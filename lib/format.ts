@@ -1,6 +1,8 @@
 // Display formatting helpers. Dates from Postgres `date` columns arrive as
 // "YYYY-MM-DD" strings; timestamps arrive as Date objects.
 
+import { DAYS_OF_WEEK } from "@/lib/constants";
+
 const DATE_FMT = new Intl.DateTimeFormat("en-PH", {
   year: "numeric",
   month: "short",
@@ -58,6 +60,19 @@ export function formatTimeOfDay(hhmm: string): string {
   const d = new Date();
   d.setHours(h || 0, m || 0, 0, 0);
   return TIME_FMT.format(d);
+}
+
+/** "Wed · 9:00 AM · Room 2" from parts; omits missing pieces; "—" if empty. */
+export function formatMeeting(
+  day: number | null,
+  time: string | null,
+  location: string | null,
+): string {
+  const parts: string[] = [];
+  if (day != null && day >= 0 && day <= 6) parts.push(DAYS_OF_WEEK[day].slice(0, 3));
+  if (time) parts.push(formatTimeOfDay(time)); // reuse the existing helper — do NOT re-derive AM/PM
+  if (location) parts.push(location);
+  return parts.length ? parts.join(" · ") : "—";
 }
 
 export function initials(name: string): string {
