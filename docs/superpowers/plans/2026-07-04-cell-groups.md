@@ -73,7 +73,7 @@ export function wouldCreateCycle(cellId: string, newParentId: string | null, cel
 **Interfaces:**
 - Produces: `cellGroups` table export; `members.cellGroupId`, `members.userId`; relations `cellGroupsRelations`, extended `membersRelations`; types `CellGroup`, `NewCellGroup`.
 
-- [ ] **Step 1: Add the `cellGroups` table.** In `db/schema.ts`, add `AnySQLiteColumn` to the `drizzle-orm/sqlite-core` import (`text`/`integer`/`sqliteTable` will already be imported by the refactored base tables), then insert this block after the `members` table (before `serviceSchedules`). **First confirm the id/timestamp/boolean helpers below match the refactored base tables and adjust if they differ (see Global Constraints):**
+- [ ] **Step 1: Add the `cellGroups` table.** In `db/schema.ts`, add `AnySQLiteColumn` to the `drizzle-orm/sqlite-core` import (`text`/`integer`/`sqliteTable`/`unique` are already imported by the base tables; `sql` is already imported from `drizzle-orm`). The helpers below match the refactored base tables verbatim — text UUID PK via `crypto.randomUUID()`, `integer` timestamps defaulting to `unixepoch()`, and `integer` booleans. Insert this block after the `members` table (before `serviceSchedules`):
 
 ```ts
 // ---------------------------------------------------------------------------
@@ -102,10 +102,10 @@ export const cellGroups = sqliteTable("cell_groups", {
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .$defaultFn(() => new Date()),
+    .default(sql`(unixepoch())`),
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
-    .$defaultFn(() => new Date()),
+    .default(sql`(unixepoch())`),
 });
 ```
 
@@ -727,8 +727,18 @@ export async function updateCellGroup(
 
 export async function deleteCellGroup(id: string) {
   await requireRole(["admin", "leader"]);
-  // onDelete: set null handles members (become unassigned) and child cells
-  // (become roots) automatically.
+  // libSQL/Turso does not enforce FK cascades unless PRAGMA foreign_keys is on
+  // (the client does not set it), so null out references explicitly: members
+  // become unassigned, child cells become roots. Idempotent if a cascade also
+  // fires. Order matters only in that the deletes/updates all target this id.
+  await db
+    .update(members)
+    .set({ cellGroupId: null, updatedAt: new Date() })
+    .where(eq(members.cellGroupId, id));
+  await db
+    .update(cellGroups)
+    .set({ parentCellGroupId: null, updatedAt: new Date() })
+    .where(eq(cellGroups.parentCellGroupId, id));
   await db.delete(cellGroups).where(eq(cellGroups.id, id));
   revalidatePath("/cell-groups");
   revalidatePath("/members");
@@ -830,7 +840,7 @@ git commit -m "feat(cell-groups): server actions for CRUD, assign, promote"
 ```ts
 import { DAYS_OF_WEEK } from "@/lib/constants";
 
-/** "Wed · 7:00 PM · Room 2" from parts; omits missing pieces; "—" if empty. */
+/** "Wed · 9:00 AM · Room 2" from parts; omits missing pieces; "—" if empty. */
 export function formatMeeting(
   day: number | null,
   time: string | null,
@@ -838,17 +848,12 @@ export function formatMeeting(
 ): string {
   const parts: string[] = [];
   if (day != null && day >= 0 && day <= 6) parts.push(DAYS_OF_WEEK[day].slice(0, 3));
-  if (time) {
-    const [h, m] = time.split(":").map(Number);
-    const period = h >= 12 ? "PM" : "AM";
-    const hour12 = ((h + 11) % 12) + 1;
-    parts.push(`${hour12}:${String(m).padStart(2, "0")} ${period}`);
-  }
+  if (time) parts.push(formatTimeOfDay(time)); // reuse the existing helper — do NOT re-derive AM/PM
   if (location) parts.push(location);
   return parts.length ? parts.join(" · ") : "—";
 }
 ```
-(If `lib/format.ts` already imports from `@/lib/constants`, merge the import rather than duplicating it.)
+(`formatTimeOfDay` already exists in this file — reuse it. Merge the `DAYS_OF_WEEK` import with any existing `@/lib/constants` import rather than duplicating it.)
 
 - [ ] **Step 2: Create `components/cell-groups/cell-group-form.tsx`.**
 
@@ -2237,7 +2242,7 @@ import('./db/index.ts').then(async ({db}) => {
 ```
 Expected: Juan → `leader-of-leaders`, Maria → `leader`, Pedro → `member`, and `unassignedCount` ≥ 0 with at least one link (Maria→Juan, Pedro→Maria).
 
-- [ ] **Step 4: Manual browser pass.** `pnpm dev`, sign in (`admin@church.local` / `admin123`), then:
+- [ ] **Step 4: Manual browser pass.** `pnpm dev`, sign in (username `admin` / `admin123`), then:
   - Visit `/cell-groups`: the graph renders with Juan largest, Maria medium, Pedro small; the amber "not in a cell group" panel lists any unassigned members.
   - Click a node → the side panel shows tier + downline count + links; other branches dim.
   - Assign an unassigned member from the panel → they disappear from the panel and appear connected after refresh.
