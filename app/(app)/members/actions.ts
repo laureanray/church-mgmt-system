@@ -30,6 +30,7 @@ function readMemberForm(formData: FormData) {
     fatherName: formData.get("fatherName"),
     educationalLevel: formData.get("educationalLevel"),
     occupation: formData.get("occupation"),
+    cellGroupId: formData.get("cellGroupId"),
   });
 }
 

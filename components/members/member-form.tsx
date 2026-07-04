@@ -6,7 +6,7 @@ import { Loader2, Save } from "lucide-react";
 
 import type { MemberFormState } from "@/app/(app)/members/actions";
 import { Field } from "@/components/form/field";
-import { FormSelect } from "@/components/form/form-select";
+import { FormSelect, type SelectOption } from "@/components/form/form-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -41,10 +41,12 @@ type MemberAction = (
 export function MemberForm({
   action,
   member,
+  cellOptions,
   submitLabel = "Save member",
 }: {
   action: MemberAction;
   member?: Member;
+  cellOptions: SelectOption[];
   submitLabel?: string;
 }) {
   const [state, formAction, pending] = useActionState<
@@ -166,6 +168,21 @@ export function MemberForm({
               name="occupation"
               defaultValue={member?.occupation ?? ""}
               placeholder="e.g. Teacher"
+            />
+          </Field>
+
+          <Field
+            label="Cell Group"
+            htmlFor="cellGroupId"
+            hint="Leave blank if not yet in a cell group"
+            error={errors.cellGroupId}
+          >
+            <FormSelect
+              id="cellGroupId"
+              name="cellGroupId"
+              placeholder="Not in a cell group"
+              options={cellOptions}
+              defaultValue={member?.cellGroupId}
             />
           </Field>
         </CardContent>

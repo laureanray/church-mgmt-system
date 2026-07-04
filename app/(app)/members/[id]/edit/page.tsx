@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { updateMember } from "../../actions";
 import { db } from "@/db";
-import { members } from "@/db/schema";
+import { cellGroups, members } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
 import { MemberForm } from "@/components/members/member-form";
 import { PageHeader } from "@/components/page-header";
@@ -27,6 +27,12 @@ export default async function EditMemberPage({
 
   const action = updateMember.bind(null, member.id);
 
+  const cellRows = await db
+    .select({ id: cellGroups.id, name: cellGroups.name })
+    .from(cellGroups)
+    .orderBy(asc(cellGroups.name));
+  const cellOptions = cellRows.map((c) => ({ value: c.id, label: c.name }));
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link
@@ -46,6 +52,7 @@ export default async function EditMemberPage({
       <MemberForm
         action={action}
         member={member}
+        cellOptions={cellOptions}
         submitLabel="Save changes"
       />
     </div>

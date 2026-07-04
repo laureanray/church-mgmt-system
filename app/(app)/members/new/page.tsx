@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { asc } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
 
 import { createMember } from "../actions";
+import { db } from "@/db";
+import { cellGroups } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
 import { MemberForm } from "@/components/members/member-form";
 import { PageHeader } from "@/components/page-header";
@@ -10,6 +13,12 @@ import { cn } from "@/lib/utils";
 
 export default async function NewMemberPage() {
   await requireRole(["admin", "leader"]);
+
+  const cellRows = await db
+    .select({ id: cellGroups.id, name: cellGroups.name })
+    .from(cellGroups)
+    .orderBy(asc(cellGroups.name));
+  const cellOptions = cellRows.map((c) => ({ value: c.id, label: c.name }));
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -27,7 +36,11 @@ export default async function NewMemberPage() {
         title="Add Member"
         description="Create a member record. A unique attendance QR code is generated automatically."
       />
-      <MemberForm action={createMember} submitLabel="Create member" />
+      <MemberForm
+        action={createMember}
+        cellOptions={cellOptions}
+        submitLabel="Create member"
+      />
     </div>
   );
 }

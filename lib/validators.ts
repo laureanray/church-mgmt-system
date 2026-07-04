@@ -28,6 +28,10 @@ const optionalDate = z.preprocess(
 
 const CURRENT_YEAR = new Date().getFullYear();
 
+// IDs come from a hidden <input>/<select>; the DB foreign key enforces validity,
+// so we only require a non-empty string — works for UUID or nanoid ids alike.
+const optionalId = z.preprocess(emptyToNull, z.string().min(1).nullable());
+
 export const memberSchema = z.object({
   fullName: z.string().trim().min(1, "Full name is required").max(200),
   birthdate: optionalDate,
@@ -51,6 +55,7 @@ export const memberSchema = z.object({
   fatherName: optionalText,
   educationalLevel: optionalText,
   occupation: optionalText,
+  cellGroupId: optionalId,
 });
 
 export type MemberInput = z.infer<typeof memberSchema>;
@@ -131,10 +136,6 @@ export const changePasswordSchema = z
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });
-
-// IDs come from a hidden <input>/<select>; the DB foreign key enforces validity,
-// so we only require a non-empty string — works for UUID or nanoid ids alike.
-const optionalId = z.preprocess(emptyToNull, z.string().min(1).nullable());
 
 export const cellGroupSchema = z.object({
   name: z.string().trim().min(1, "Cell group name is required").max(200),

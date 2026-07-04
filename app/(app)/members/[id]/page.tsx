@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarCheck, Pencil } from "lucide-react";
 
+import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
 import { db } from "@/db";
-import { attendance, members } from "@/db/schema";
+import { attendance, cellGroups, members } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
 import { GENDER_LABELS, MARITAL_STATUS_LABELS } from "@/lib/constants";
 import { formatDate, formatDateTime, initials } from "@/lib/format";
@@ -14,7 +15,7 @@ import { DeleteMemberButton } from "@/components/members/delete-member-button";
 import { MemberQr } from "@/components/members/member-qr";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -56,6 +57,7 @@ export default async function MemberDetailPage({
 
   const member = await db.query.members.findFirst({
     where: eq(members.id, id),
+    with: { cellGroup: true },
   });
   if (!member) notFound();
 
@@ -70,6 +72,13 @@ export default async function MemberDetailPage({
   ]);
 
   const manage = canManage(user.role);
+
+  const parentCells = manage
+    ? await db
+        .select({ id: cellGroups.id, name: cellGroups.name })
+        .from(cellGroups)
+        .orderBy(asc(cellGroups.name))
+    : [];
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -164,6 +173,21 @@ export default async function MemberDetailPage({
                   value={member.educationalLevel}
                 />
                 <DetailRow label="Occupation" value={member.occupation} />
+                <DetailRow
+                  label="Cell Group"
+                  value={
+                    member.cellGroup ? (
+                      <Link
+                        href={`/cell-groups/${member.cellGroup.id}`}
+                        className="hover:underline"
+                      >
+                        {member.cellGroup.name}
+                      </Link>
+                    ) : (
+                      <Badge variant="outline">Not in a cell group</Badge>
+                    )
+                  }
+                />
               </dl>
             </CardContent>
           </Card>
@@ -186,6 +210,41 @@ export default async function MemberDetailPage({
               </p>
             </CardContent>
           </Card>
+
+          {manage ? (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">Promote to Leader</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form action={promoteMemberToLeader} className="space-y-3">
+                  <input type="hidden" name="memberId" value={member.id} />
+                  <input
+                    name="name"
+                    required
+                    placeholder="New cell group name"
+                    defaultValue={`${member.fullName}'s Cell`}
+                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  />
+                  <select
+                    name="parentCellGroupId"
+                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none"
+                    defaultValue=""
+                  >
+                    <option value="">Upline: top level</option>
+                    {parentCells.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        Upline: {c.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button type="submit" size="sm" variant="outline">
+                    Create cell &amp; make leader
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
 
