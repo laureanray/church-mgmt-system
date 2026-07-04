@@ -1,5 +1,11 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import {
+  AnySQLiteColumn,
+  integer,
+  sqliteTable,
+  text,
+  unique,
+} from "drizzle-orm/sqlite-core";
 
 // ---------------------------------------------------------------------------
 // Enums are modeled as text columns with a TS-level enum constraint. DB-level
@@ -66,6 +72,50 @@ export const members = sqliteTable("members", {
   educationalLevel: text("educational_level"),
   occupation: text("occupation"),
 
+  // The cell group this person belongs to. NULL = not yet in any cell group.
+  cellGroupId: text("cell_group_id").references(
+    (): AnySQLiteColumn => cellGroups.id,
+    {
+      onDelete: "set null",
+    },
+  ),
+  // Links a member to their staff login, when they also log in. No UI in v1.
+  userId: text("user_id")
+    .references(() => users.id, { onDelete: "set null" })
+    .unique(),
+
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+// ---------------------------------------------------------------------------
+// Cell groups — discipleship cells. A cell has a leader (a member) and may sit
+// under a parent cell, forming the leader-of-leaders network.
+// ---------------------------------------------------------------------------
+
+export const cellGroups = sqliteTable("cell_groups", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  // The member who leads this cell. Nullable so a cell can briefly be leaderless.
+  leaderId: text("leader_id").references(() => members.id, {
+    onDelete: "set null",
+  }),
+  // The upline cell. This nesting produces "leaders of leaders".
+  parentCellGroupId: text("parent_cell_group_id").references(
+    (): AnySQLiteColumn => cellGroups.id,
+    { onDelete: "set null" },
+  ),
+  meetingDay: integer("meeting_day"), // 0 = Sunday .. 6 = Saturday
+  meetingTime: text("meeting_time"), // "HH:mm" 24h
+  meetingLocation: text("meeting_location"),
+  notes: text("notes"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -187,8 +237,32 @@ export const appSettings = sqliteTable("app_settings", {
 // Relations
 // ---------------------------------------------------------------------------
 
-export const membersRelations = relations(members, ({ many }) => ({
+export const membersRelations = relations(members, ({ one, many }) => ({
   attendance: many(attendance),
+  cellGroup: one(cellGroups, {
+    fields: [members.cellGroupId],
+    references: [cellGroups.id],
+  }),
+  user: one(users, {
+    fields: [members.userId],
+    references: [users.id],
+  }),
+  ledCellGroups: many(cellGroups, { relationName: "cellLeader" }),
+}));
+
+export const cellGroupsRelations = relations(cellGroups, ({ one, many }) => ({
+  leader: one(members, {
+    fields: [cellGroups.leaderId],
+    references: [members.id],
+    relationName: "cellLeader",
+  }),
+  parent: one(cellGroups, {
+    fields: [cellGroups.parentCellGroupId],
+    references: [cellGroups.id],
+    relationName: "cellParent",
+  }),
+  children: many(cellGroups, { relationName: "cellParent" }),
+  members: many(members),
 }));
 
 export const serviceSchedulesRelations = relations(
@@ -236,3 +310,5 @@ export type NewServiceSchedule = typeof serviceSchedules.$inferInsert;
 export type AppSettings = typeof appSettings.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
 export type NewAttendance = typeof attendance.$inferInsert;
+export type CellGroup = typeof cellGroups.$inferSelect;
+export type NewCellGroup = typeof cellGroups.$inferInsert;
