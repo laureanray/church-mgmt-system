@@ -8,7 +8,12 @@ import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
 import { wouldCreateCycle } from "@/lib/cell-graph";
-import { assignSchema, cellGroupSchema, fieldErrors } from "@/lib/validators";
+import {
+  assignSchema,
+  cellGroupSchema,
+  fieldErrors,
+  promoteSchema,
+} from "@/lib/validators";
 
 export type CellGroupFormState =
   | { errors?: Record<string, string>; message?: string }
@@ -151,11 +156,13 @@ export async function assignMemberToCellGroup(formData: FormData) {
 export async function promoteMemberToLeader(formData: FormData) {
   await requireRole(["admin", "leader"]);
 
-  const memberId = String(formData.get("memberId") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  const parentRaw = String(formData.get("parentCellGroupId") ?? "").trim();
-  const parentCellGroupId = parentRaw === "" ? null : parentRaw;
-  if (!memberId || !name) return;
+  const parsed = promoteSchema.safeParse({
+    memberId: formData.get("memberId"),
+    name: formData.get("name"),
+    parentCellGroupId: formData.get("parentCellGroupId"),
+  });
+  if (!parsed.success) return;
+  const { memberId, name, parentCellGroupId } = parsed.data;
 
   const [row] = await db
     .insert(cellGroups)

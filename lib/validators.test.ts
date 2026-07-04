@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellGroupSchema } from "./validators";
+import { cellGroupSchema, promoteSchema } from "./validators";
 
 describe("cellGroupSchema", () => {
   it("requires a name", () => {
@@ -36,5 +36,28 @@ describe("cellGroupSchema", () => {
   it("rejects a bad meeting time", () => {
     const r = cellGroupSchema.safeParse({ name: "X", meetingTime: "7pm" });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("promoteSchema", () => {
+  it("rejects a cell group name longer than 200 characters", () => {
+    const r = promoteSchema.safeParse({
+      memberId: "m1",
+      name: "a".repeat(201),
+      parentCellGroupId: "",
+    });
+    expect(r.success).toBe(false);
+  });
+
+  it("accepts a valid promotion and coerces an empty parent to null", () => {
+    const r = promoteSchema.safeParse({
+      memberId: "m1",
+      name: "New Cell",
+      parentCellGroupId: "",
+    });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      expect(r.data.parentCellGroupId).toBeNull();
+    }
   });
 });

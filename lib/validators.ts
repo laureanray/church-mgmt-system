@@ -167,6 +167,13 @@ export const assignSchema = z.object({
   cellGroupId: optionalId,
 });
 
+// Promote a member to leader by creating a new cell group for them.
+export const promoteSchema = z.object({
+  memberId: z.string().min(1, "Invalid member"),
+  name: z.string().trim().min(1, "Cell group name is required").max(200),
+  parentCellGroupId: optionalId,
+});
+
 /** Flatten a ZodError into a { field: message } map for form display. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
