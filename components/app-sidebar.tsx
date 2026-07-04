@@ -8,6 +8,7 @@ import {
   QrCode,
   Users,
   CalendarDays,
+  Network,
   Settings,
   UserCog,
   type LucideIcon,
@@ -38,6 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Scan Attendance", href: "/scan", icon: QrCode },
   { title: "Members", href: "/members", icon: Users },
+  { title: "Cell Groups", href: "/cell-groups", icon: Network },
   { title: "Services", href: "/services", icon: CalendarDays },
   {
     title: "Staff Users",
