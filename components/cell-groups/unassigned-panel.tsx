@@ -51,6 +51,7 @@ export function UnassignedPanel({
                     <select
                       name="cellGroupId"
                       defaultValue=""
+                      required
                       className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none"
                     >
                       <option value="" disabled>

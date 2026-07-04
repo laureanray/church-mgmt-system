@@ -54,6 +54,9 @@ export function CellGraph({
   const [, force] = useState(0); // re-render on tick
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const drag = useRef<{ id: string } | null>(null);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const pan = useRef<{ sx: number; sy: number; vx: number; vy: number; moved: boolean } | null>(null);
+  const didPan = useRef(false);
 
   // Build sim nodes once per data identity.
   useEffect(() => {
@@ -139,26 +142,58 @@ export function CellGraph({
       className="h-[60vh] w-full touch-none rounded-lg border bg-card"
       onWheel={(e) => {
         const factor = e.deltaY < 0 ? 1.1 : 0.9;
-        setView((v) => ({
-          ...v,
-          k: Math.min(3, Math.max(0.4, v.k * factor)),
-        }));
+        setView((v) => ({ ...v, k: Math.min(3, Math.max(0.4, v.k * factor)) }));
+      }}
+      onPointerDown={(e) => {
+        // Background press → begin panning. Node presses stopPropagation, so
+        // they never reach here.
+        pan.current = {
+          sx: e.clientX,
+          sy: e.clientY,
+          vx: view.x,
+          vy: view.y,
+          moved: false,
+        };
+        (e.currentTarget as SVGSVGElement).setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e) => {
-        if (!drag.current) return;
-        const w = pointerToWorld(e);
-        const n = nodePos.get(drag.current.id);
-        if (n) {
-          n.fx = w.x;
-          n.fy = w.y;
-          simRef.current?.alphaTarget(0.3).restart();
+        if (drag.current) {
+          const w = pointerToWorld(e);
+          const n = nodePos.get(drag.current.id);
+          if (n) {
+            n.fx = w.x;
+            n.fy = w.y;
+            simRef.current?.alphaTarget(0.3).restart();
+          }
+          return;
+        }
+        if (pan.current) {
+          const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+          const dxPx = e.clientX - pan.current.sx;
+          const dyPx = e.clientY - pan.current.sy;
+          if (Math.abs(dxPx) > 3 || Math.abs(dyPx) > 3) pan.current.moved = true;
+          const dx = (dxPx / rect.width) * WIDTH;
+          const dy = (dyPx / rect.height) * HEIGHT;
+          setView((v) => ({ ...v, x: pan.current!.vx + dx, y: pan.current!.vy + dy }));
         }
       }}
-      onPointerUp={() => {
+      onPointerUp={(e) => {
         drag.current = null;
         simRef.current?.alphaTarget(0);
+        didPan.current = Boolean(pan.current?.moved);
+        pan.current = null;
+        try {
+          (e.currentTarget as SVGSVGElement).releasePointerCapture(e.pointerId);
+        } catch {}
       }}
-      onClick={() => onSelect(null)}
+      onClick={() => {
+        // Suppress the deselect that would otherwise follow a pan drag.
+        if (didPan.current) {
+          didPan.current = false;
+          return;
+        }
+        onSelect(null);
+      }}
     >
       <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
         {inputLinks.map((l, i) => {
@@ -181,6 +216,7 @@ export function CellGraph({
         {nodesRef.current.map((n) => {
           const st = TIER_STYLE[n.tier];
           const selected = n.id === selectedId;
+          const hovered = n.id === hoveredId;
           return (
             <g
               key={n.id}
@@ -190,7 +226,14 @@ export function CellGraph({
               onPointerDown={(e) => {
                 e.stopPropagation();
                 drag.current = { id: n.id };
+                (e.target as SVGElement).ownerSVGElement?.setPointerCapture(
+                  e.pointerId,
+                );
               }}
+              onPointerEnter={() => setHoveredId(n.id)}
+              onPointerLeave={() =>
+                setHoveredId((h) => (h === n.id ? null : h))
+              }
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(n.id);
@@ -202,7 +245,7 @@ export function CellGraph({
                 stroke={selected ? "var(--color-ring)" : "var(--color-background)"}
                 strokeWidth={selected ? 3 : 1.5}
               />
-              {st.label || selected ? (
+              {st.label || selected || hovered ? (
                 <text
                   x={st.r + 4}
                   y={4}
