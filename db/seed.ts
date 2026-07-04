@@ -12,7 +12,7 @@ try {
 
 async function main() {
   const { db } = await import("./index");
-  const { users, members, services } = await import("./schema");
+  const { users, members, services, cellGroups } = await import("./schema");
 
   console.log("Seeding database...");
 
@@ -90,6 +90,76 @@ async function main() {
     console.log("  ✓ 3 sample members created");
   } else {
     console.log(`  • Members already present (${existingMembers}), skipping`);
+  }
+
+  // --- Sample cell groups -------------------------------------------------
+  const existingCells = await db.$count(cellGroups);
+  if (existingCells === 0) {
+    const { eq } = await import("drizzle-orm");
+    const byName = async (name: string) =>
+      (await db.query.members.findFirst({
+        where: eq(members.fullName, name),
+      }))?.id ?? null;
+
+    const juan = await byName("Juan Dela Cruz"); // becomes leader-of-leaders
+    const maria = await byName("Maria Santos"); // cell leader under Juan
+    const pedro = await byName("Pedro Reyes"); // ordinary member in Maria's cell
+
+    if (juan && maria) {
+      const [root] = await db
+        .insert(cellGroups)
+        .values({
+          name: "Pastor's Network",
+          leaderId: juan,
+          meetingDay: 0,
+          meetingTime: "10:30",
+          meetingLocation: "Main Sanctuary",
+        })
+        .returning({ id: cellGroups.id });
+
+      const [anaCell] = await db
+        .insert(cellGroups)
+        .values({
+          name: "Maria's Cell",
+          leaderId: maria,
+          parentCellGroupId: root.id,
+          meetingDay: 3,
+          meetingTime: "19:00",
+          meetingLocation: "Room 2",
+        })
+        .returning({ id: cellGroups.id });
+
+      // Leaders belong to the cell they lead; Pedro is a plain member.
+      await db.update(members).set({ cellGroupId: root.id }).where(eq(members.id, juan));
+      await db.update(members).set({ cellGroupId: anaCell.id }).where(eq(members.id, maria));
+      if (pedro) {
+        await db.update(members).set({ cellGroupId: anaCell.id }).where(eq(members.id, pedro));
+      }
+
+      // A few members intentionally left with NO cell group, so the graph's
+      // "⚠ N not in a cell group" panel is populated and the headline feature
+      // (spotting unassigned members) is demonstrable on a fresh seed.
+      const unassignedNames = [
+        "Lito Aquino",
+        "Rosa Villanueva",
+        "Ben Tolentino",
+        "Grace Mendoza",
+      ];
+      for (const fullName of unassignedNames) {
+        const exists = await db.query.members.findFirst({
+          where: eq(members.fullName, fullName),
+        });
+        if (!exists) {
+          await db.insert(members).values({ qrToken: nanoid(16), fullName });
+        }
+      }
+
+      console.log(
+        "  ✓ 2 sample cell groups + 4 unassigned members created",
+      );
+    }
+  } else {
+    console.log(`  • Cell groups already present (${existingCells}), skipping`);
   }
 
   // --- Sample services ----------------------------------------------------
