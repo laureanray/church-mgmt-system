@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { asc, count, ilike } from "drizzle-orm";
+import { asc, count, like } from "drizzle-orm";
 import { Plus, Search, Users } from "lucide-react";
 
 import { db } from "@/db";
@@ -33,7 +33,7 @@ export default async function MembersPage({
   const { q } = await searchParams;
   const query = q?.trim();
 
-  const where = query ? ilike(members.fullName, `%${query}%`) : undefined;
+  const where = query ? like(members.fullName, `%${query}%`) : undefined;
 
   const [rows, [{ total }]] = await Promise.all([
     db

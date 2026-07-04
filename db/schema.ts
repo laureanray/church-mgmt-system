@@ -1,77 +1,64 @@
-import { relations } from "drizzle-orm";
-import {
-  boolean,
-  date,
-  integer,
-  pgEnum,
-  pgTable,
-  text,
-  timestamp,
-  unique,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
+import { integer, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 // ---------------------------------------------------------------------------
-// Enums
+// Enums are modeled as text columns with a TS-level enum constraint. DB-level
+// enforcement is intentionally omitted; validation lives in lib/validators.ts
+// (zod). Keep these arrays in sync with lib/constants.ts.
 // ---------------------------------------------------------------------------
-
-export const userRoleEnum = pgEnum("user_role", ["admin", "leader", "usher"]);
-
-export const genderEnum = pgEnum("gender", ["male", "female"]);
-
-export const maritalStatusEnum = pgEnum("marital_status", [
-  "single",
-  "married",
-  "widowed",
-  "separated",
-  "divorced",
-]);
-
-export const serviceTypeEnum = pgEnum("service_type", [
-  "worship_service",
-  "prayer_meeting",
-  "bible_study",
-  "youth_service",
-  "special_event",
-  "other",
-]);
 
 // ---------------------------------------------------------------------------
 // Users — staff who log in (admin / leader / usher)
 // ---------------------------------------------------------------------------
 
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const users = sqliteTable("users", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
-  email: text("email").notNull().unique(),
+  // Login handle.
+  username: text("username").notNull().unique(),
+  // Optional — provisioned for future email features (notifications, etc.).
+  // Not used for login or any sending today.
+  email: text("email").unique(),
   passwordHash: text("password_hash").notNull(),
-  role: userRoleEnum("role").notNull().default("usher"),
-  createdAt: timestamp("created_at", { withTimezone: true })
+  role: text("role", { enum: ["admin", "leader", "usher"] })
     .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .default("usher"),
+  // True when an admin has issued a temporary password; forces a reset at login.
+  mustChangePassword: integer("must_change_password", { mode: "boolean" })
     .notNull()
-    .defaultNow(),
+    .default(false),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
 });
 
 // ---------------------------------------------------------------------------
 // Members — the church congregation. Each has a unique QR token.
 // ---------------------------------------------------------------------------
 
-export const members = pgTable("members", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const members = sqliteTable("members", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   // Unique token encoded into the member's QR code.
   qrToken: text("qr_token").notNull().unique(),
 
   fullName: text("full_name").notNull(),
-  birthdate: date("birthdate"),
-  spiritualBirthday: date("spiritual_birthday"),
+  birthdate: text("birthdate"),
+  spiritualBirthday: text("spiritual_birthday"),
   // "Taon na naging Kaanib ng IRM" — year the member joined IRM.
   memberSinceYear: integer("member_since_year"),
-  gender: genderEnum("gender"),
-  maritalStatus: maritalStatusEnum("marital_status"),
+  gender: text("gender", { enum: ["male", "female"] }),
+  maritalStatus: text("marital_status", {
+    enum: ["single", "married", "widowed", "separated", "divorced"],
+  }),
   spouseName: text("spouse_name"),
-  weddingAnniversary: date("wedding_anniversary"),
+  weddingAnniversary: text("wedding_anniversary"),
   contactNumber: text("contact_number"),
   homeAddress: text("home_address"),
   motherName: text("mother_name"),
@@ -79,12 +66,12 @@ export const members = pgTable("members", {
   educationalLevel: text("educational_level"),
   occupation: text("occupation"),
 
-  createdAt: timestamp("created_at", { withTimezone: true })
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
+    .default(sql`(unixepoch())`),
 });
 
 // ---------------------------------------------------------------------------
@@ -92,10 +79,16 @@ export const members = pgTable("members", {
 // that auto-generate dated service occurrences.
 // ---------------------------------------------------------------------------
 
-export const serviceSchedules = pgTable("service_schedules", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const serviceSchedules = sqliteTable("service_schedules", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
-  type: serviceTypeEnum("type").notNull().default("worship_service"),
+  type: text("type", {
+    enum: ["sunday_service", "midweek_service", "special_event"],
+  })
+    .notNull()
+    .default("sunday_service"),
   // Day of week, 0 = Sunday .. 6 = Saturday (matches JS Date.getDay()).
   dayOfWeek: integer("day_of_week").notNull(),
   // Time of day in 24h "HH:mm".
@@ -103,10 +96,10 @@ export const serviceSchedules = pgTable("service_schedules", {
   location: text("location"),
   notes: text("notes"),
   // When false, no new occurrences are generated.
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
+    .default(sql`(unixepoch())`),
 });
 
 // ---------------------------------------------------------------------------
@@ -114,23 +107,29 @@ export const serviceSchedules = pgTable("service_schedules", {
 // one-off (scheduleId null) or an occurrence generated from a schedule.
 // ---------------------------------------------------------------------------
 
-export const services = pgTable(
+export const services = sqliteTable(
   "services",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
     name: text("name").notNull(),
-    type: serviceTypeEnum("type").notNull().default("worship_service"),
+    type: text("type", {
+      enum: ["sunday_service", "midweek_service", "special_event"],
+    })
+      .notNull()
+      .default("sunday_service"),
     // Date + time the service is held.
-    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
+    scheduledAt: integer("scheduled_at", { mode: "timestamp" }).notNull(),
     location: text("location"),
     notes: text("notes"),
     // The recurring schedule this occurrence came from, if any.
-    scheduleId: uuid("schedule_id").references(() => serviceSchedules.id, {
+    scheduleId: text("schedule_id").references(() => serviceSchedules.id, {
       onDelete: "set null",
     }),
-    createdAt: timestamp("created_at", { withTimezone: true })
+    createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()
-      .defaultNow(),
+      .default(sql`(unixepoch())`),
   },
   // Prevents generating the same occurrence twice for a schedule.
   (t) => [
@@ -145,26 +144,44 @@ export const services = pgTable(
 // Attendance — one row per member per service (deduped by unique constraint).
 // ---------------------------------------------------------------------------
 
-export const attendance = pgTable(
+export const attendance = sqliteTable(
   "attendance",
   {
-    id: uuid("id").primaryKey().defaultRandom(),
-    memberId: uuid("member_id")
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    memberId: text("member_id")
       .notNull()
       .references(() => members.id, { onDelete: "cascade" }),
-    serviceId: uuid("service_id")
+    serviceId: text("service_id")
       .notNull()
       .references(() => services.id, { onDelete: "cascade" }),
-    checkedInAt: timestamp("checked_in_at", { withTimezone: true })
+    checkedInAt: integer("checked_in_at", { mode: "timestamp" })
       .notNull()
-      .defaultNow(),
+      .default(sql`(unixepoch())`),
     // Which staff user scanned them in (nullable — user may be deleted later).
-    recordedBy: uuid("recorded_by").references(() => users.id, {
+    recordedBy: text("recorded_by").references(() => users.id, {
       onDelete: "set null",
     }),
   },
-  (t) => [unique("attendance_member_service_unique").on(t.memberId, t.serviceId)],
+  (t) => [
+    unique("attendance_member_service_unique").on(t.memberId, t.serviceId),
+  ],
 );
+
+// ---------------------------------------------------------------------------
+// App settings — a single-row table holding integration config (e.g. the
+// Google Sheets webhook). Keyed by a constant id so there is only ever one row.
+// ---------------------------------------------------------------------------
+
+export const appSettings = sqliteTable("app_settings", {
+  id: text("id").primaryKey().default("singleton"),
+  sheetsWebhookUrl: text("sheets_webhook_url"),
+  sheetsWebhookSecret: text("sheets_webhook_secret"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
 
 // ---------------------------------------------------------------------------
 // Relations
@@ -216,5 +233,6 @@ export type Service = typeof services.$inferSelect;
 export type NewService = typeof services.$inferInsert;
 export type ServiceSchedule = typeof serviceSchedules.$inferSelect;
 export type NewServiceSchedule = typeof serviceSchedules.$inferInsert;
+export type AppSettings = typeof appSettings.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
 export type NewAttendance = typeof attendance.$inferInsert;

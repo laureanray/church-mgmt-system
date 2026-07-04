@@ -44,7 +44,7 @@ export default async function LoginPage({
         </Card>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Demo login: admin@church.local / admin123
+          Demo login: admin / admin123
         </p>
       </div>
     </div>

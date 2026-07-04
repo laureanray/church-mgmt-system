@@ -87,18 +87,50 @@ export const scheduleSchema = z.object({
 export type ScheduleInput = z.infer<typeof scheduleSchema>;
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-z0-9._-]{3,30}$/;
 
-export const userSchema = z.object({
+const usernameField = z.preprocess(
+  (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
+  z
+    .string()
+    .regex(
+      USERNAME_RE,
+      "3–30 characters: lowercase letters, numbers, dot, underscore or dash",
+    ),
+);
+
+// Optional email — stored for future use, never required.
+const optionalEmail = z.preprocess(
+  (v) => {
+    const s = typeof v === "string" ? v.trim().toLowerCase() : v;
+    return s === "" ? null : s;
+  },
+  z.string().regex(EMAIL_RE, "Enter a valid email").nullable(),
+);
+
+// Admin creates a user (password is generated, not entered).
+export const createUserSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
-  email: z.preprocess(
-    (v) => (typeof v === "string" ? v.trim().toLowerCase() : v),
-    z.string().regex(EMAIL_RE, "Enter a valid email"),
-  ),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  username: usernameField,
+  email: optionalEmail,
   role: z.enum(USER_ROLES),
 });
 
-export type UserInput = z.infer<typeof userSchema>;
+export type CreateUserInput = z.infer<typeof createUserSchema>;
+
+// Editing an existing user (same fields; password handled separately).
+export const editUserSchema = createUserSchema;
+
+// A user setting their own new password.
+export const changePasswordSchema = z
+  .object({
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 /** Flatten a ZodError into a { field: message } map for form display. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {

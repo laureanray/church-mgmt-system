@@ -6,16 +6,17 @@
 
 **Architecture:** A new `cell_groups` table plus two nullable columns on `members` (`cellGroupId`, `userId`). Everyone in the graph is a **member node**; a person's upline is derived (not stored) from their cell's leader and that cell's parent. All hierarchy math lives in one pure module, `lib/cell-graph.ts`, so it is unit-tested without a database. Management UI, member assignment, and the graph page mirror the existing `members` feature patterns.
 
-**Tech Stack:** Next.js 16 (App Router, modified — see Global Constraints), React 19, Drizzle ORM + postgres-js, Base UI (shadcn Base UI variant), Tailwind v4, zod, lucide-react, `d3-force` (new), `vitest` (new, for pure-logic tests only).
+**Tech Stack:** Next.js 16 (App Router, modified — see Global Constraints), React 19, Drizzle ORM (SQLite via libSQL — Turso in prod), Base UI (shadcn Base UI variant), Tailwind v4, zod, lucide-react, `d3-force` (new), `vitest` (new, for pure-logic tests only).
 
 ## Global Constraints
 
 - **Modified Next.js.** Per `AGENTS.md`, before writing any page/route/server-action code, read the relevant guide under `node_modules/next/dist/docs/01-app/` — specifically `01-getting-started/07-mutating-data.md` and `02-guides/server-actions.md` for actions, `03-api-reference/03-file-conventions/dynamic-routes.md` for `[id]` routes. New code here mirrors existing working files, so this is a verification pass, not a redesign.
+- **Database is SQLite (libSQL / Turso on prod), NOT Postgres.** A parallel session is refactoring the base tables from Postgres to SQLite; **this feature is built on top of that refactor** — treat a completed refactor (sqlite-core `db/schema.ts`, a libSQL `db/index.ts`, `drizzle.config.ts` set to `dialect: "turso"`/`"sqlite"`) as a precondition of Task 1. Use `drizzle-orm/sqlite-core` helpers (`sqliteTable`, `text`, `integer`, `AnySQLiteColumn`). **Mirror the exact id / timestamp / boolean column conventions the refactored base tables (`users`, `members`, …) land on.** The Task 1 code assumes: text UUID primary keys via `crypto.randomUUID()`; timestamps as `integer(col, { mode: "timestamp" })`; booleans as `integer(col, { mode: "boolean" })`. If the refactor chose otherwise (e.g. `nanoid()` ids, text/ISO timestamps), match it and adjust FK column types to suit — FK column type must equal the referenced PK type. Dialect-agnostic APIs used elsewhere (`db.select`, `db.query`, `db.insert().returning()`, `db.$count`, relations) all work unchanged on libSQL/Turso.
 - **Base UI variant of shadcn:** components use `render` (not `asChild`); `Select` uses `name`/`items` (wrapped by `components/form/FormSelect`); there is no `form.tsx`. Reuse `components/form/Field` and `components/form/FormSelect`.
 - **Server actions pattern:** `"use server"`, `requireRole(["admin","leader"])` for mutations, `requireUser()` for reads, zod validation via `lib/validators.ts`, `revalidatePath`, `redirect`. Copy the shape of `app/(app)/members/actions.ts`.
 - **Terminology:** "Cell Group" everywhere in UI copy. Nav label "Cell Groups". Route base `/cell-groups`.
 - **Unassigned = `members.cellGroupId IS NULL`.** A cell's leader belongs to the cell they lead (so top leaders are never flagged unassigned).
-- **Package manager is pnpm.** Migrations: `pnpm db:generate` then `pnpm db:migrate`. Local dev DB is Docker Postgres on port 5433; `pnpm db:up` starts it.
+- **Package manager is pnpm.** Migrations: `pnpm db:generate` then `pnpm db:migrate`. Local dev uses SQLite/libSQL per the DB refactor (e.g. a local `file:` libSQL database or `turso dev`) — there is no Docker Postgres anymore. Use whatever local-DB command the refactor establishes.
 - **DRY / YAGNI:** No history/audit trail. `members.userId` column is added for the data model but has **no UI** in v1.
 
 ---
@@ -72,7 +73,7 @@ export function wouldCreateCycle(cellId: string, newParentId: string | null, cel
 **Interfaces:**
 - Produces: `cellGroups` table export; `members.cellGroupId`, `members.userId`; relations `cellGroupsRelations`, extended `membersRelations`; types `CellGroup`, `NewCellGroup`.
 
-- [ ] **Step 1: Add the `cellGroups` table.** In `db/schema.ts`, add `AnyPgColumn` to the `drizzle-orm/pg-core` import, then insert this block after the `members` table (before `serviceSchedules`):
+- [ ] **Step 1: Add the `cellGroups` table.** In `db/schema.ts`, add `AnySQLiteColumn` to the `drizzle-orm/sqlite-core` import (`text`/`integer`/`sqliteTable` will already be imported by the refactored base tables), then insert this block after the `members` table (before `serviceSchedules`). **First confirm the id/timestamp/boolean helpers below match the refactored base tables and adjust if they differ (see Global Constraints):**
 
 ```ts
 // ---------------------------------------------------------------------------
@@ -80,46 +81,48 @@ export function wouldCreateCycle(cellId: string, newParentId: string | null, cel
 // under a parent cell, forming the leader-of-leaders network.
 // ---------------------------------------------------------------------------
 
-export const cellGroups = pgTable("cell_groups", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const cellGroups = sqliteTable("cell_groups", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   // The member who leads this cell. Nullable so a cell can briefly be leaderless.
-  leaderId: uuid("leader_id").references(() => members.id, {
+  leaderId: text("leader_id").references(() => members.id, {
     onDelete: "set null",
   }),
   // The upline cell. This nesting produces "leaders of leaders".
-  parentCellGroupId: uuid("parent_cell_group_id").references(
-    (): AnyPgColumn => cellGroups.id,
+  parentCellGroupId: text("parent_cell_group_id").references(
+    (): AnySQLiteColumn => cellGroups.id,
     { onDelete: "set null" },
   ),
   meetingDay: integer("meeting_day"), // 0 = Sunday .. 6 = Saturday
   meetingTime: text("meeting_time"), // "HH:mm" 24h
   meetingLocation: text("meeting_location"),
   notes: text("notes"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
     .notNull()
-    .defaultNow(),
+    .$defaultFn(() => new Date()),
 });
 ```
 
-- [ ] **Step 2: Add the two columns to `members`.** Inside the `members` `pgTable({...})` object, after the `occupation` line, add:
+- [ ] **Step 2: Add the two columns to `members`.** Inside the `members` `sqliteTable({...})` object, after the `occupation` line, add (using the same PK column type the refactored `members.id` uses — text here):
 
 ```ts
   // The cell group this person belongs to. NULL = not yet in any cell group.
-  cellGroupId: uuid("cell_group_id").references((): AnyPgColumn => cellGroups.id, {
+  cellGroupId: text("cell_group_id").references((): AnySQLiteColumn => cellGroups.id, {
     onDelete: "set null",
   }),
   // Links a member to their staff login, when they also log in. No UI in v1.
-  userId: uuid("user_id")
+  userId: text("user_id")
     .references(() => users.id, { onDelete: "set null" })
     .unique(),
 ```
 
-(Note: `members` references `cellGroups` and `cellGroups` references `members` — both use the `(): AnyPgColumn =>` lazy form, which is why the type import is required.)
+(Note: `members` references `cellGroups` and `cellGroups` references `members` — both use the `(): AnySQLiteColumn =>` lazy form, which is why the type import is required. In SQLite, foreign keys are only enforced when `PRAGMA foreign_keys = ON`; libSQL/Turso and the drizzle libSQL driver enable this — verify the refactored `db/index.ts` does not disable it, otherwise the `onDelete: "set null"` cascades won't fire.)
 
 - [ ] **Step 3: Add/extend relations.** Replace the existing `membersRelations` and add `cellGroupsRelations`:
 
@@ -165,7 +168,7 @@ export type NewCellGroup = typeof cellGroups.$inferInsert;
 Run: `pnpm db:generate`
 Expected: prints a new migration tag (e.g. `000N_*`) and writes a `.sql` file under `db/migrations/` creating `cell_groups` and altering `members`. No "No schema changes" message.
 
-- [ ] **Step 6: Apply the migration.** Ensure the DB is up (`pnpm db:up`), then:
+- [ ] **Step 6: Apply the migration.** Ensure the local libSQL DB is reachable (per the refactor's setup), then:
 
 Run: `pnpm db:migrate`
 Expected: applies the new migration with no error.
@@ -545,18 +548,14 @@ Expected: FAIL — `cellGroupSchema` not exported.
 - [ ] **Step 3: Add the schemas to `lib/validators.ts`.** Append (the file already defines `emptyToNull` and `optionalText` at the top — reuse them):
 
 ```ts
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const optionalUuid = z.preprocess(
-  emptyToNull,
-  z.string().regex(UUID_RE, "Invalid selection").nullable(),
-);
+// IDs come from a hidden <input>/<select>; the DB foreign key enforces validity,
+// so we only require a non-empty string — works for UUID or nanoid ids alike.
+const optionalId = z.preprocess(emptyToNull, z.string().min(1).nullable());
 
 export const cellGroupSchema = z.object({
   name: z.string().trim().min(1, "Cell group name is required").max(200),
-  leaderId: optionalUuid,
-  parentCellGroupId: optionalUuid,
+  leaderId: optionalId,
+  parentCellGroupId: optionalId,
   meetingDay: z.preprocess(
     (v) => (v === "" || v == null ? null : Number(v)),
     z.number().int().min(0).max(6).nullable(),
@@ -580,8 +579,8 @@ export type CellGroupInput = z.infer<typeof cellGroupSchema>;
 
 // Quick-assign a member to a cell group (or clear it with an empty value).
 export const assignSchema = z.object({
-  memberId: z.string().regex(UUID_RE, "Invalid member"),
-  cellGroupId: optionalUuid,
+  memberId: z.string().min(1, "Invalid member"),
+  cellGroupId: optionalId,
 });
 ```
 
@@ -1412,9 +1411,9 @@ git commit -m "feat(cell-groups): management form, detail, edit, delete UI"
 - [ ] **Step 1: Add `cellGroupId` to `memberSchema`.** In `lib/validators.ts`, inside `memberSchema` (after `occupation`), add:
 
 ```ts
-  cellGroupId: optionalUuid,
+  cellGroupId: optionalId,
 ```
-(`optionalUuid` was added in Task 3 — it is in the same file.)
+(`optionalId` was added in Task 3 — it is in the same file.)
 
 - [ ] **Step 2: Read `cellGroupId` in member actions.** In `app/(app)/members/actions.ts`, add to the object inside `readMemberForm`:
 

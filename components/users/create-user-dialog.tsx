@@ -1,12 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState } from "react";
 import { Loader2, UserPlus } from "lucide-react";
-import { toast } from "sonner";
 
-import { createUser, type UserFormState } from "@/app/(app)/users/actions";
+import { createUser, type CreateUserState } from "@/app/(app)/users/actions";
 import { Field } from "@/components/form/field";
 import { FormSelect } from "@/components/form/form-select";
+import { TempPasswordReveal } from "@/components/users/temp-password-reveal";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,84 +29,133 @@ const ROLE_OPTIONS = USER_ROLES.map((v) => ({
 export function CreateUserDialog() {
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
-  const [state, formAction, pending] = useActionState<UserFormState, FormData>(
-    createUser,
-    undefined,
-  );
+  const [state, formAction, pending] = useActionState<
+    CreateUserState,
+    FormData
+  >(createUser, undefined);
   const errors = state?.errors ?? {};
+  const created = Boolean(state?.ok && state?.tempPassword);
 
-  useEffect(() => {
-    if (state?.ok) {
-      toast.success("Staff user created");
-      setOpen(false);
-      setFormKey((k) => k + 1);
-    }
-  }, [state]);
+  function reset() {
+    setOpen(false);
+    // Remount fresh state next time it opens.
+    setFormKey((k) => k + 1);
+  }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setFormKey((k) => k + 1);
+      }}
+    >
       <DialogTrigger render={<Button />}>
         <UserPlus className="size-4" />
         Add Staff
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add staff user</DialogTitle>
-          <DialogDescription>
-            Create a login for a church staff member and assign their role.
-          </DialogDescription>
-        </DialogHeader>
-        <form key={formKey} action={formAction} className="space-y-4">
-          <Field label="Full Name" htmlFor="user-name" required error={errors.name}>
-            <Input id="user-name" name="name" required placeholder="Jane Cruz" />
-          </Field>
-          <Field label="Email" htmlFor="user-email" required error={errors.email}>
-            <Input
-              id="user-email"
-              name="email"
-              type="email"
-              required
-              placeholder="jane@church.local"
+        {created ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Staff user created</DialogTitle>
+              <DialogDescription>
+                Give these credentials to <strong>{state?.username}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+            <TempPasswordReveal
+              username={state!.username!}
+              tempPassword={state!.tempPassword!}
             />
-          </Field>
-          <Field
-            label="Password"
-            htmlFor="user-password"
-            required
-            error={errors.password}
-            hint="At least 6 characters"
-          >
-            <Input
-              id="user-password"
-              name="password"
-              type="password"
-              required
-            />
-          </Field>
-          <Field label="Role" htmlFor="user-role" required error={errors.role}>
-            <FormSelect
-              id="user-role"
-              name="role"
-              options={ROLE_OPTIONS}
-              defaultValue="usher"
-              placeholder="Select role"
-              required
-            />
-          </Field>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>
-              Cancel
-            </DialogClose>
-            <Button type="submit" disabled={pending}>
-              {pending ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <UserPlus className="size-4" />
-              )}
-              Create user
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter>
+              <Button onClick={reset}>Done</Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Add staff user</DialogTitle>
+              <DialogDescription>
+                Create a login. A temporary password is generated for you to
+                share; they&apos;ll set their own at first sign-in.
+              </DialogDescription>
+            </DialogHeader>
+            <form key={formKey} action={formAction} className="space-y-4">
+              <Field
+                label="Full Name"
+                htmlFor="user-name"
+                required
+                error={errors.name}
+              >
+                <Input
+                  id="user-name"
+                  name="name"
+                  required
+                  placeholder="Jane Cruz"
+                />
+              </Field>
+              <Field
+                label="Username"
+                htmlFor="user-username"
+                required
+                error={errors.username}
+                hint="Used to sign in"
+              >
+                <Input
+                  id="user-username"
+                  name="username"
+                  required
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  placeholder="jane"
+                />
+              </Field>
+              <Field
+                label="Email"
+                htmlFor="user-email"
+                error={errors.email}
+                hint="Optional — for future use"
+              >
+                <Input
+                  id="user-email"
+                  name="email"
+                  type="email"
+                  placeholder="jane@church.local"
+                />
+              </Field>
+              <Field
+                label="Role"
+                htmlFor="user-role"
+                required
+                error={errors.role}
+              >
+                <FormSelect
+                  id="user-role"
+                  name="role"
+                  options={ROLE_OPTIONS}
+                  defaultValue="usher"
+                  placeholder="Select role"
+                  required
+                />
+              </Field>
+              <DialogFooter>
+                <DialogClose
+                  render={<Button variant="outline" type="button" />}
+                >
+                  Cancel
+                </DialogClose>
+                <Button type="submit" disabled={pending}>
+                  {pending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="size-4" />
+                  )}
+                  Create user
+                </Button>
+              </DialogFooter>
+            </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

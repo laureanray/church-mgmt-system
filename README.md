@@ -87,6 +87,21 @@ Open http://localhost:3000 and sign in with the seeded admin:
    camera at a member's QR code. Each scan records their attendance; scanning
    the same member twice for one service is safely ignored.
 
+## Google Sheets export
+
+Attendance can be pushed to a Google Sheet you control — no Google Cloud account
+needed. In the app go to **Settings** (admin), then:
+
+1. Open your Google Sheet → **Extensions ▸ Apps Script** and paste the script
+   shown on the Settings page (it already contains your secret).
+2. **Deploy ▸ New deployment ▸ Web app** (Execute as: Me, Access: Anyone), and
+   copy the Web app URL.
+3. Paste the URL into Settings, **Save**, then **Test connection**.
+
+Then use **Sync all attendance** (Settings) or **Sync to Sheets** (on any
+service). Rows are de-duplicated by attendance ID, so re-syncing never creates
+duplicates. Columns: `ID · Timestamp · Service · Service Date · Member · Recorded By`.
+
 ## Scripts
 
 | Command | Description |

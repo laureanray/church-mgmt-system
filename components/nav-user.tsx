@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import Link from "next/link";
+import { ChevronsUpDown, KeyRound, LogOut } from "lucide-react";
 
 import { signOutAction } from "@/lib/auth-actions";
 import { USER_ROLE_LABELS, type UserRole } from "@/lib/constants";
@@ -34,7 +35,7 @@ function initials(name: string) {
 export function NavUser({
   user,
 }: {
-  user: { name: string; email: string; role: UserRole };
+  user: { name: string; username: string; role: UserRole };
 }) {
   const { isMobile } = useSidebar();
 
@@ -74,10 +75,17 @@ export function NavUser({
                 <div className="flex flex-col space-y-0.5">
                   <span className="text-sm font-medium">{user.name}</span>
                   <span className="text-xs text-muted-foreground">
-                    {user.email}
+                    @{user.username}
                   </span>
                 </div>
               </DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem render={<Link href="/change-password" />}>
+                <KeyRound className="size-4" />
+                Change password
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem

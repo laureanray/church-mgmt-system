@@ -81,7 +81,7 @@ export function ScheduleForm({
               name="type"
               placeholder="Select type"
               options={TYPE_OPTIONS}
-              defaultValue={schedule?.type ?? "worship_service"}
+              defaultValue={schedule?.type ?? "sunday_service"}
               required
             />
           </Field>

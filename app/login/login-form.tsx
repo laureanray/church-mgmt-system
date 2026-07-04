@@ -19,13 +19,13 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
       <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
 
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="username">Username</Label>
         <Input
-          id="email"
-          name="email"
-          type="email"
-          autoComplete="email"
-          placeholder="admin@church.local"
+          id="username"
+          name="username"
+          type="text"
+          autoComplete="username"
+          placeholder="admin"
           required
           autoFocus
         />

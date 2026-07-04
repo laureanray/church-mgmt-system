@@ -8,6 +8,7 @@ import {
   QrCode,
   Users,
   CalendarDays,
+  Settings,
   UserCog,
   type LucideIcon,
 } from "lucide-react";
@@ -44,12 +45,18 @@ const NAV_ITEMS: NavItem[] = [
     icon: UserCog,
     roles: ["admin"],
   },
+  {
+    title: "Settings",
+    href: "/settings",
+    icon: Settings,
+    roles: ["admin"],
+  },
 ];
 
 export function AppSidebar({
   user,
 }: {
-  user: { name: string; email: string; role: UserRole };
+  user: { name: string; username: string; role: UserRole };
 }) {
   const pathname = usePathname();
 

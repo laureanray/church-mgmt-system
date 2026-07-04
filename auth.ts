@@ -12,19 +12,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
+        username: { label: "Username", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const email = String(credentials?.email ?? "")
+        const username = String(credentials?.username ?? "")
           .toLowerCase()
           .trim();
         const password = String(credentials?.password ?? "");
 
-        if (!email || !password) return null;
+        if (!username || !password) return null;
 
         const user = await db.query.users.findFirst({
-          where: eq(users.email, email),
+          where: eq(users.username, username),
         });
         if (!user) return null;
 

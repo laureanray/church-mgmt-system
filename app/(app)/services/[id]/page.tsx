@@ -15,7 +15,9 @@ import { attendance, services } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { formatDateTime, formatTime, initials } from "@/lib/format";
+import { getSheetsConfig } from "@/lib/sheets";
 import { cn } from "@/lib/utils";
+import { SyncServiceButton } from "@/components/integrations/sync-buttons";
 import { DeleteServiceButton } from "@/components/services/delete-service-button";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -56,6 +58,7 @@ export default async function ServiceDetailPage({
   });
 
   const manage = canManage(user.role);
+  const sheetsOn = manage ? Boolean(await getSheetsConfig()) : false;
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -78,6 +81,7 @@ export default async function ServiceDetailPage({
           <QrCode className="size-4" />
           Scan attendance
         </Link>
+        {sheetsOn ? <SyncServiceButton serviceId={service.id} /> : null}
         {manage ? (
           <>
             <Link

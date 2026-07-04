@@ -1,15 +1,20 @@
+import Link from "next/link";
 import { asc } from "drizzle-orm";
+import { Pencil } from "lucide-react";
 
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
 import { USER_ROLE_LABELS } from "@/lib/constants";
-import { formatDate, initials } from "@/lib/format";
+import { initials } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { DeleteUserButton } from "@/components/users/delete-user-button";
+import { ResetPasswordButton } from "@/components/users/reset-password-button";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -22,10 +27,7 @@ import {
 export default async function UsersPage() {
   const currentUser = await requireRole(["admin"]);
 
-  const staff = await db
-    .select()
-    .from(users)
-    .orderBy(asc(users.name));
+  const staff = await db.select().from(users).orderBy(asc(users.name));
 
   return (
     <>
@@ -43,52 +45,85 @@ export default async function UsersPage() {
               <TableHead>Name</TableHead>
               <TableHead className="hidden sm:table-cell">Email</TableHead>
               <TableHead>Role</TableHead>
-              <TableHead className="hidden md:table-cell">Added</TableHead>
-              <TableHead className="w-10" />
+              <TableHead className="hidden md:table-cell">Status</TableHead>
+              <TableHead className="w-28 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staff.map((u) => (
-              <TableRow key={u.id}>
-                <TableCell>
-                  <div className="flex items-center gap-2 font-medium">
-                    <Avatar className="size-7">
-                      <AvatarFallback className="text-xs">
-                        {initials(u.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    {u.name}
-                    {u.id === currentUser.id ? (
-                      <Badge variant="outline" className="text-xs">
-                        You
+            {staff.map((u) => {
+              const isSelf = u.id === currentUser.id;
+              return (
+                <TableRow key={u.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="size-7">
+                        <AvatarFallback className="text-xs">
+                          {initials(u.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          {u.name}
+                          {isSelf ? (
+                            <Badge variant="outline" className="text-xs">
+                              You
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          @{u.username}
+                        </div>
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell text-muted-foreground">
+                    {u.email ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={u.role === "admin" ? "default" : "secondary"}
+                    >
+                      {USER_ROLE_LABELS[u.role]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {u.mustChangePassword ? (
+                      <Badge
+                        variant="outline"
+                        className="border-amber-500/40 text-amber-600 dark:text-amber-400"
+                      >
+                        Must reset password
                       </Badge>
-                    ) : null}
-                  </div>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell text-muted-foreground">
-                  {u.email}
-                </TableCell>
-                <TableCell>
-                  <Badge
-                    variant={u.role === "admin" ? "default" : "secondary"}
-                  >
-                    {USER_ROLE_LABELS[u.role]}
-                  </Badge>
-                </TableCell>
-                <TableCell className="hidden md:table-cell text-muted-foreground">
-                  {formatDate(u.createdAt.toISOString().slice(0, 10))}
-                </TableCell>
-                <TableCell className="text-right">
-                  {u.id === currentUser.id ? null : (
-                    <DeleteUserButton
-                      id={u.id}
-                      name={u.name}
-                      currentUserId={currentUser.id}
-                    />
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        Active
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Link
+                        href={`/users/${u.id}/edit`}
+                        className={cn(
+                          buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                        )}
+                        aria-label={`Edit ${u.name}`}
+                      >
+                        <Pencil className="size-4" />
+                      </Link>
+                      <ResetPasswordButton id={u.id} name={u.name} />
+                      {isSelf ? null : (
+                        <DeleteUserButton
+                          id={u.id}
+                          name={u.name}
+                          currentUserId={currentUser.id}
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>

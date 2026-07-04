@@ -1,3 +1,8 @@
+import { eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
+
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { requireUser } from "@/lib/auth-helpers";
 import { AppSidebar } from "@/components/app-sidebar";
 import {
@@ -12,12 +17,30 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await requireUser();
+  const sessionUser = await requireUser();
+
+  // Source of truth for display + the temporary-password gate.
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, sessionUser.id),
+    columns: {
+      name: true,
+      username: true,
+      role: true,
+      mustChangePassword: true,
+    },
+  });
+
+  if (!user) {
+    redirect("/login");
+  }
+  if (user.mustChangePassword) {
+    redirect("/change-password");
+  }
 
   return (
     <SidebarProvider>
       <AppSidebar
-        user={{ name: user.name ?? "User", email: user.email ?? "", role: user.role }}
+        user={{ name: user.name, username: user.username, role: user.role }}
       />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">

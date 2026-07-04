@@ -17,20 +17,22 @@ async function main() {
   console.log("Seeding database...");
 
   // --- Default admin user -------------------------------------------------
-  const adminEmail = "admin@church.local";
+  const adminUsername = "admin";
   const passwordHash = await hash("admin123", 10);
 
   await db
     .insert(users)
     .values({
       name: "Church Admin",
-      email: adminEmail,
+      username: adminUsername,
+      email: "admin@church.local",
       passwordHash,
       role: "admin",
+      mustChangePassword: false,
     })
-    .onConflictDoNothing({ target: users.email });
+    .onConflictDoNothing({ target: users.username });
 
-  console.log(`  ✓ Admin user ready:  ${adminEmail} / admin123`);
+  console.log(`  ✓ Admin user ready:  ${adminUsername} / admin123`);
 
   // --- Sample members -----------------------------------------------------
   const existingMembers = await db.$count(members);
@@ -105,13 +107,13 @@ async function main() {
     await db.insert(services).values([
       {
         name: "Sunday Worship Service",
-        type: "worship_service",
+        type: "sunday_service",
         scheduledAt: thisSunday,
         location: "Main Sanctuary",
       },
       {
         name: "Midweek Prayer Meeting",
-        type: "prayer_meeting",
+        type: "midweek_service",
         scheduledAt: wednesday,
         location: "Fellowship Hall",
       },

@@ -35,22 +35,16 @@ export const MARITAL_STATUS_LABELS: Record<MaritalStatus, string> = {
 };
 
 export const SERVICE_TYPES = [
-  "worship_service",
-  "prayer_meeting",
-  "bible_study",
-  "youth_service",
+  "sunday_service",
+  "midweek_service",
   "special_event",
-  "other",
 ] as const;
 export type ServiceType = (typeof SERVICE_TYPES)[number];
 
 export const SERVICE_TYPE_LABELS: Record<ServiceType, string> = {
-  worship_service: "Worship Service",
-  prayer_meeting: "Prayer Meeting",
-  bible_study: "Bible Study",
-  youth_service: "Youth Service",
+  sunday_service: "Sunday Service",
+  midweek_service: "Midweek Service",
   special_event: "Special Event",
-  other: "Other",
 };
 
 // Marital statuses for which a spouse / anniversary is relevant.

@@ -73,7 +73,7 @@ export function ServiceForm({
               name="type"
               placeholder="Select type"
               options={TYPE_OPTIONS}
-              defaultValue={service?.type ?? "worship_service"}
+              defaultValue={service?.type ?? "sunday_service"}
               required
             />
           </Field>

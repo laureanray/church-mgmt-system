@@ -1,7 +1,8 @@
 # Cell Groups — Design
 
 **Date:** 2026-07-04
-**Status:** Approved (pending spec review)
+**Status:** Approved
+**Amended 2026-07-04:** target database changed from Postgres to **SQLite (libSQL / Turso on prod)**, tracking a parallel Postgres→SQLite refactor of the base tables. Only the data-model dialect (§3) and implementation constraints (§10) change; the feature design, derivations, and graph are unchanged.
 
 ## 1. Purpose
 
@@ -41,20 +42,21 @@ graphic on top.
 
 ### 3.1 New table `cell_groups`
 
-Drizzle (`db/schema.ts`), mirroring existing conventions:
+Drizzle SQLite (`drizzle-orm/sqlite-core`), mirroring the refactored base tables'
+id/timestamp/boolean conventions:
 
 ```ts
-export const cellGroups = pgTable("cell_groups", {
-  id: uuid("id").primaryKey().defaultRandom(),
+export const cellGroups = sqliteTable("cell_groups", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   // The member who leads this cell. Nullable so a cell can briefly exist
   // leaderless (e.g. leader deleted); UI flags this state.
-  leaderId: uuid("leader_id").references(() => members.id, {
+  leaderId: text("leader_id").references(() => members.id, {
     onDelete: "set null",
   }),
   // The upline cell. This nesting is what produces "leaders of leaders".
-  parentCellGroupId: uuid("parent_cell_group_id").references(
-    (): AnyPgColumn => cellGroups.id,
+  parentCellGroupId: text("parent_cell_group_id").references(
+    (): AnySQLiteColumn => cellGroups.id,
     { onDelete: "set null" },
   ),
   // Meeting details.
@@ -62,26 +64,27 @@ export const cellGroups = pgTable("cell_groups", {
   meetingTime: text("meeting_time"),         // "HH:mm" 24h
   meetingLocation: text("meeting_location"),
   notes: text("notes"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
 ```
 
-(Self-reference uses `AnyPgColumn` per Drizzle's self-FK pattern — implementer to
-confirm exact syntax against the installed drizzle-orm version.)
+(Self-reference uses `AnySQLiteColumn` per Drizzle's self-FK pattern. The id/
+timestamp/boolean helpers assume the refactor's conventions — text UUID PKs,
+`integer` timestamps, `integer` booleans; match whatever the base tables adopt.)
 
 ### 3.2 New columns on `members`
 
 ```ts
 // The cell group this person belongs to. NULL = "not yet in any cell group".
-cellGroupId: uuid("cell_group_id").references(() => cellGroups.id, {
+cellGroupId: text("cell_group_id").references((): AnySQLiteColumn => cellGroups.id, {
   onDelete: "set null",
 }),
 // Links a member to their staff login, when they also log in.
 // This reconciles the "leaders can be staff OR ordinary members" requirement:
 // every leader is a member node; staff-leaders additionally point at their user.
-userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }).unique(),
+userId: text("user_id").references(() => users.id, { onDelete: "set null" }).unique(),
 ```
 
 ### 3.3 Relations
@@ -227,6 +230,14 @@ graph and the unassigned panel are both populated on first run.
 
 ## 10. Implementation constraints
 
+- **Database is SQLite (libSQL / Turso on prod), built on a parallel Postgres→SQLite
+  refactor.** Implement this feature only after that refactor lands. Use
+  `drizzle-orm/sqlite-core` (`sqliteTable`, `text`, `integer`, `AnySQLiteColumn`) and
+  **mirror the refactored base tables' id/timestamp/boolean column conventions.** FK
+  column types must match the referenced PK type. Because ids may be UUID or nanoid,
+  validators require only a non-empty string for id references (the DB foreign key
+  enforces real validity). SQLite enforces FK cascades (`onDelete: "set null"`) only
+  with `PRAGMA foreign_keys = ON` — verify the libSQL client keeps it on.
 - **This is a modified Next.js (see `AGENTS.md`).** Before writing any route, page,
   server action, or data-fetching code, read the relevant guide under
   `node_modules/next/dist/docs/` — APIs and conventions may differ from stock Next 16.
