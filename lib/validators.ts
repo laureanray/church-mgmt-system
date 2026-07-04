@@ -132,6 +132,41 @@ export const changePasswordSchema = z
     path: ["confirmPassword"],
   });
 
+// IDs come from a hidden <input>/<select>; the DB foreign key enforces validity,
+// so we only require a non-empty string — works for UUID or nanoid ids alike.
+const optionalId = z.preprocess(emptyToNull, z.string().min(1).nullable());
+
+export const cellGroupSchema = z.object({
+  name: z.string().trim().min(1, "Cell group name is required").max(200),
+  leaderId: optionalId.optional().default(null),
+  parentCellGroupId: optionalId.optional().default(null),
+  meetingDay: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z.number().int().min(0).max(6).nullable(),
+  ).optional().default(null),
+  meetingTime: z.preprocess(
+    emptyToNull,
+    z.string().regex(/^\d{2}:\d{2}$/, "Pick a valid time").nullable(),
+  ).optional().default(null),
+  meetingLocation: optionalText.optional().default(null),
+  notes: optionalText.optional().default(null),
+  active: z.preprocess(
+    (v) =>
+      v === undefined || v === null
+        ? true
+        : v === "on" || v === "true" || v === true,
+    z.boolean(),
+  ).optional().default(true),
+});
+
+export type CellGroupInput = z.infer<typeof cellGroupSchema>;
+
+// Quick-assign a member to a cell group (or clear it with an empty value).
+export const assignSchema = z.object({
+  memberId: z.string().min(1, "Invalid member"),
+  cellGroupId: optionalId,
+});
+
 /** Flatten a ZodError into a { field: message } map for form display. */
 export function fieldErrors(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
