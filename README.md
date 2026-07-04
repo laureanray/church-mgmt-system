@@ -1,36 +1,121 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# IRM Ministries
 
-## Getting Started
+Church management for IRM Ministries — manage members and record attendance
+with per-member QR codes. Each
+member gets a unique QR code; scan it at the entrance (phone/tablet camera or a
+USB scanner) to instantly record attendance against a service.
 
-First, run the development server:
+## Features
+
+- **Members** — full directory with all pastoral details (birthdate, spiritual
+  birthday, year joined IRM, marital status, spouse, family, contact, address,
+  education, occupation). Each member has a unique, printable **QR code**.
+- **Services** — define worship services, prayer meetings, Bible studies, etc.
+  Attendance is recorded per service.
+- **QR attendance scanning** — a camera-based scan page (with a manual / USB
+  scanner fallback), live check-in feed, and automatic duplicate prevention.
+- **Roles** — `admin`, `leader`, and `usher`:
+  - **Admin** — everything, including managing staff users.
+  - **Leader** — manage members and services, scan attendance.
+  - **Usher** — scan attendance and view records.
+- **Dashboard** — members, services, and attendance stats at a glance.
+
+## Tech stack
+
+- **Next.js 16** (App Router, Server Actions, Turbopack) + **React 19**
+- **Tailwind CSS 4** + **shadcn/ui** (Base UI variant)
+- **Drizzle ORM** + **PostgreSQL** (local via Docker, Neon in production)
+- **Auth.js (NextAuth v5)** — credentials + role-based access
+- **@yudiel/react-qr-scanner** (scanning) + **qrcode** (generation)
+
+## Getting started
+
+### Prerequisites
+
+- Node.js 20+ (24 recommended)
+- pnpm 10+
+- Docker Desktop (for local Postgres)
+
+### 1. Install dependencies
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Configure environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy the example env and adjust if needed (defaults work with the bundled
+Docker Postgres):
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env
+```
 
-## Learn More
+Generate a fresh `AUTH_SECRET`:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+openssl rand -base64 32
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 3. Start the database
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+pnpm db:up        # starts Postgres in Docker on port 5433
+pnpm db:migrate   # applies the schema
+pnpm db:seed      # creates an admin user + sample members/services
+```
 
-## Deploy on Vercel
+### 4. Run the app
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+pnpm dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open http://localhost:3000 and sign in with the seeded admin:
+
+- **Email:** `admin@church.local`
+- **Password:** `admin123`
+
+> Change this password (or create your own admin) before using in production.
+
+## How to use it
+
+1. **Add a member** (Members → Add Member). A unique QR code is generated on
+   their detail page — **Print** or **Download** it and give it to the member.
+2. **Create a service** (Services → Add Service).
+3. **Scan attendance** (Scan Attendance): pick the service, then point the
+   camera at a member's QR code. Each scan records their attendance; scanning
+   the same member twice for one service is safely ignored.
+
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Start the dev server |
+| `pnpm build` / `pnpm start` | Production build / serve |
+| `pnpm db:up` / `pnpm db:down` | Start / stop local Postgres (Docker) |
+| `pnpm db:generate` | Generate a migration from schema changes |
+| `pnpm db:migrate` | Apply migrations |
+| `pnpm db:seed` | Seed admin + sample data |
+| `pnpm db:studio` | Open Drizzle Studio |
+
+## Deployment (Vercel + Neon)
+
+1. Create a **Neon Postgres** database (Vercel Marketplace) and copy its
+   pooled connection string.
+2. Set project env vars on Vercel: `DATABASE_URL`, `AUTH_SECRET`,
+   `AUTH_TRUST_HOST=true`, and `NEXT_PUBLIC_APP_URL`.
+3. Run migrations against the production database (`DATABASE_URL=… pnpm db:migrate`).
+4. Deploy. Camera scanning requires HTTPS — Vercel provides this automatically.
+
+## Project structure
+
+```
+app/(app)/         Authenticated app (dashboard, members, services, scan, users)
+app/login/         Sign-in page
+auth.ts            NextAuth setup (credentials + roles)
+proxy.ts           Route protection (Next.js middleware/proxy)
+db/schema.ts       Drizzle schema (members, services, attendance, users)
+components/         UI + feature components (shadcn/ui in components/ui)
+lib/               Validators, formatting, QR + auth helpers
+```
