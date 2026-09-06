@@ -78,6 +78,7 @@ export function CellGroupForm({
               id="leaderId"
               name="leaderId"
               placeholder="Select a leader"
+              clearLabel="No leader"
               options={memberOptions}
               defaultValue={cellGroup?.leaderId}
             />
@@ -93,6 +94,7 @@ export function CellGroupForm({
               id="parentCellGroupId"
               name="parentCellGroupId"
               placeholder="None (top level)"
+              clearLabel="None (top level)"
               options={cellOptions}
               defaultValue={cellGroup?.parentCellGroupId}
             />
@@ -110,6 +112,7 @@ export function CellGroupForm({
               id="meetingDay"
               name="meetingDay"
               placeholder="Select a day"
+              clearLabel="No set day"
               options={MEETING_DAY_OPTIONS}
               defaultValue={
                 cellGroup?.meetingDay != null

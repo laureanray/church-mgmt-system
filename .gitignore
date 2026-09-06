@@ -37,8 +37,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...but the placeholder template is what `cp .env.example .env` in the README
+# copies, so it has to be tracked.
+!.env.example
 
-# local libSQL database
+# leftover SQLite database from the pre-Supabase (libSQL/Turso) setup
 /local.db
 /local.db-*
 

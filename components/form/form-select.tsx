@@ -15,6 +15,11 @@ export type SelectOption = { value: string; label: string };
  * Base UI Select wired for native form submission. The `name` prop makes the
  * value part of FormData; `items` lets the trigger render the label instead of
  * the raw value.
+ *
+ * `placeholder` only shows while nothing is selected — it is not selectable, so
+ * an optional field also needs `clearLabel` to prepend a real "none" item.
+ * Without it a value can be set but never unset. The empty string it submits is
+ * what `emptyToNull` in lib/validators.ts turns back into a NULL column.
  */
 export function FormSelect({
   name,
@@ -25,6 +30,7 @@ export function FormSelect({
   id,
   className,
   onValueChange,
+  clearLabel,
 }: {
   name: string;
   defaultValue?: string | null;
@@ -34,12 +40,17 @@ export function FormSelect({
   id?: string;
   className?: string;
   onValueChange?: (value: string) => void;
+  clearLabel?: string;
 }) {
+  const items = clearLabel
+    ? [{ value: "", label: clearLabel }, ...options]
+    : options;
+
   return (
     <Select
       name={name}
       defaultValue={defaultValue ?? undefined}
-      items={options}
+      items={items}
       required={required}
       onValueChange={(value) => onValueChange?.(value as string)}
     >
@@ -47,7 +58,7 @@ export function FormSelect({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
-        {options.map((o) => (
+        {items.map((o) => (
           <SelectItem key={o.value} value={o.value}>
             {o.label}
           </SelectItem>

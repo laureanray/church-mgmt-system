@@ -34,6 +34,18 @@ function readMemberForm(formData: FormData) {
   });
 }
 
+/**
+ * Members carry `cellGroupId`, so any member mutation can change a cell roster,
+ * the graph, and the unassigned count on /cell-groups. Revalidate the cell
+ * routes a mutation touched — both sides of a move, hence the varargs.
+ */
+function revalidateCellGroups(...cellGroupIds: (string | null | undefined)[]) {
+  revalidatePath("/cell-groups");
+  for (const cellGroupId of new Set(cellGroupIds.filter(Boolean))) {
+    revalidatePath(`/cell-groups/${cellGroupId}`);
+  }
+}
+
 export async function createMember(
   _prev: MemberFormState,
   formData: FormData,
@@ -54,6 +66,7 @@ export async function createMember(
     .returning({ id: members.id });
 
   revalidatePath("/members");
+  revalidateCellGroups(parsed.data.cellGroupId);
   redirect(`/members/${row.id}`);
 }
 
@@ -72,19 +85,31 @@ export async function updateMember(
     };
   }
 
-  await db
+  const previous = await db.query.members.findFirst({
+    where: eq(members.id, id),
+    columns: { cellGroupId: true },
+  });
+
+  const [updated] = await db
     .update(members)
     .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(members.id, id));
+    .where(eq(members.id, id))
+    .returning({ cellGroupId: members.cellGroupId });
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
+  // `previous` may differ from the new value when the member was moved.
+  revalidateCellGroups(previous?.cellGroupId, updated?.cellGroupId);
   redirect(`/members/${id}`);
 }
 
 export async function deleteMember(id: string) {
   await requireRole(["admin", "leader"]);
-  await db.delete(members).where(eq(members.id, id));
+  const [deleted] = await db
+    .delete(members)
+    .where(eq(members.id, id))
+    .returning({ cellGroupId: members.cellGroupId });
   revalidatePath("/members");
+  revalidateCellGroups(deleted?.cellGroupId);
   redirect("/members");
 }
