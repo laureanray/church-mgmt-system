@@ -3,6 +3,7 @@ import {
   AnyPgColumn,
   boolean,
   date,
+  index,
   integer,
   pgTable,
   text,
@@ -50,82 +51,101 @@ export const users = pgTable("users", {
 // Members — the church congregation. Each has a unique QR token.
 // ---------------------------------------------------------------------------
 
-export const members = pgTable("members", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  // Unique token encoded into the member's QR code.
-  qrToken: text("qr_token").notNull().unique(),
+export const members = pgTable(
+  "members",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Unique token encoded into the member's QR code.
+    qrToken: text("qr_token").notNull().unique(),
 
-  fullName: text("full_name").notNull(),
-  birthdate: date("birthdate"),
-  spiritualBirthday: date("spiritual_birthday"),
-  // "Taon na naging Kaanib ng IRM" — year the member joined IRM.
-  memberSinceYear: integer("member_since_year"),
-  gender: text("gender", { enum: ["male", "female"] }),
-  maritalStatus: text("marital_status", {
-    enum: ["single", "married", "widowed", "separated", "divorced"],
-  }),
-  spouseName: text("spouse_name"),
-  weddingAnniversary: date("wedding_anniversary"),
-  contactNumber: text("contact_number"),
-  homeAddress: text("home_address"),
-  motherName: text("mother_name"),
-  fatherName: text("father_name"),
-  educationalLevel: text("educational_level"),
-  occupation: text("occupation"),
+    fullName: text("full_name").notNull(),
+    birthdate: date("birthdate"),
+    spiritualBirthday: date("spiritual_birthday"),
+    // "Taon na naging Kaanib ng IRM" — year the member joined IRM.
+    memberSinceYear: integer("member_since_year"),
+    gender: text("gender", { enum: ["male", "female"] }),
+    maritalStatus: text("marital_status", {
+      enum: ["single", "married", "widowed", "separated", "divorced"],
+    }),
+    spouseName: text("spouse_name"),
+    weddingAnniversary: date("wedding_anniversary"),
+    contactNumber: text("contact_number"),
+    homeAddress: text("home_address"),
+    motherName: text("mother_name"),
+    fatherName: text("father_name"),
+    educationalLevel: text("educational_level"),
+    occupation: text("occupation"),
 
-  // The cell group this person belongs to. NULL = not yet in any cell group.
-  cellGroupId: text("cell_group_id").references(
-    (): AnyPgColumn => cellGroups.id,
-    {
-      onDelete: "set null",
-    },
-  ),
-  // Links a member to their staff login, when they also log in. No UI in v1.
-  userId: text("user_id")
-    .references(() => users.id, { onDelete: "set null" })
-    .unique(),
+    // The cell group this person belongs to. NULL = not yet in any cell group.
+    cellGroupId: text("cell_group_id").references(
+      (): AnyPgColumn => cellGroups.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    // Links a member to their staff login, when they also log in. No UI in v1.
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "set null" })
+      .unique(),
 
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Every listing of the directory sorts by name, and /members pairs that with
+    // a LIMIT — without this the whole table is sorted to return 200 rows.
+    index("members_full_name_idx").on(t.fullName),
+    // Read by the cell-group pages; also what makes deleting a cell group (which
+    // nulls this column) an indexed update rather than a scan.
+    index("members_cell_group_id_idx").on(t.cellGroupId),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // Cell groups — discipleship cells. A cell has a leader (a member) and may sit
 // under a parent cell, forming the leader-of-leaders network.
 // ---------------------------------------------------------------------------
 
-export const cellGroups = pgTable("cell_groups", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  // The member who leads this cell. Nullable so a cell can briefly be leaderless.
-  leaderId: text("leader_id").references(() => members.id, {
-    onDelete: "set null",
-  }),
-  // The upline cell. This nesting produces "leaders of leaders".
-  parentCellGroupId: text("parent_cell_group_id").references(
-    (): AnyPgColumn => cellGroups.id,
-    { onDelete: "set null" },
-  ),
-  meetingDay: integer("meeting_day"), // 0 = Sunday .. 6 = Saturday
-  meetingTime: text("meeting_time"), // "HH:mm" 24h
-  meetingLocation: text("meeting_location"),
-  notes: text("notes"),
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const cellGroups = pgTable(
+  "cell_groups",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    name: text("name").notNull(),
+    // The member who leads this cell. Nullable so a cell can briefly be leaderless.
+    leaderId: text("leader_id").references(() => members.id, {
+      onDelete: "set null",
+    }),
+    // The upline cell. This nesting produces "leaders of leaders".
+    parentCellGroupId: text("parent_cell_group_id").references(
+      (): AnyPgColumn => cellGroups.id,
+      { onDelete: "set null" },
+    ),
+    meetingDay: integer("meeting_day"), // 0 = Sunday .. 6 = Saturday
+    meetingTime: text("meeting_time"), // "HH:mm" 24h
+    meetingLocation: text("meeting_location"),
+    notes: text("notes"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Both sides of the leader-of-leaders graph, walked on every /cell-groups load.
+    index("cell_groups_leader_id_idx").on(t.leaderId),
+    index("cell_groups_parent_cell_group_id_idx").on(t.parentCellGroupId),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // Service schedules — recurring templates (e.g. "Sunday Service, weekly 9AM")
@@ -184,12 +204,16 @@ export const services = pgTable(
       .notNull()
       .defaultNow(),
   },
-  // Prevents generating the same occurrence twice for a schedule.
   (t) => [
+    // Prevents generating the same occurrence twice for a schedule.
     unique("services_schedule_occurrence_unique").on(
       t.scheduleId,
       t.scheduledAt,
     ),
+    // Every services query orders by this column, and /scan slices a window
+    // around now out of it. The unique constraint above leads with schedule_id,
+    // so it cannot serve those on its own.
+    index("services_scheduled_at_idx").on(t.scheduledAt),
   ],
 );
 
@@ -219,6 +243,14 @@ export const attendance = pgTable(
   },
   (t) => [
     unique("attendance_member_service_unique").on(t.memberId, t.serviceId),
+    // The unique constraint leads with member_id, so it is no help to the
+    // per-service aggregates — the attendance count next to every service on
+    // /services, /dashboard and /services/[id] — which all group by this column.
+    index("attendance_service_id_idx").on(t.serviceId),
+    // The dashboard's "check-ins (7 days)" tile filters on this.
+    index("attendance_checked_in_at_idx").on(t.checkedInAt),
+    // Deleting a staff user nulls this column across the table.
+    index("attendance_recorded_by_idx").on(t.recordedBy),
   ],
 );
 

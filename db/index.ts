@@ -40,9 +40,10 @@ function connect(): Database {
       max: 5,
     });
 
-  if (process.env.NODE_ENV !== "production") {
-    globalForDb.pgClient = client;
-  }
+  // Cached in production too, not just in dev. Next may evaluate this module
+  // more than once per instance, and each fresh evaluation would otherwise open
+  // its own pool — the opposite of what the comment on globalForDb promises.
+  globalForDb.pgClient = client;
 
   return drizzle(client, { schema });
 }
