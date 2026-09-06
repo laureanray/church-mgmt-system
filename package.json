@@ -21,6 +21,7 @@
     "test:unit": "bun test lib",
     "test:watch": "bun test --watch lib",
     "test:coverage": "bun test --coverage lib",
+    "coverage:report": "bun scripts/coverage-report.mjs",
     "test:integration": "bun test --preload ./tests/support/integration-setup.ts --timeout 30000 tests/integration",
     "test:e2e": "playwright test",
     "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e",
