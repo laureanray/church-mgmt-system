@@ -51,7 +51,7 @@ export function CellGraph({
 
   const nodesRef = useRef<SimNode[]>([]);
   const simRef = useRef<Simulation<SimNode, undefined> | null>(null);
-  const [, force] = useState(0); // re-render on tick
+  const [nodes, setNodes] = useState<SimNode[]>([]); // immutable render snapshot
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const drag = useRef<{ id: string } | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -86,13 +86,12 @@ export function CellGraph({
       .force("charge", forceManyBody().strength(-260))
       .force("center", forceCenter(WIDTH / 2, HEIGHT / 2))
       .force("collide", forceCollide<SimNode>((d) => TIER_STYLE[d.tier].r + 6))
-      .on("tick", () => force((t) => t + 1));
+      .on("tick", () => setNodes(nodesRef.current.map((node) => ({ ...node }))));
 
     simRef.current = sim;
     return () => {
       sim.stop();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, inputLinks]);
 
   // Highlight the selected node's ancestors + descendants; dim the rest.
@@ -126,7 +125,7 @@ export function CellGraph({
 
   const dim = (id: string) => (highlighted && !highlighted.has(id) ? 0.15 : 1);
 
-  const nodePos = new Map(nodesRef.current.map((n) => [n.id, n]));
+  const nodePos = new Map(nodes.map((n) => [n.id, n]));
 
   function pointerToWorld(e: React.PointerEvent) {
     const svg = e.currentTarget as SVGSVGElement;
@@ -159,7 +158,7 @@ export function CellGraph({
       onPointerMove={(e) => {
         if (drag.current) {
           const w = pointerToWorld(e);
-          const n = nodePos.get(drag.current.id);
+          const n = nodesRef.current.find((node) => node.id === drag.current!.id);
           if (n) {
             n.fx = w.x;
             n.fy = w.y;
@@ -213,7 +212,7 @@ export function CellGraph({
             />
           );
         })}
-        {nodesRef.current.map((n) => {
+        {nodes.map((n) => {
           const st = TIER_STYLE[n.tier];
           const selected = n.id === selectedId;
           const hovered = n.id === hoveredId;
@@ -226,9 +225,9 @@ export function CellGraph({
               onPointerDown={(e) => {
                 e.stopPropagation();
                 drag.current = { id: n.id };
-                (e.target as SVGElement).ownerSVGElement?.setPointerCapture(
-                  e.pointerId,
-                );
+                // Keep clicks targeted at the node; capturing on the SVG would
+                // retarget pointerup/click to the background and clear selection.
+                e.currentTarget.setPointerCapture(e.pointerId);
               }}
               onPointerEnter={() => setHoveredId(n.id)}
               onPointerLeave={() =>

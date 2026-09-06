@@ -66,6 +66,8 @@ function StatCard({
 
 export default async function DashboardPage() {
   const user = await requireUser();
+  // This async Server Component reads the clock after request-bound authentication.
+  // eslint-disable-next-line react-hooks/purity
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [membersCount, servicesCount, attendanceCount, weekCheckins, recent] =

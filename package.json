@@ -16,7 +16,16 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "tsx db/seed.ts"
+    "db:seed": "tsx db/seed.ts",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "playwright test",
+    "test:all": "pnpm test:unit && pnpm test:integration && pnpm test:e2e",
+    "test:db:up": "docker compose -p church-mgmt-tests -f compose.test.yml up -d --wait",
+    "test:db:down": "docker compose -p church-mgmt-tests -f compose.test.yml down",
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -65,6 +74,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "@playwright/test": "^1.63.0",
+    "@vitest/coverage-v8": "4.1.9"
   }
 }
