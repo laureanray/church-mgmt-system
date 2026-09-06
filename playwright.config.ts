@@ -18,7 +18,7 @@ export default defineConfig({
   use: { baseURL, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'pnpm build && pnpm exec next start --hostname 127.0.0.1 --port 3100',
+    command: 'bun run build && bunx next start --hostname 127.0.0.1 --port 3100',
     url: `${baseURL}/login`,
     reuseExistingServer: false,
     timeout: 180_000,

@@ -32,15 +32,14 @@ USB scanner) to instantly record attendance against a service.
 
 ### Prerequisites
 
-- Node.js 20+ (24 recommended)
-- pnpm 10+
+- [Bun](https://bun.sh) 1.4+ (package manager, task runner and test runner)
 - Docker Desktop (the local Supabase stack runs in Docker)
 - [Supabase CLI](https://supabase.com/docs/guides/local-development) 2+
 
 ### 1. Install dependencies
 
 ```bash
-pnpm install
+bun install
 ```
 
 ### 2. Configure environment
@@ -52,7 +51,7 @@ Supabase stack):
 cp .env.example .env
 ```
 
-Then fill in the Supabase Auth keys, which `pnpm db:up` prints (and
+Then fill in the Supabase Auth keys, which `bun run db:up` prints (and
 `supabase status` repeats):
 
 ```bash
@@ -62,9 +61,9 @@ supabase status   # copy API_URL, ANON_KEY and SERVICE_ROLE_KEY
 ### 3. Start the database
 
 ```bash
-pnpm db:up        # supabase start — Postgres on 54422, Studio on 54423
-pnpm db:migrate   # applies the Drizzle migrations
-pnpm db:seed      # creates an admin user + sample members/services
+bun run db:up        # supabase start — Postgres on 54422, Studio on 54423
+bun run db:migrate   # applies the Drizzle migrations
+bun run db:seed      # creates an admin user + sample members/services
 ```
 
 > This project uses the `544xx` port block rather than Supabase's `543xx`
@@ -78,7 +77,7 @@ is the identity provider.
 ### 4. Run the app
 
 ```bash
-pnpm dev
+bun run dev
 ```
 
 Open http://localhost:3000 and sign in with the seeded admin:
@@ -116,21 +115,21 @@ duplicates. Columns: `ID · Timestamp · Service · Service Date · Member · Re
 
 | Command | Description |
 | --- | --- |
-| `pnpm dev` | Start the dev server |
-| `pnpm build` / `pnpm start` | Production build / serve |
-| `pnpm db:up` / `pnpm db:down` | Start / stop the local Supabase stack |
-| `pnpm db:reset` | Drop, re-migrate and re-seed the local database |
-| `pnpm db:generate` | Generate a migration from schema changes |
-| `pnpm db:migrate` | Apply migrations |
-| `pnpm db:seed` | Seed admin + sample data |
-| `pnpm db:studio` | Open Drizzle Studio |
+| `bun run dev` | Start the dev server (Next runs on the Bun runtime) |
+| `bun run build` / `bun run start` | Production build / serve (Node, as on Vercel) |
+| `bun run db:up` / `bun run db:down` | Start / stop the local Supabase stack |
+| `bun run db:reset` | Drop, re-migrate and re-seed the local database |
+| `bun run db:generate` | Generate a migration from schema changes |
+| `bun run db:migrate` | Apply migrations |
+| `bun run db:seed` | Seed admin + sample data |
+| `bun run db:studio` | Open Drizzle Studio |
 
 ## Testing
 
 See [the testing guide](docs/testing.md) for the assessment, unit/integration/E2E
-setup, database isolation, CI, and coverage priorities. Start with `pnpm test`;
-for all suites, run `pnpm test:db:up`, install Chromium with
-`pnpm exec playwright install chromium`, then run `pnpm test:all`.
+setup, database isolation, CI, and coverage priorities. Start with `bun test lib`;
+for all suites, run `bun run test:db:up`, install Chromium with
+`bunx playwright install chromium`, then run `bun run test:all`.
 
 ## Deployment (Vercel + Supabase)
 

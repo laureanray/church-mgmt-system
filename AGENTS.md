@@ -17,7 +17,8 @@ terms in the schema and `en-PH` formatting throughout.
 Stack: Next.js 16 App Router (route protection lives in `proxy.ts`, the
 successor to `middleware.ts`) · React 19 · Drizzle ORM on Supabase Postgres ·
 Supabase Auth · Tailwind 4 · shadcn/ui **Base UI** variant · zod v4 ·
-vitest.
+`bun test`. **Bun is the package manager, task runner and test runner** — there
+is no pnpm/npm lockfile, and every command in this file is `bun …`.
 
 ## shadcn here is the Base UI variant
 
@@ -113,8 +114,8 @@ Column types worth knowing before you query:
   Postgres `ENUM` types. Adding a value means editing `db/schema.ts`,
   `lib/constants.ts` and `lib/validators.ts` together.
 
-Migrations are versioned and committed: `pnpm db:generate`, then
-`pnpm db:migrate`. `scripts/vercel-build.mjs` applies them on Vercel
+Migrations are versioned and committed: `bun run db:generate`, then
+`bun run db:migrate`. `scripts/vercel-build.mjs` applies them on Vercel
 **production** deploys only (previews skip). Supabase's own migration runner is
 disabled so that `db/migrations` stays the single schema history; `db:push`
 would desync it, so reach for generate + migrate instead.
@@ -162,18 +163,31 @@ worktree, but the worktree must exist before the first file mutation.
 
 ### Project conventions
 
-- `pnpm test` runs vitest over `lib/**/*.test.ts` only, in a `node`
-  environment. Put pure logic in `lib/` so it is testable there —
-  `lib/cell-graph.ts` with `lib/cell-graph.test.ts` is the model.
-- Integration tests live in `tests/integration/` (`pnpm test:integration`); E2E
-  tests live in `tests/e2e/` (`pnpm test:e2e`). Both use the disposable test
-  Postgres from `pnpm test:db:up`, never the development database. See
+- `bun test lib` (the `test` script) runs the unit suite over `lib/**/*.test.ts`.
+  Put pure logic in `lib/` so it is testable there — `lib/cell-graph.ts` with
+  `lib/cell-graph.test.ts` is the model. Import from `bun:test`, never
+  `vitest`. A bare `bun test` would also sweep up the integration and
+  Playwright specs, so always run the scoped scripts.
+- Integration tests live in `tests/integration/` (`bun run test:integration`);
+  E2E tests live in `tests/e2e/` (`bun run test:e2e`). Both use the disposable
+  test Postgres from `bun run test:db:up`, never the development database. See
   `docs/testing.md`; run these suites sequentially.
+- `bunfig.toml` preloads `tests/support/bun-preload.ts`, which stubs
+  `server-only` for every test run — bun has no resolver aliases, so a module
+  importing `server-only` throws without it. Integration migrations come from a
+  second `--preload` in the `test:integration` script, since `bun test` has no
+  `globalSetup`. `mock.module` is not hoisted like `vi.mock`, so register mocks
+  before `await import(…)`-ing the module under test.
 - Modules reaching the database or secrets import `"server-only"`.
-- `pnpm db:up` starts the local stack; `pnpm db:reset` rebuilds and reseeds it.
-  It binds the `544xx` port block (Postgres `54422`, Studio `54423`) rather
-  than Supabase's `543xx` default, so it coexists with other local Supabase
-  projects.
+- `bun run dev` runs Next on the **Bun runtime** (`bunx --bun next dev`), but
+  `build` and `start` deliberately stay on Node so local production builds
+  match Vercel. Keep it that way when editing scripts.
+- Bun executes TypeScript directly, so there is no `tsx`: `db:seed` is
+  `bun db/seed.ts`, and the `.mjs` scripts run under `bun`.
+- `bun run db:up` starts the local stack; `bun run db:reset` rebuilds and
+  reseeds it. It binds the `544xx` port block (Postgres `54422`, Studio
+  `54423`) rather than Supabase's `543xx` default, so it coexists with other
+  local Supabase projects.
 - Seeded admin: `admin@church.local` / `admin123`. The seed creates it through
-  the Supabase Admin API, so `pnpm db:seed` needs the auth stack running.
+  the Supabase Admin API, so `bun run db:seed` needs the auth stack running.
 - Commits follow `type(scope): summary`, e.g. `feat(cell-groups): …`.

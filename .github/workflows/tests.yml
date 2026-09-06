@@ -10,16 +10,12 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 10.15.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun run lint
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -27,19 +23,15 @@ jobs:
       TZ: Asia/Manila
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 10.15.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:coverage
-      - run: pnpm test:db:up
-      - run: pnpm test:integration
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run test:coverage
+      - run: bun run test:db:up
+      - run: bun run test:integration
+      - run: bunx playwright install --with-deps chromium
+      - run: bun run test:e2e
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -49,5 +41,5 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
-      - run: pnpm test:db:down
+      - run: bun run test:db:down
         if: always()

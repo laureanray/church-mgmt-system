@@ -1,13 +1,16 @@
-import { afterAll, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, expect, it, mock } from "bun:test";
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import { attendance, members, services, users } from "../../db/schema";
 
 const database = connectTestDatabase();
-vi.mock("@/db", () => ({ db: database.db }));
-vi.mock("@/lib/auth-helpers", () => ({ requireUser: vi.fn() }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// bun's mock.module is not hoisted the way vi.mock is, so every mock has to be
+// registered before the module under test is imported — hence the dynamic
+// import below.
+const requireUser = mock();
+await mock.module("@/db", () => ({ db: database.db }));
+await mock.module("@/lib/auth-helpers", () => ({ requireUser }));
+await mock.module("next/cache", () => ({ revalidatePath: mock() }));
 const { recordAttendance } = await import("../../app/(app)/scan/actions");
-const { requireUser } = await import("../../lib/auth-helpers");
 
 beforeEach(async () => {
   await resetTestDatabase(database.client);
@@ -16,7 +19,7 @@ beforeEach(async () => {
   await database.db.insert(users).values({ id: 'usher', email: 'usher@example.test', name: 'Usher' });
   await database.db.insert(members).values({ id: 'member', fullName: 'Ana Santos', qrToken: 'ana-token' });
   await database.db.insert(services).values({ id: 'service', name: 'Sunday', scheduledAt: new Date() });
-  vi.mocked(requireUser).mockResolvedValue({
+  requireUser.mockResolvedValue({
     id: 'usher', name: 'Usher', role: 'usher', email: 'usher@example.test',
     mustChangePassword: false,
   });
@@ -45,7 +48,7 @@ it("rejects missing services, empty codes and unknown members without writing at
 });
 
 it("requires authentication before recording attendance", async () => {
-  vi.mocked(requireUser).mockRejectedValueOnce(new Error('unauthenticated'));
+  requireUser.mockRejectedValueOnce(new Error('unauthenticated'));
   await expect(recordAttendance('service', 'ana-token')).rejects.toThrow('unauthenticated');
   expect(await database.db.select().from(attendance)).toHaveLength(0);
 });

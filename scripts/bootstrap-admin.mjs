@@ -6,7 +6,7 @@
 // production must never carry.
 //
 // Usage:
-//   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='…' pnpm bootstrap:admin
+//   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='…' bun run bootstrap:admin
 //
 // Against production, run it with that project's DATABASE_URL /
 // NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in the environment.
