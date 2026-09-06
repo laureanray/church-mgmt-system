@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "bunx --bun next dev",
+    "dev:network": "bash scripts/dev-network.sh",
     "build": "next build",
     "vercel-build": "bun scripts/vercel-build.mjs",
     "start": "next start",
