@@ -28,7 +28,7 @@ export function ChangePasswordForm() {
         htmlFor="password"
         required
         error={errors.password}
-        hint="At least 6 characters"
+        hint="At least 8 characters"
       >
         <Input
           id="password"

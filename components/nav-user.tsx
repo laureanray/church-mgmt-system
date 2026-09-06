@@ -35,7 +35,7 @@ function initials(name: string) {
 export function NavUser({
   user,
 }: {
-  user: { name: string; username: string; role: UserRole };
+  user: { name: string; email: string; role: UserRole };
 }) {
   const { isMobile } = useSidebar();
 
@@ -75,7 +75,7 @@ export function NavUser({
                 <div className="flex flex-col space-y-0.5">
                   <span className="text-sm font-medium">{user.name}</span>
                   <span className="text-xs text-muted-foreground">
-                    @{user.username}
+                    {user.email}
                   </span>
                 </div>
               </DropdownMenuLabel>

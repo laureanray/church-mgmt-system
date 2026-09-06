@@ -38,16 +38,16 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 }
 
 export function TempPasswordReveal({
-  username,
+  email,
   tempPassword,
 }: {
-  username: string;
+  email: string;
   tempPassword: string;
 }) {
   return (
     <div className="space-y-3">
       <div className="space-y-2 rounded-lg border bg-muted/40 p-3">
-        <CopyRow label="Username" value={username} />
+        <CopyRow label="Email" value={email} />
         <CopyRow label="Temporary password" value={tempPassword} />
       </div>
       <p className="text-xs text-muted-foreground">

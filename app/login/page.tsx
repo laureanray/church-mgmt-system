@@ -42,10 +42,6 @@ export default async function LoginPage({
             <LoginForm callbackUrl={callbackUrl} />
           </CardContent>
         </Card>
-
-        <p className="mt-4 text-center text-xs text-muted-foreground">
-          Demo login: admin / admin123
-        </p>
       </div>
     </div>
   );

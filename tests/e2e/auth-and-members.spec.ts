@@ -1,9 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
+import { testEmail, TEST_PASSWORD } from '../support/auth';
 
 async function signIn(page: Page, role: string) {
   await page.goto('/login');
-  await page.getByLabel('Username', { exact: true }).fill(`e2e-${role}`);
-  await page.getByLabel('Password', { exact: true }).fill('test-password-123');
+  await page.getByLabel('Email', { exact: true }).fill(testEmail(role));
+  await page.getByLabel('Password', { exact: true }).fill(TEST_PASSWORD);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 }
@@ -16,10 +17,10 @@ test('anonymous visitors must sign in to access members', async ({ page }) => {
 
 test('invalid credentials show a useful error', async ({ page }) => {
   await page.goto('/login');
-  await page.getByLabel('Username', { exact: true }).fill('e2e-admin');
+  await page.getByLabel('Email', { exact: true }).fill(testEmail('admin'));
   await page.getByLabel('Password', { exact: true }).fill('wrong-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.locator('form').getByRole('alert')).toHaveText('Invalid username or password.');
+  await expect(page.locator('form').getByRole('alert')).toHaveText('Invalid email or password.');
   await expect(page).toHaveURL(/\/login/);
 });
 

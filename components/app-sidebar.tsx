@@ -58,7 +58,7 @@ const NAV_ITEMS: NavItem[] = [
 export function AppSidebar({
   user,
 }: {
-  user: { name: string; username: string; role: UserRole };
+  user: { name: string; email: string; role: UserRole };
 }) {
   const pathname = usePathname();
 

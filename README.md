@@ -25,7 +25,7 @@ USB scanner) to instantly record attendance against a service.
 - **Next.js 16** (App Router, Server Actions, Turbopack) + **React 19**
 - **Tailwind CSS 4** + **shadcn/ui** (Base UI variant)
 - **Drizzle ORM** + **PostgreSQL** (Supabase — local CLI stack in dev, hosted in production)
-- **Auth.js (NextAuth v5)** — credentials + role-based access
+- **Supabase Auth** — email + password, with roles held in the app's `users` table
 - **@yudiel/react-qr-scanner** (scanning) + **qrcode** (generation)
 
 ## Getting started
@@ -52,10 +52,11 @@ Supabase stack):
 cp .env.example .env
 ```
 
-Generate a fresh `AUTH_SECRET`:
+Then fill in the Supabase Auth keys, which `pnpm db:up` prints (and
+`supabase status` repeats):
 
 ```bash
-openssl rand -base64 32
+supabase status   # copy API_URL, ANON_KEY and SERVICE_ROLE_KEY
 ```
 
 ### 3. Start the database
@@ -70,8 +71,9 @@ pnpm db:seed      # creates an admin user + sample members/services
 > default, so it can run alongside other local Supabase projects.
 
 Only Postgres and Studio are enabled — the app talks to Postgres directly
-through Drizzle and handles auth with Auth.js, so the API, Auth, Storage and
-Realtime services are switched off in `supabase/config.toml`.
+through Drizzle, so Storage and Realtime stay switched off in
+`supabase/config.toml`. The API gateway and Auth are on, because Supabase Auth
+is the identity provider.
 
 ### 4. Run the app
 
@@ -81,7 +83,7 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with the seeded admin:
 
-- **Username:** `admin`
+- **Email:** `admin@church.local`
 - **Password:** `admin123`
 
 > Change this password (or create your own admin) before using in production.
@@ -142,8 +144,12 @@ for all suites, run `pnpm test:db:up`, install Chromium with
    `DIRECT_URL` to the session pooler / direct connection yourself. Migrations
    run DDL, which the transaction pooler does not support, so the two cannot be
    the same URL.
-2. Set the remaining env vars on Vercel: `AUTH_SECRET`,
-   `AUTH_TRUST_HOST=true`, and `NEXT_PUBLIC_APP_URL`.
+2. Set the remaining env vars on Vercel: `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` and
+   `NEXT_PUBLIC_APP_URL`. The Supabase integration injects the first two under
+   its own names, so they may already be present as `SUPABASE_URL` /
+   `SUPABASE_ANON_KEY` — the `NEXT_PUBLIC_` copies are what the browser needs.
+   The service-role key must **not** be `NEXT_PUBLIC_`.
 3. Deploy. `scripts/vercel-build.mjs` applies migrations automatically on
    **production** deploys (previews skip them). Camera scanning requires
    HTTPS — Vercel provides this automatically.
@@ -153,7 +159,7 @@ for all suites, run `pnpm test:db:up`, install Chromium with
 ```
 app/(app)/         Authenticated app (dashboard, members, services, scan, users)
 app/login/         Sign-in page
-auth.ts            NextAuth setup (credentials + roles)
+lib/supabase/      Supabase clients (server / browser / service-role admin)
 proxy.ts           Route protection (Next.js middleware/proxy)
 db/schema.ts       Drizzle schema (members, services, attendance, users)
 db/migrations/     Versioned SQL migrations (drizzle-kit)

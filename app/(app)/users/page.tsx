@@ -70,14 +70,16 @@ export default async function UsersPage() {
                             </Badge>
                           ) : null}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          @{u.username}
+                        {/* Stands in for the Email column, which is hidden on
+                            small screens. */}
+                        <div className="text-xs text-muted-foreground sm:hidden">
+                          {u.email}
                         </div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell className="hidden sm:table-cell text-muted-foreground">
-                    {u.email ?? "—"}
+                    {u.email}
                   </TableCell>
                   <TableCell>
                     <Badge

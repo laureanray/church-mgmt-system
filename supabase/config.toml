@@ -5,13 +5,16 @@
 project_id = "church-mgmt-system"
 
 [api]
-# Unused: the app talks to Postgres directly via Drizzle, never PostgREST.
-enabled = false
+# Serves /auth/v1 — the gateway supabase-js talks to for sign-in.
+enabled = true
 # Port to use for the API URL.
 port = 54421
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# `public` is deliberately NOT exposed: the app reaches Postgres only through
+# Drizzle, there are no RLS policies, and the anon key ships to every browser —
+# so exposing it would let anyone read members and staff straight off /rest/v1.
+schemas = ["graphql_public"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size
@@ -21,7 +24,7 @@ max_rows = 1000
 # `postgres` are reachable through the Data API roles (`anon`, `authenticated`, `service_role`)
 # without explicit GRANTs, matching the cloud default. Set to `false` to require explicit GRANTs
 # instead. Left unset, a fresh project falls back to `true`.
-# auto_expose_new_tables = true
+auto_expose_new_tables = false
 
 [api.tls]
 # Enable HTTPS endpoints locally using a self-signed certificate.
@@ -106,8 +109,8 @@ openai_api_key = "env(OPENAI_API_KEY)"
 # Email testing server. Emails sent with the local dev setup are not actually sent - rather, they
 # are monitored, and you can view the emails that would have been sent from the web interface.
 [local_smtp]
-# Unused: Supabase Auth is disabled, so no local mail server.
-enabled = false
+# Catches password-reset and invite mail locally.
+enabled = true
 # Port to use for the email testing server web interface.
 port = 54424
 # Uncomment to expose additional ports for testing user applications that send emails.
@@ -158,8 +161,8 @@ max_indexes = 5
 # [storage.vector.buckets.documents-openai]
 
 [auth]
-# Unused: authentication is Auth.js (see auth.ts), not Supabase Auth.
-enabled = false
+# Supabase Auth is the identity provider (replaces Auth.js).
+enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
 site_url = "http://127.0.0.1:3000"
@@ -179,13 +182,14 @@ enable_refresh_token_rotation = true
 # Requires enable_refresh_token_rotation = true.
 refresh_token_reuse_interval = 10
 # Allow/disallow new user signups to your project.
-enable_signup = true
+# Staff accounts are created by an admin only — there is no public sign-up.
+enable_signup = false
 # Allow/disallow anonymous sign-ins to your project.
 enable_anonymous_sign_ins = false
 # Allow/disallow testing manual linking of accounts
 enable_manual_linking = false
 # Passwords shorter than this value will be rejected as weak. Minimum 6, recommended 8 or more.
-minimum_password_length = 6
+minimum_password_length = 8
 # Passwords that do not meet the following requirements will be rejected as weak. Supported values
 # are: `letters_digits`, `lower_upper_letters_digits`, `lower_upper_letters_digits_symbols`
 password_requirements = ""
@@ -223,7 +227,9 @@ web3 = 30
 # secret = ""
 
 [auth.email]
-# Allow/disallow new user signups via email to your project.
+# Must stay true: this flag enables the email provider as a whole, so turning it
+# off rejects *sign-ins* too ("email_provider_disabled"), not just registration.
+# Public registration is closed by enable_signup under [auth] above.
 enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.

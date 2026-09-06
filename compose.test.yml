@@ -9,8 +9,66 @@ services:
       - "127.0.0.1:54432:5432"
     tmpfs:
       - /var/lib/postgresql/data
+    volumes:
+      - ./tests/support/init-auth-schema.sql:/docker-entrypoint-initdb.d/init-auth-schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d church_mgmt_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Supabase Auth is the identity provider, so signing in during an E2E run
+  # needs a real GoTrue — a bare Postgres cannot authenticate anybody. It owns
+  # the `auth` schema in the same test database and creates it on first boot.
+  test-auth:
+    image: public.ecr.aws/supabase/gotrue:v2.196.0
+    depends_on:
+      test-db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: "9999"
+      API_EXTERNAL_URL: http://127.0.0.1:54433
+      GOTRUE_DB_DRIVER: postgres
+      # search_path=auth is essential. Without it GoTrue resolves unqualified
+      # names against `public` and finds this app's own `users` table instead of
+      # auth.users, failing with "column users.aud does not exist".
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:postgres@test-db:5432/church_mgmt_test?sslmode=disable&search_path=auth
+      GOTRUE_SITE_URL: http://127.0.0.1:3100
+      # Same throwaway secret the Supabase CLI uses locally, so the well-known
+      # demo anon/service keys validate against it.
+      GOTRUE_JWT_SECRET: super-secret-jwt-token-with-at-least-32-characters-long
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      # Mirrors supabase/config.toml: no public registration, but the email
+      # provider itself stays on or sign-in breaks too.
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"
+      GOTRUE_LOG_LEVEL: warn
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9999/health"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # supabase-js hardcodes its auth path to `${SUPABASE_URL}/auth/v1`, while
+  # GoTrue serves from the root. This strips the prefix — the one job Kong does
+  # for us in a full Supabase stack.
+  test-gateway:
+    image: nginx:1.27-alpine
+    depends_on:
+      test-auth:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:54433:80"
+    volumes:
+      - ./tests/support/gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      # 127.0.0.1, not localhost: that resolves to ::1 first in this image,
+      # while nginx's `listen 80` binds IPv4 only.
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/auth/v1/health"]
       interval: 2s
       timeout: 5s
       retries: 30

@@ -11,10 +11,15 @@ const { requireUser } = await import("../../lib/auth-helpers");
 
 beforeEach(async () => {
   await resetTestDatabase(database.client);
-  await database.db.insert(users).values({ id: 'usher', username: 'usher', name: 'Usher', passwordHash: 'unused' });
+  // A profile row only — Supabase Auth owns credentials, and requireUser is
+  // mocked here, so no auth.users counterpart is needed for this test.
+  await database.db.insert(users).values({ id: 'usher', email: 'usher@example.test', name: 'Usher' });
   await database.db.insert(members).values({ id: 'member', fullName: 'Ana Santos', qrToken: 'ana-token' });
   await database.db.insert(services).values({ id: 'service', name: 'Sunday', scheduledAt: new Date() });
-  vi.mocked(requireUser).mockResolvedValue({ id: 'usher', name: 'Usher', role: 'usher', email: null });
+  vi.mocked(requireUser).mockResolvedValue({
+    id: 'usher', name: 'Usher', role: 'usher', email: 'usher@example.test',
+    mustChangePassword: false,
+  });
 });
 afterAll(() => database.client.end());
 

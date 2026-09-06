@@ -21,20 +21,20 @@ import {
 // ---------------------------------------------------------------------------
 
 export const users = pgTable("users", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+  // The Supabase Auth user id (a UUID), not generated here — a row only exists
+  // once auth.users has one. Kept as text so the foreign keys pointing at it
+  // from members.user_id and attendance.recorded_by stay unchanged.
+  id: text("id").primaryKey(),
   name: text("name").notNull(),
-  // Login handle.
-  username: text("username").notNull().unique(),
-  // Optional — provisioned for future email features (notifications, etc.).
-  // Not used for login or any sending today.
-  email: text("email").unique(),
-  passwordHash: text("password_hash").notNull(),
+  // Login identity, mirrored from auth.users so staff can be listed and
+  // searched without a round trip to the Auth admin API. Supabase remains the
+  // source of truth; app/(app)/users/actions.ts writes both together.
+  email: text("email").notNull().unique(),
   role: text("role", { enum: ["admin", "leader", "usher"] })
     .notNull()
     .default("usher"),
   // True when an admin has issued a temporary password; forces a reset at login.
+  // Supabase Auth has no equivalent, so the flag stays app-side.
   mustChangePassword: boolean("must_change_password")
     .notNull()
     .default(false),

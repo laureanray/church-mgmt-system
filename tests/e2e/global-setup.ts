@@ -1,19 +1,41 @@
 import { inArray } from "drizzle-orm";
-import { hash } from "bcryptjs";
 import { connectTestDatabase, migrateTestDatabase, resetTestDatabase } from "../support/database";
+import { testAdminClient, testEmail, TEST_PASSWORD } from "../support/auth";
 import { users, members, cellGroups } from "../../db/schema";
+
+const ROLES = ['admin', 'leader', 'usher'] as const;
 
 export default async function setup() {
   await migrateTestDatabase();
   const { client, db } = connectTestDatabase();
+  const admin = testAdminClient();
   try {
     await resetTestDatabase(client);
-    const passwordHash = await hash('test-password-123', 10);
-    await db.insert(users).values(
-      (['admin', 'leader', 'usher'] as const).map(role => ({
-        id: `e2e-${role}`, username: `e2e-${role}`, name: `Test ${role}`, role, passwordHash,
-      })),
-    );
+
+    // Supabase Auth owns credentials, so each staff account is created in
+    // GoTrue first and its id becomes the profile's primary key — the same
+    // two-step the app performs in app/(app)/users/actions.ts.
+    for (const role of ROLES) {
+      const email = testEmail(role);
+
+      // auth.users survives resetTestDatabase (it truncates public tables
+      // only), so drop any account left by a previous run before recreating.
+      const { data: existing } = await admin.auth.admin.listUsers();
+      const stale = existing?.users.find(u => u.email === email);
+      if (stale) await admin.auth.admin.deleteUser(stale.id);
+
+      const { data, error } = await admin.auth.admin.createUser({
+        email, password: TEST_PASSWORD, email_confirm: true,
+      });
+      if (error || !data.user) {
+        throw new Error(`Could not create the ${role} test account: ${error?.message}`);
+      }
+
+      await db.insert(users).values({
+        id: data.user.id, name: `Test ${role}`, email, role,
+      });
+    }
+
     await db.insert(members).values([
       { id: 'e2e-cell-leader', fullName: 'E2E Cell Leader', qrToken: 'e2e-leader-token' },
       { id: 'e2e-cell-member', fullName: 'E2E Cell Member', qrToken: 'e2e-member-token' },

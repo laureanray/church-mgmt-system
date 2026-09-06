@@ -1,6 +1,6 @@
 // Seed script: creates a default admin user and a few sample services + members.
 // Run with: pnpm db:seed
-import { hash } from "bcryptjs";
+import { createClient } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 
 // Node 20.6+/24: load .env before importing the db client.
@@ -13,26 +13,55 @@ try {
 async function main() {
   const { db } = await import("./index");
   const { users, members, services, cellGroups } = await import("./schema");
+  const { eq } = await import("drizzle-orm");
 
   console.log("Seeding database...");
 
   // --- Default admin user -------------------------------------------------
-  const adminUsername = "admin";
-  const passwordHash = await hash("admin123", 10);
+  // Supabase Auth owns the credential, so the account is created there first
+  // and the id it assigns becomes the profile row's primary key.
+  const adminEmail = "admin@church.local";
+  const adminPassword = "admin123";
 
-  await db
-    .insert(users)
-    .values({
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set to seed the admin",
+    );
+  }
+
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const existingAdmin = await db.query.users.findFirst({
+    where: eq(users.email, adminEmail),
+  });
+
+  if (existingAdmin) {
+    console.log(`  • Admin already present: ${adminEmail}`);
+  } else {
+    const { data, error } = await admin.auth.admin.createUser({
+      email: adminEmail,
+      password: adminPassword,
+      email_confirm: true,
+    });
+
+    if (error || !data.user) {
+      throw new Error(`Could not create the admin account: ${error?.message}`);
+    }
+
+    await db.insert(users).values({
+      id: data.user.id,
       name: "Church Admin",
-      username: adminUsername,
-      email: "admin@church.local",
-      passwordHash,
+      email: adminEmail,
       role: "admin",
       mustChangePassword: false,
-    })
-    .onConflictDoNothing({ target: users.username });
+    });
 
-  console.log(`  ✓ Admin user ready:  ${adminUsername} / admin123`);
+    console.log(`  ✓ Admin user ready:  ${adminEmail} / ${adminPassword}`);
+  }
 
   // --- Sample members -----------------------------------------------------
   const existingMembers = await db.$count(members);
@@ -95,7 +124,6 @@ async function main() {
   // --- Sample cell groups -------------------------------------------------
   const existingCells = await db.$count(cellGroups);
   if (existingCells === 0) {
-    const { eq } = await import("drizzle-orm");
     const byName = async (name: string) =>
       (await db.query.members.findFirst({
         where: eq(members.fullName, name),
