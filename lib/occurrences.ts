@@ -37,25 +37,39 @@ function startOfToday() {
   return d;
 }
 
+type SchedulePlan = Pick<
+  ServiceSchedule,
+  "id" | "name" | "type" | "dayOfWeek" | "timeOfDay" | "location"
+>;
+
 /**
- * Generate the next `weeks` of occurrences for a schedule. Idempotent — the
- * unique (scheduleId, scheduledAt) index means re-running only fills gaps.
- * Returns how many new occurrences were created.
+ * The rows the next `weeks` of a schedule would produce. Pure — no database —
+ * so callers can batch several schedules into one insert.
  */
-export async function generateForSchedule(
-  schedule: Pick<
-    ServiceSchedule,
-    "id" | "name" | "type" | "dayOfWeek" | "timeOfDay" | "location"
-  >,
+export function occurrenceValues(
+  schedule: SchedulePlan,
   weeks = OCCURRENCE_WEEKS_AHEAD,
-): Promise<number> {
-  const values = upcomingDates(schedule.dayOfWeek, weeks).map((date) => ({
+  from = new Date(),
+) {
+  return upcomingDates(schedule.dayOfWeek, weeks, from).map((date) => ({
     name: schedule.name,
     type: schedule.type,
     location: schedule.location ?? null,
     scheduledAt: withTime(date, schedule.timeOfDay),
     scheduleId: schedule.id,
   }));
+}
+
+/**
+ * Generate the next `weeks` of occurrences for a schedule. Idempotent — the
+ * unique (scheduleId, scheduledAt) index means re-running only fills gaps.
+ * Returns how many new occurrences were created.
+ */
+export async function generateForSchedule(
+  schedule: SchedulePlan,
+  weeks = OCCURRENCE_WEEKS_AHEAD,
+): Promise<number> {
+  const values = occurrenceValues(schedule, weeks);
 
   if (values.length === 0) return 0;
 
@@ -89,16 +103,32 @@ export async function deleteFutureEmptyOccurrences(scheduleId: string) {
     );
 }
 
-/** Fill in upcoming occurrences for every active schedule. Safe to call often. */
+/**
+ * Fill in upcoming occurrences for every active schedule. Safe to call often —
+ * and it is called often, on every /services and /scan page load, since there
+ * is no cron.
+ *
+ * That makes its cost part of those pages' time to first byte, so all the
+ * schedules go in as one insert rather than one per schedule. Two round trips,
+ * whatever the number of schedules.
+ */
 export async function topUpAllSchedules(weeks = OCCURRENCE_WEEKS_AHEAD) {
   const active = await db
     .select()
     .from(serviceSchedules)
     .where(eq(serviceSchedules.active, true));
 
-  let created = 0;
-  for (const schedule of active) {
-    created += await generateForSchedule(schedule, weeks);
-  }
-  return created;
+  const values = active.flatMap((schedule) =>
+    occurrenceValues(schedule, weeks),
+  );
+
+  if (values.length === 0) return 0;
+
+  const inserted = await db
+    .insert(services)
+    .values(values)
+    .onConflictDoNothing()
+    .returning({ id: services.id });
+
+  return inserted.length;
 }
