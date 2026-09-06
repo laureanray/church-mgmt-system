@@ -1,0 +1,135 @@
+# Design system
+
+Three layers, and knowing which one a change belongs in is most of the work:
+
+| Layer | Where | What lives there |
+| --- | --- | --- |
+| **Tokens** | `app/globals.css` | Every colour, radius and font in the product, as CSS custom properties |
+| **Primitives** | `components/ui/*` | shadcn's **Base UI** components — Button, Badge, Card, Table, Select |
+| **Patterns** | `components/patterns/*` | This app's recurring compositions — PageHeader, EmptyState, StatCard |
+
+Storybook renders all three: `bun run storybook`.
+
+## Tokens
+
+`app/globals.css` holds two blocks that do different jobs:
+
+- `:root` and `.dark` hold **raw values**. They are the only place an `oklch()`
+  literal belongs.
+- `@theme inline` maps each raw value onto a Tailwind utility, so a component
+  writes `bg-primary` or `text-warning` and never a literal.
+
+A component that writes `text-amber-600 dark:text-amber-400` has stepped outside
+this system. It will not follow a rebrand, and its dark variant is a guess
+rather than a checked contrast. `tests/ui/design-tokens.test.ts` fails the build
+if one appears — including hex literals — with two deliberate exemptions:
+`components/members/member-qr.tsx` prints into a popup document that has no
+stylesheet, and `lib/qr.ts` must emit true black on true white or camera
+scanners lose the contrast they decode from.
+
+### The palette
+
+Neutral greys throughout, with one brand hue: a deep indigo at
+`oklch(0.47 0.142 264)`. Light mode fills with it and labels in white; dark mode
+lifts it to `oklch(0.72 0.132 264)` and flips the label dark, because the
+light-mode value is too dark to fill a button on a near-black surface.
+
+Status colours are `--success`, `--warning`, `--info` and `--destructive`. Each
+is used as `text-x` over a `bg-x/10` tint — the Badge variants of the same name
+do exactly that — so it is the **text** contrast that has to hold, not the
+swatch.
+
+`--chart-1` … `--chart-5` are **categorical, not sequential**: they identify
+cell-group tiers, so their hues are spread and their lightness held roughly
+constant. `TIER_STYLE` in `lib/cell-graph.ts` is the single source of truth for
+which tier gets which, and both the SVG and the legend beside it read from it,
+so a colour cannot drift between the dot in the key and the dot on the canvas.
+
+### Adding a token
+
+Add the raw value to **both** `:root` and `.dark`, then map it in
+`@theme inline`. Check it in both themes in Storybook's *Foundations → Tokens*
+story — the swatches read the live variables, which is the only reliable way to
+catch a token that was only ever eyeballed in light mode.
+
+One trap when writing a story or a component that reads a variable directly:
+`@theme inline` **substitutes** theme values into utilities instead of emitting
+`--color-*` properties, so `var(--color-success)` resolves to nothing unless
+some file happens to spell that name out literally. Read the raw `--success`
+instead.
+
+## Primitives
+
+`components.json` sets `"style": "base-nova"`, so `components/ui/*` wraps
+`@base-ui/react`, not Radix. The differences that actually bite are in
+[AGENTS.md](../AGENTS.md); two are worth repeating because Storybook documents
+them with a working example:
+
+- Composition is **`render`**, not `asChild` — see *UI/Badge → AsLink*.
+- `CardHeader` is a **grid**. Trailing header content must be a `CardAction`, or
+  it drops under the title. `<CardHeader className="flex-row justify-between">`
+  looks correct and does nothing, since `flex-row` sets a direction on an
+  element that is not a flex container. See *UI/Card → WithAction*.
+
+`Badge` carries the semantic variants (`success`, `warning`, `info`, `brand`)
+and a `size` scale, so a status pill never has to be hand-rolled from utility
+classes.
+
+`Field` (`components/form/field.tsx`) wires the accessibility contract onto
+whatever single element it wraps: `aria-describedby` pointing at the hint or
+error, and `aria-invalid` while there is an error. That second one is not only
+for screen readers — `Input` styles its error ring off `aria-invalid`, so this
+is what turns a failed server-action round-trip into a visibly red field. It
+derives its ids from `htmlFor`, deliberately not `useId`, so it stays renderable
+from a Server Component; pass `htmlFor` on every field.
+
+## Patterns
+
+| Component | Replaces |
+| --- | --- |
+| `PageHeader` | Title, description and actions above every page |
+| `BackLink` | The "← Back to members" ghost link, previously copied into 12 routes |
+| `EmptyState` | The dashed placeholder *and* the muted line inside a Card (`variant="inline"`) |
+| `StatCard` | The dashboard's headline figures |
+| `InfoTile` | The icon-led attribute cards on a service |
+| `DetailList` / `DetailRow` | The label/value description list on a record |
+| `TableCard` | The bordered, clipped frame around a full-width table |
+| `SearchField` | The list-page search box |
+
+Two behaviours in there are load-bearing rather than cosmetic:
+
+- **`EmptyState` for a search that matched nothing must not offer a create
+  action.** Someone whose search missed is one click from creating a duplicate
+  of the record they were looking for.
+- **`DetailRow` renders `value || "—"`**, so a nullable column can be passed
+  straight through — but a real zero is falsy and would vanish behind the dash.
+  Pass `String(0)`.
+
+## Storybook
+
+```bash
+bun run storybook          # dev server on :6006
+bun run build-storybook    # static build into storybook-static/
+```
+
+Stories sit beside their component as `*.stories.tsx`; the foundations live in
+`.storybook/foundations.stories.tsx`.
+
+The toolbar's theme switch puts `dark` on `<html>`, not on the story wrapper —
+the custom variant is `&:is(.dark *)`, which matches descendants of `.dark` and
+never the element carrying it. **Check every new story in both themes**; that is
+the cheapest way to catch a colour that only works in one.
+
+Storybook builds with Vite while the app builds with Turbopack, so
+`.storybook/main.ts` wires Tailwind up a second time through
+`@tailwindcss/vite`. Same `app/globals.css`, same tokens — only the bundler
+differs.
+
+Args stay JSON-serializable. A React element passed as an arg trips Storybook's
+cycle detection, so anything with a node prop is built in `render` instead.
+
+## Testing
+
+See [testing.md](./testing.md#ui-tests). In short: `bun run test:ui` renders the
+stories themselves through `composeStories`, so the stories are the fixtures and
+cannot drift from what the tests assert.

@@ -9,6 +9,8 @@
     "vercel-build": "bun scripts/vercel-build.mjs",
     "start": "next start",
     "lint": "eslint",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "test": "bun test lib",
     "db:up": "supabase start",
     "db:down": "supabase stop",
@@ -23,9 +25,10 @@
     "test:watch": "bun test --watch lib",
     "test:coverage": "bun test --coverage lib",
     "coverage:report": "bun scripts/coverage-report.mjs",
+    "test:ui": "bun test --preload ./tests/support/ui-setup.ts tests/ui",
     "test:integration": "bun test --preload ./tests/support/integration-setup.ts --timeout 30000 tests/integration",
     "test:e2e": "playwright test",
-    "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e",
+    "test:all": "bun run test:unit && bun run test:ui && bun run test:integration && bun run test:e2e",
     "test:db:up": "docker compose -p church-mgmt-tests -f compose.test.yml up -d --wait",
     "test:db:down": "docker compose -p church-mgmt-tests -f compose.test.yml down",
     "typecheck": "next typegen && tsc --noEmit"
@@ -59,8 +62,17 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.14.0",
     "@playwright/test": "^1.63.0",
+    "@storybook/addon-a11y": "^10.6.0",
+    "@storybook/addon-docs": "^10.6.0",
+    "@storybook/addon-themes": "^10.6.0",
+    "@storybook/nextjs-vite": "^10.6.0",
     "@tailwindcss/postcss": "^4",
+    "@tailwindcss/vite": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/bun": "^1.4.1",
     "@types/d3-force": "^3.0.10",
     "@types/node": "^20",
@@ -70,7 +82,10 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "happy-dom": "^20.14.0",
+    "storybook": "^10.6.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^7"
   }
 }
