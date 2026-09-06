@@ -38,6 +38,14 @@ Coverage is `bun test --coverage`, reported as text plus `coverage/lcov.info` â€
 there is no HTML report, and only files a test actually loads appear, so
 untouched `lib/` modules are absent rather than listed at 0%.
 
+`scripts/coverage-report.mjs` turns that `lcov.info` into markdown for CI (see
+below). Two things about its totals: it aggregates hits across files
+(`lines hit / lines found`), whereas bun's text reporter prints the unweighted
+mean of the per-file percentages, so the two headline numbers differ slightly on
+purpose. And because bun's report is silent about files no test loads, the
+script walks `lib/` itself and lists the absent ones, so the percentage is not
+mistaken for whole-directory coverage.
+
 ## Local commands
 
 ```bash
@@ -45,6 +53,7 @@ bun install
 bun test lib                       # fast unit suite; no Docker or env needed
 bun run test:watch
 bun run test:coverage              # text + coverage/lcov.info; loaded lib/ files
+bun run coverage:report            # the markdown CI posts, from the last lcov run
 bun run test:db:up                 # dedicated, disposable Postgres via Docker
 bun run test:integration           # applies committed Drizzle migrations
 bunx playwright install chromium   # once, and after browser upgrades
@@ -97,7 +106,8 @@ Integration tests stub the session boundary and Next cache invalidation, but
 execute the actual application functions against migrated Postgres. E2E tests
 verify the real session path. Coverage currently reports unit execution only;
 zero coverage on server modules does not account for integration/E2E execution.
-No arbitrary global coverage threshold is enforced yet.
+No arbitrary global coverage threshold is enforced yet, so the pull request
+report informs review rather than gating the merge.
 
 ## CI and next priorities
 
@@ -105,6 +115,15 @@ GitHub Actions sets up Bun from `.bun-version`, installs locked dependencies
 with `bun install --frozen-lockfile`, checks types and lint, runs unit coverage
 and Postgres integration tests, installs Chromium and runs the E2E suite. Reports, screenshots and failure traces are retained for seven days.
 No Supabase or production secrets are required.
+
+Every run writes the coverage markdown to the job summary, and pull requests
+additionally get it as a comment that later pushes **edit in place** rather than
+append (`gh pr comment --edit-last --create-if-none`, using the built-in
+`GITHUB_TOKEN`; the job therefore asks for `pull-requests: write`). The comment
+step runs directly after the unit suite, so a failure further down the job still
+leaves the report on the pull request. Pull requests opened from a fork are
+skipped by design: their token is read-only, and attempting the comment would
+fail the job.
 
 Next useful additions are member/service validator edge cases, permission
 checks on mutation actions, schedule editing/pausing through forms, password
