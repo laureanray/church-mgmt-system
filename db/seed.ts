@@ -1,5 +1,5 @@
 // Seed script: creates a default admin user and a few sample services + members.
-// Run with: pnpm db:seed
+// Run with: bun run db:seed
 import { createClient } from "@supabase/supabase-js";
 import { nanoid } from "nanoid";
 

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it } from "bun:test";
 import { formatDate, formatDateTime, formatMeeting, initials, toDateTimeLocal } from './format';
 
 it('preserves calendar dates across year and leap-day boundaries', () => {

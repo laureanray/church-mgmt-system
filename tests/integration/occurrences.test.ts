@@ -1,9 +1,9 @@
-import { afterAll, beforeEach, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, expect, it, mock } from "bun:test";
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import { attendance, members, services, serviceSchedules } from "../../db/schema";
 
 const database = connectTestDatabase();
-vi.mock("@/db", () => ({ db: database.db }));
+await mock.module("@/db", () => ({ db: database.db }));
 const { generateForSchedule, deleteFutureEmptyOccurrences, topUpAllSchedules } = await import("../../lib/occurrences");
 
 beforeEach(() => resetTestDatabase(database.client));

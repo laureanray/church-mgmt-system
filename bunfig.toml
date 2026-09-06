@@ -1,0 +1,12 @@
+[test]
+# Test code runs outside React's server-component runtime, where importing
+# `server-only` throws. Stub it for every suite before any test file loads.
+preload = ["./tests/support/bun-preload.ts"]
+
+# bun's coverage only counts files a test actually loads, so this reports on
+# exercised lib/ code rather than the whole directory. lcov feeds CI artifacts;
+# there is no HTML reporter.
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["tests/**"]

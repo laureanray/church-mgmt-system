@@ -8,29 +8,53 @@ report, or CI workflow. Keep three distinct layers:
 
 | Layer | Runner | What belongs here |
 | --- | --- | --- |
-| Unit | Vitest, Node | Pure validators, graph rules, date formatting and transformations |
-| Integration | Vitest + real Postgres | Actions and database helpers, constraints, transactions, deletion behavior |
+| Unit | `bun test`, Bun runtime | Pure validators, graph rules, date formatting and transformations |
+| Integration | `bun test` + real Postgres | Actions and database helpers, constraints, transactions, deletion behavior |
 | End-to-end | Playwright + production Next.js | Real sign-in, role protection, forms, navigation and persisted results |
 
 Next.js's bundled testing guide recommends browser tests for async Server
-Components. Don't attempt to render these in Vitest. Add React Testing Library
-and a separate jsdom project when client components need isolated interaction
-tests; the current foundation intentionally doesn't install unused DOM tooling.
+Components. Don't attempt to render these in `bun test`. Add React Testing
+Library and a separate happy-dom setup when client components need isolated
+interaction tests; the current foundation intentionally doesn't install unused
+DOM tooling.
+
+### Bun test specifics
+
+The unit and integration suites share one runner but differ in setup, and three
+details do not carry over from Vitest:
+
+- **No resolver aliases.** `bunfig.toml` preloads `tests/support/bun-preload.ts`,
+  which calls `mock.module("server-only", …)` for every run. Without it, any
+  module importing `server-only` (`lib/cell-graph.ts` included) throws on
+  import.
+- **`mock.module` is not hoisted** the way `vi.mock` was, so integration files
+  register mocks first and then `await import(…)` the module under test. Keep
+  that order when adding tests.
+- **No `globalSetup`.** Migrations run from `tests/support/integration-setup.ts`,
+  passed as `--preload` in the `test:integration` script; `bun test` runs files
+  sequentially in one process, so it executes exactly once.
+
+Coverage is `bun test --coverage`, reported as text plus `coverage/lcov.info` —
+there is no HTML report, and only files a test actually loads appear, so
+untouched `lib/` modules are absent rather than listed at 0%.
 
 ## Local commands
 
 ```bash
-pnpm install
-pnpm test                      # fast unit suite; no Docker or env needed
-pnpm test:watch
-pnpm test:coverage              # HTML in coverage/index.html; lib/ only
-pnpm test:db:up                 # dedicated, disposable Postgres via Docker
-pnpm test:integration           # applies committed Drizzle migrations
-pnpm exec playwright install chromium  # once, and after browser upgrades
-pnpm test:e2e                  # migrates/seeds, builds and starts Next on 3100
-pnpm test:all                  # all three suites sequentially; start test DB first
-pnpm test:db:down               # removes the disposable database
+bun install
+bun test lib                       # fast unit suite; no Docker or env needed
+bun run test:watch
+bun run test:coverage              # text + coverage/lcov.info; loaded lib/ files
+bun run test:db:up                 # dedicated, disposable Postgres via Docker
+bun run test:integration           # applies committed Drizzle migrations
+bunx playwright install chromium   # once, and after browser upgrades
+bun run test:e2e                   # migrates/seeds, builds and starts Next on 3100
+bun run test:all                   # all three suites sequentially; start test DB first
+bun run test:db:down               # removes the disposable database
 ```
+
+A bare `bun test` would pick up the integration and Playwright specs too, so
+every script scopes the run to a directory. Prefer the scripts over `bun test`.
 
 The test stack is three containers: Postgres on **54432** (separate from local
 Supabase's **54422**), a **GoTrue** instance owning the `auth` schema in that
@@ -77,9 +101,9 @@ No arbitrary global coverage threshold is enforced yet.
 
 ## CI and next priorities
 
-GitHub Actions installs locked dependencies, checks types and lint, runs unit
-coverage and Postgres integration tests, installs Chromium and runs the E2E
-suite. Reports, screenshots and failure traces are retained for seven days.
+GitHub Actions sets up Bun from `.bun-version`, installs locked dependencies
+with `bun install --frozen-lockfile`, checks types and lint, runs unit coverage
+and Postgres integration tests, installs Chromium and runs the E2E suite. Reports, screenshots and failure traces are retained for seven days.
 No Supabase or production secrets are required.
 
 Next useful additions are member/service validator edge cases, permission

@@ -20,11 +20,11 @@ if (process.env.VERCEL_ENV === "production") {
   }
 
   console.log("[vercel-build] production — applying migrations");
-  run("pnpm drizzle-kit migrate");
+  run("bun run db:migrate");
 } else {
   console.log(
     `[vercel-build] VERCEL_ENV=${process.env.VERCEL_ENV} — skipping migrations`,
   );
 }
 
-run("pnpm next build");
+run("bun run build");

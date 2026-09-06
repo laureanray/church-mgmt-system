@@ -61,7 +61,7 @@ max_client_conn = 100
 
 [db.migrations]
 # If disabled, migrations will be skipped during a db push or reset.
-# Disabled: drizzle-kit owns migrations (db/migrations). Apply with `pnpm db:migrate`.
+# Disabled: drizzle-kit owns migrations (db/migrations). Apply with `bun run db:migrate`.
 enabled = false
 # Specifies an ordered list of schema files, directories, or glob patterns that describe your database.
 # Supports paths relative to supabase directory: "./schemas/*.sql", "./database".
@@ -69,7 +69,7 @@ schema_paths = []
 
 [db.seed]
 # If enabled, seeds the database after migrations during a db reset.
-# Disabled: seeding is `pnpm db:seed` (db/seed.ts), not seed.sql.
+# Disabled: seeding is `bun run db:seed` (db/seed.ts), not seed.sql.
 enabled = false
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
