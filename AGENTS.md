@@ -76,6 +76,11 @@ Two connection strings, because they are not interchangeable:
   pooler does not support, so this must be a direct or session-pooler
   connection (port 5432).
 
+On Vercel these fall back to `POSTGRES_URL` and `POSTGRES_URL_NON_POOLING`,
+which the Supabase integration injects. Prefer that fallback over copying the
+URLs into `DATABASE_URL`/`DIRECT_URL`: the integration rotates those credentials,
+and copies go stale silently.
+
 Column types worth knowing before you query:
 
 - Date-only fields (`birthdate`, `weddingAnniversary`, `spiritualBirthday`) are

@@ -14,10 +14,14 @@ const globalForDb = globalThis as unknown as {
 let instance: Database | undefined;
 
 function connect(): Database {
-  const url = process.env.DATABASE_URL;
+  // POSTGRES_URL is injected by Vercel's Supabase integration and already points
+  // at the transaction pooler. Preferring DATABASE_URL keeps local dev and any
+  // non-Vercel host working, while the fallback means nothing has to be copied
+  // by hand — which matters because the integration rotates these credentials.
+  const url = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
   if (!url) {
-    throw new Error("DATABASE_URL is not set");
+    throw new Error("Set DATABASE_URL (or connect Vercel's Supabase integration)");
   }
 
   // Supabase's transaction pooler (Supavisor, port 6543) multiplexes connections

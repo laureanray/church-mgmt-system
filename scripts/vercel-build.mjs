@@ -9,11 +9,12 @@ if (process.env.VERCEL_ENV === "production") {
   // Migrations run DDL, which Supabase's transaction pooler rejects. Without
   // DIRECT_URL drizzle-kit falls back to the pooled DATABASE_URL and fails
   // mid-migration, so stop here with a message that names the actual problem.
-  if (!process.env.DIRECT_URL) {
+  if (!process.env.DIRECT_URL && !process.env.POSTGRES_URL_NON_POOLING) {
     console.error(
-      "[vercel-build] DIRECT_URL is not set. Point it at the Supabase session " +
-        "pooler or direct connection (port 5432) — the transaction pooler " +
-        "(6543) in DATABASE_URL cannot run migrations.",
+      "[vercel-build] No non-pooled connection available. Set DIRECT_URL to " +
+        "the Supabase session pooler or direct connection (port 5432), or " +
+        "connect the Supabase integration so POSTGRES_URL_NON_POOLING is " +
+        "injected — the transaction pooler (6543) cannot run migrations.",
     );
     process.exit(1);
   }

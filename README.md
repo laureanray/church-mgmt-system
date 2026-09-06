@@ -125,12 +125,17 @@ duplicates. Columns: `ID · Timestamp · Service · Service Date · Member · Re
 
 ## Deployment (Vercel + Supabase)
 
-1. Create a **Supabase** project and open **Connect** to copy two connection
-   strings:
-   - **Transaction pooler** (port 6543) → `DATABASE_URL`, used by the app.
-   - **Session pooler / direct** (port 5432) → `DIRECT_URL`, used by migrations,
-     which run DDL that the transaction pooler does not support.
-2. Set project env vars on Vercel: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`,
+1. Connect the **Supabase integration** to the Vercel project (Storage ▸ your
+   Supabase store ▸ Connect Project). It injects `POSTGRES_URL` (transaction
+   pooler, 6543) and `POSTGRES_URL_NON_POOLING` (session pooler, 5432), which
+   the app and drizzle-kit pick up automatically — nothing to copy by hand, and
+   the values keep working when Supabase rotates the credentials.
+
+   Without the integration, set `DATABASE_URL` to the transaction pooler and
+   `DIRECT_URL` to the session pooler / direct connection yourself. Migrations
+   run DDL, which the transaction pooler does not support, so the two cannot be
+   the same URL.
+2. Set the remaining env vars on Vercel: `AUTH_SECRET`,
    `AUTH_TRUST_HOST=true`, and `NEXT_PUBLIC_APP_URL`.
 3. Deploy. `scripts/vercel-build.mjs` applies migrations automatically on
    **production** deploys (previews skip them). Camera scanning requires
