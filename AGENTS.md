@@ -58,7 +58,20 @@ password. Supabase owns credentials — this codebase never hashes a password.
 - `lib/auth-helpers.ts` exports `requireUser()` and `requireRole([...])`, both
   of which redirect. Call one at the top of **every** page and **every** server
   action: `proxy.ts` only checks that a session exists, so role enforcement is
-  per-route.
+  per-route. `requireUser()` is wrapped in React `cache()`, so calling it from
+  the layout *and* the page *and* an action costs one check per request — call
+  it freely rather than threading the user through props.
+- Tokens are verified by `verifiedUserId()` in `lib/supabase/verify.ts`, not by
+  `getUser()`. It takes the access token from `getSession()` — which decodes
+  the cookie and refreshes it when stale, and proves nothing on its own — then
+  checks the signature against the project's JWKS. That is a local computation,
+  where `getUser()` was an HTTPS call to Supabase on every request. The JWKS
+  cache lives on a client instance, so `verify.ts` keeps a second, session-less
+  client alive for the process; the per-request clients in `server.ts` cannot
+  hold it. On a project still using the legacy shared signing secret this falls
+  back to `getUser()` internally — correct either way, but only faster once the
+  project moves to asymmetric signing keys. Never swap either of these for a
+  bare `getSession()`, which does not verify at all.
 - The `users` table is a **profile**, not a credential store. Its `id` *is* the
   `auth.users` UUID, and `requireUser()` joins the two — Supabase for identity,
   this table for `role`. A signed-in user with no profile row is rejected,
@@ -66,7 +79,9 @@ password. Supabase owns credentials — this codebase never hashes a password.
 - Three Supabase clients, and picking the wrong one is a security bug:
   `lib/supabase/server.ts` (session-bound, for pages and actions),
   `lib/supabase/client.ts` (browser), and `lib/supabase/admin.ts` (service
-  role — bypasses everything, so only after `requireRole(["admin"])`).
+  role — bypasses everything, so only after `requireRole(["admin"])`). The
+  verifier in `lib/supabase/verify.ts` is a fourth, but it is anonymous and
+  read-only — it holds no session and can reach no data.
 - Creating or deleting staff writes to **both** Supabase Auth and the profile
   table; `app/(app)/users/actions.ts` rolls the auth user back if the profile
   insert fails, so neither half is left orphaned.
@@ -102,6 +117,14 @@ On Vercel these fall back to `POSTGRES_URL` and `POSTGRES_URL_NON_POOLING`,
 which the Supabase integration injects. Prefer that fallback over copying the
 URLs into `DATABASE_URL`/`DIRECT_URL`: the integration rotates those credentials,
 and copies go stale silently.
+
+`vercel.json` pins functions to `sin1`, because the Supabase project is in
+Singapore (`ap-southeast-1`). Vercel's default is `iad1` in Washington, D.C.,
+which put roughly 230ms of Pacific between the app and its database — paid once
+per query, and pages issue several in sequence. **If the Supabase project ever
+moves region, move this with it**; a mismatch here costs more than every other
+optimisation in this file combined. Middleware is unaffected either way, since
+`proxy.ts` runs at whichever edge location the request arrives at.
 
 Column types worth knowing before you query:
 
@@ -179,6 +202,11 @@ worktree, but the worktree must exist before the first file mutation.
   `globalSetup`. `mock.module` is not hoisted like `vi.mock`, so register mocks
   before `await import(…)`-ing the module under test.
 - Modules reaching the database or secrets import `"server-only"`.
+- `app/(app)/loading.tsx` is the whole group's loading boundary. Every route in
+  it authenticates, so every route is dynamic and none can be prerendered —
+  without that boundary the router holds the previous page on screen for the
+  full server round trip and a click looks ignored. Adding a route-level
+  `loading.tsx` to override it is fine; deleting it is not.
 - `bun run dev` runs Next on the **Bun runtime** (`bunx --bun next dev`), but
   `build` and `start` deliberately stay on Node so local production builds
   match Vercel. Keep it that way when editing scripts.
