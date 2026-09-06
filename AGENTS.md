@@ -116,6 +116,31 @@ would desync it, so reach for generate + migrate instead.
 
 ## Working here
 
+### Required branch and worktree workflow
+
+Before making any changes for a new task, always create both a new branch and
+a new Git worktree from the latest remote `main`. This applies to every kind
+of change, including code, tests, documentation, configuration, dependencies,
+generated files, and this `AGENTS.md`.
+
+1. Inspect the current branch, worktrees, and working-tree status. Preserve all
+   existing work; do not stash, reset, move, or overwrite unrelated changes.
+2. Run `git fetch origin main`. If fetching fails, stop before editing and
+   report the blocker; do not silently use a stale local `main`.
+3. Create a task-specific branch and sibling worktree from `origin/main`:
+   `git worktree add -b <task-branch> ../church-mgmt-system-<task> origin/main`.
+4. Confirm the new worktree's branch and starting commit match the intended
+   branch and fetched `origin/main`, then perform all edits and checks there.
+5. Report the branch and worktree path when starting work and in the handoff.
+
+Continue follow-up work for the same task in its dedicated branch/worktree;
+create a fresh pair from newly fetched `origin/main` for each new task. Never
+start edits in the original checkout, on `main`, or on another task's branch.
+Read-only assessment may run in the existing checkout before creating a
+worktree, but the worktree must exist before the first file mutation.
+
+### Project conventions
+
 - `pnpm test` runs vitest over `lib/**/*.test.ts` only, in a `node`
   environment. Put pure logic in `lib/` so it is testable there —
   `lib/cell-graph.ts` with `lib/cell-graph.test.ts` is the model.
