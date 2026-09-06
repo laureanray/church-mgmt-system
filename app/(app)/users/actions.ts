@@ -152,7 +152,6 @@ export type ResetPasswordState =
 export async function resetUserPassword(
   id: string,
   _prev: ResetPasswordState,
-  _formData: FormData,
 ): Promise<ResetPasswordState> {
   await requireRole(["admin"]);
 

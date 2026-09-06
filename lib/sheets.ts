@@ -7,15 +7,6 @@ import { appSettings, attendance } from "@/db/schema";
 
 const SETTINGS_ID = "singleton";
 
-export const SHEET_HEADERS = [
-  "ID",
-  "Timestamp",
-  "Service",
-  "Service Date",
-  "Member",
-  "Recorded By",
-] as const;
-
 export type SheetsConfig = { url: string; secret: string };
 
 export async function getSettings() {

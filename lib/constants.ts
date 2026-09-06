@@ -65,8 +65,6 @@ export const DAYS_OF_WEEK = [
   "Saturday",
 ] as const;
 
-export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
-
 // Options for a meeting-day <Select> (value is the JS day index as a string).
 export const MEETING_DAY_OPTIONS = DAYS_OF_WEEK.map((label, i) => ({
   value: String(i),

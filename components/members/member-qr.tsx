@@ -43,7 +43,6 @@ export function MemberQr({
   return (
     <div className="flex flex-col items-center">
       <div className="rounded-xl border bg-white p-3">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <Image
           src={dataUrl}
           alt={`QR code for ${name}`}

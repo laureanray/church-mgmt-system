@@ -74,8 +74,3 @@ export async function requireRole(roles: UserRole[]): Promise<SessionUser> {
 export function canManage(role: UserRole) {
   return role === "admin" || role === "leader";
 }
-
-/** True if the given role is permitted to manage staff users. */
-export function canManageUsers(role: UserRole) {
-  return role === "admin";
-}
