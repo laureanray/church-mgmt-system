@@ -60,11 +60,11 @@ export function CreateUserDialog() {
             <DialogHeader>
               <DialogTitle>Staff user created</DialogTitle>
               <DialogDescription>
-                Give these credentials to <strong>{state?.username}</strong>.
+                Give these credentials to <strong>{state?.email}</strong>.
               </DialogDescription>
             </DialogHeader>
             <TempPasswordReveal
-              username={state!.username!}
+              email={state!.email!}
               tempPassword={state!.tempPassword!}
             />
             <DialogFooter>
@@ -95,32 +95,20 @@ export function CreateUserDialog() {
                 />
               </Field>
               <Field
-                label="Username"
-                htmlFor="user-username"
-                required
-                error={errors.username}
-                hint="Used to sign in"
-              >
-                <Input
-                  id="user-username"
-                  name="username"
-                  required
-                  autoCapitalize="none"
-                  autoComplete="off"
-                  placeholder="jane"
-                />
-              </Field>
-              <Field
                 label="Email"
                 htmlFor="user-email"
+                required
                 error={errors.email}
-                hint="Optional — for future use"
+                hint="Used to sign in"
               >
                 <Input
                   id="user-email"
                   name="email"
                   type="email"
-                  placeholder="jane@church.local"
+                  required
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  placeholder="jane@example.com"
                 />
               </Field>
               <Field

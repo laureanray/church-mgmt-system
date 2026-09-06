@@ -40,7 +40,7 @@ function ResetInner({ id, name }: { id: string; name: string }) {
           </DialogDescription>
         </DialogHeader>
         <TempPasswordReveal
-          username={state.username}
+          email={state.email}
           tempPassword={state.tempPassword}
         />
         <DialogFooter>

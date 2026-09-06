@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 import { testDatabaseUrl } from "./tests/support/database";
+import {
+  TEST_ANON_KEY,
+  TEST_SERVICE_ROLE_KEY,
+  TEST_SUPABASE_URL,
+} from "./tests/support/auth";
 
 const baseURL = 'http://127.0.0.1:3100';
 export default defineConfig({
@@ -20,9 +25,9 @@ export default defineConfig({
     env: {
       DATABASE_URL: testDatabaseUrl(),
       DIRECT_URL: testDatabaseUrl(),
-      AUTH_SECRET: 'local-test-only-secret-do-not-use-in-production',
-      AUTH_TRUST_HOST: 'true',
-      AUTH_URL: baseURL,
+      NEXT_PUBLIC_SUPABASE_URL: TEST_SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: TEST_ANON_KEY,
+      SUPABASE_SERVICE_ROLE_KEY: TEST_SERVICE_ROLE_KEY,
       NEXT_PUBLIC_APP_URL: baseURL,
       TZ: 'Asia/Manila',
     },

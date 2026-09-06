@@ -32,7 +32,16 @@ pnpm test:all                  # all three suites sequentially; start test DB fi
 pnpm test:db:down               # removes the disposable database
 ```
 
-The test database uses port **54432**, separate from local Supabase's **54422**.
+The test stack is three containers: Postgres on **54432** (separate from local
+Supabase's **54422**), a **GoTrue** instance owning the `auth` schema in that
+same database, and a tiny **nginx** gateway on **54433**. The gateway exists
+because `supabase-js` builds its calls as `${SUPABASE_URL}/auth/v1/...` while
+GoTrue serves from the root — it strips the prefix, which is the one job Kong
+does in a full Supabase stack. GoTrue is given `search_path=auth`; without it,
+it resolves unqualified names against `public` and finds this app's own `users`
+table. Postgres runs `tests/support/init-auth-schema.sql` on first boot, since
+GoTrue's migrations assume the `auth` schema already exists.
+
 It uses tmpfs; stopping/recreating it loses its data. It does not require the
 Supabase CLI. Tests never use `.env`, `DATABASE_URL`, or `DIRECT_URL` to choose
 their database. `TEST_DATABASE_URL` may override the default, but must point to
@@ -41,8 +50,10 @@ test data there: integration fixtures and E2E setup truncate all application
 tables. Never run integration and E2E suites simultaneously against one database.
 
 Playwright overrides the app's database and auth environment, refuses to reuse
-an existing server, and uses real Auth.js login with test-only seeded admin,
-leader and usher accounts. It uses the regular `.next` production build folder;
+an existing server, and signs in through **real Supabase Auth** with test-only
+admin, leader and usher accounts created via the GoTrue admin API. Those live in
+`auth.users`, which `resetTestDatabase` does not truncate, so the global setup
+deletes any account left by a previous run before recreating it. It uses the regular `.next` production build folder;
 avoid running another build in the same checkout at the same time. Browser
 contexts are fresh per test; members have unique names so retries don't collide.
 No development seed data or external integration credentials are needed.

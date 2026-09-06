@@ -1,6 +1,5 @@
 "use server";
 
-import { hash } from "bcryptjs";
 import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -9,12 +8,13 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
 import { generateTempPassword } from "@/lib/password";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
 
 export type CreateUserState =
   | {
       ok?: boolean;
-      username?: string;
+      email?: string;
       tempPassword?: string;
       errors?: Record<string, string>;
       message?: string;
@@ -29,7 +29,6 @@ export async function createUser(
 
   const parsed = createUserSchema.safeParse({
     name: formData.get("name"),
-    username: formData.get("username"),
     email: formData.get("email"),
     role: formData.get("role"),
   });
@@ -40,37 +39,51 @@ export async function createUser(
     };
   }
 
-  const { name, username, email, role } = parsed.data;
+  const { name, email, role } = parsed.data;
 
-  const takenUsername = await db.query.users.findFirst({
-    where: eq(users.username, username),
+  const taken = await db.query.users.findFirst({
+    where: eq(users.email, email),
   });
-  if (takenUsername) {
-    return { errors: { username: "That username is already taken." } };
-  }
-  if (email) {
-    const takenEmail = await db.query.users.findFirst({
-      where: eq(users.email, email),
-    });
-    if (takenEmail) {
-      return { errors: { email: "That email is already in use." } };
-    }
+  if (taken) {
+    return { errors: { email: "That email is already in use." } };
   }
 
   const tempPassword = generateTempPassword();
-  const passwordHash = await hash(tempPassword, 10);
+  const admin = createAdminClient();
 
-  await db.insert(users).values({
-    name,
-    username,
+  // Supabase owns the credential, so it has to be created first — we need the
+  // id it assigns as the profile's primary key.
+  const { data, error } = await admin.auth.admin.createUser({
     email,
-    passwordHash,
-    role,
-    mustChangePassword: true,
+    password: tempPassword,
+    // No mail server is configured for staff onboarding; the admin hands over
+    // the temporary password directly, so skip the confirmation round trip.
+    email_confirm: true,
   });
 
+  if (error || !data.user) {
+    return {
+      errors: { email: error?.message ?? "Could not create the account." },
+    };
+  }
+
+  try {
+    await db.insert(users).values({
+      id: data.user.id,
+      name,
+      email,
+      role,
+      mustChangePassword: true,
+    });
+  } catch (err) {
+    // Roll the auth user back, otherwise it lingers with no profile and its
+    // owner can sign in but gets bounced by requireUser().
+    await admin.auth.admin.deleteUser(data.user.id);
+    throw err;
+  }
+
   revalidatePath("/users");
-  return { ok: true, username, tempPassword };
+  return { ok: true, email, tempPassword };
 }
 
 export type EditUserState =
@@ -86,7 +99,6 @@ export async function updateUser(
 
   const parsed = editUserSchema.safeParse({
     name: formData.get("name"),
-    username: formData.get("username"),
     email: formData.get("email"),
     role: formData.get("role"),
   });
@@ -97,26 +109,36 @@ export async function updateUser(
     };
   }
 
-  const { name, username, email, role } = parsed.data;
+  const { name, email, role } = parsed.data;
 
-  const clashUsername = await db.query.users.findFirst({
-    where: and(eq(users.username, username), ne(users.id, id)),
+  const clash = await db.query.users.findFirst({
+    where: and(eq(users.email, email), ne(users.id, id)),
   });
-  if (clashUsername) {
-    return { errors: { username: "That username is already taken." } };
+  if (clash) {
+    return { errors: { email: "That email is already in use." } };
   }
-  if (email) {
-    const clashEmail = await db.query.users.findFirst({
-      where: and(eq(users.email, email), ne(users.id, id)),
+
+  const existing = await db.query.users.findFirst({
+    where: eq(users.id, id),
+    columns: { email: true },
+  });
+
+  // Email is the login identity, so a change has to reach Supabase too, or the
+  // staff member would keep signing in with the old address.
+  if (existing && existing.email !== email) {
+    const admin = createAdminClient();
+    const { error } = await admin.auth.admin.updateUserById(id, {
+      email,
+      email_confirm: true,
     });
-    if (clashEmail) {
-      return { errors: { email: "That email is already in use." } };
+    if (error) {
+      return { errors: { email: error.message } };
     }
   }
 
   await db
     .update(users)
-    .set({ name, username, email, role, updatedAt: new Date() })
+    .set({ name, email, role, updatedAt: new Date() })
     .where(eq(users.id, id));
 
   revalidatePath("/users");
@@ -124,7 +146,7 @@ export async function updateUser(
 }
 
 export type ResetPasswordState =
-  | { username: string; tempPassword: string }
+  | { email: string; tempPassword: string }
   | undefined;
 
 export async function resetUserPassword(
@@ -135,16 +157,23 @@ export async function resetUserPassword(
   await requireRole(["admin"]);
 
   const tempPassword = generateTempPassword();
-  const passwordHash = await hash(tempPassword, 10);
+  const admin = createAdminClient();
+
+  const { error } = await admin.auth.admin.updateUserById(id, {
+    password: tempPassword,
+  });
+  if (error) {
+    throw new Error(`Could not reset the password: ${error.message}`);
+  }
 
   const [updated] = await db
     .update(users)
-    .set({ passwordHash, mustChangePassword: true, updatedAt: new Date() })
+    .set({ mustChangePassword: true, updatedAt: new Date() })
     .where(eq(users.id, id))
-    .returning({ username: users.username });
+    .returning({ email: users.email });
 
   revalidatePath("/users");
-  return { username: updated.username, tempPassword };
+  return { email: updated.email, tempPassword };
 }
 
 export async function deleteUser(currentUserId: string, id: string) {
@@ -153,6 +182,16 @@ export async function deleteUser(currentUserId: string, id: string) {
     // Guard against locking yourself out.
     return;
   }
+
+  // Delete the credential first: a profile with no auth user is merely orphaned
+  // data, while an auth user with no profile is an account that can still sign
+  // in. requireUser() rejects the latter, but leaving one around is worse.
+  const admin = createAdminClient();
+  const { error } = await admin.auth.admin.deleteUser(id);
+  if (error) {
+    throw new Error(`Could not delete the account: ${error.message}`);
+  }
+
   await db.delete(users).where(eq(users.id, id));
   revalidatePath("/users");
 }

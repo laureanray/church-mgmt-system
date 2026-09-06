@@ -10,13 +10,13 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # IRM Ministries — church management
 
 A members directory where every member carries a QR code; scanning that code
-records attendance against a service. Staff sign in with a **username** (roles:
+records attendance against a service. Staff sign in with their **email** (roles:
 `admin`, `leader`, `usher`). Filipino church context — expect Taglish domain
 terms in the schema and `en-PH` formatting throughout.
 
 Stack: Next.js 16 App Router (route protection lives in `proxy.ts`, the
 successor to `middleware.ts`) · React 19 · Drizzle ORM on Supabase Postgres ·
-Auth.js v5 credentials · Tailwind 4 · shadcn/ui **Base UI** variant · zod v4 ·
+Supabase Auth · Tailwind 4 · shadcn/ui **Base UI** variant · zod v4 ·
 vitest.
 
 ## shadcn here is the Base UI variant
@@ -51,21 +51,42 @@ columns stay nullable rather than filling with `""`.
 
 ## Auth
 
+**Supabase Auth** is the identity provider; staff sign in with **email** and
+password. Supabase owns credentials — this codebase never hashes a password.
+
 - `lib/auth-helpers.ts` exports `requireUser()` and `requireRole([...])`, both
   of which redirect. Call one at the top of **every** page and **every** server
   action: `proxy.ts` only checks that a session exists, so role enforcement is
   per-route.
-- `auth.config.ts` is edge-safe — no db or bcrypt imports — because `proxy.ts`
-  instantiates NextAuth from it. The Credentials provider and bcrypt stay in
-  `auth.ts`.
+- The `users` table is a **profile**, not a credential store. Its `id` *is* the
+  `auth.users` UUID, and `requireUser()` joins the two — Supabase for identity,
+  this table for `role`. A signed-in user with no profile row is rejected,
+  because role is what every downstream check depends on.
+- Three Supabase clients, and picking the wrong one is a security bug:
+  `lib/supabase/server.ts` (session-bound, for pages and actions),
+  `lib/supabase/client.ts` (browser), and `lib/supabase/admin.ts` (service
+  role — bypasses everything, so only after `requireRole(["admin"])`).
+- Creating or deleting staff writes to **both** Supabase Auth and the profile
+  table; `app/(app)/users/actions.ts` rolls the auth user back if the profile
+  insert fails, so neither half is left orphaned.
 - `canManage(role)` covers admin + leader (members, services, cell groups);
   `canManageUsers(role)` is admin only.
 
+Two config traps in `supabase/config.toml`:
+
+- `[auth] enable_signup = false` is what closes public registration. Leave
+  `[auth.email] enable_signup = true` — that flag gates the email provider as a
+  whole, so turning it off breaks **sign-in** with `email_provider_disabled`.
+- `minimum_password_length` must stay in step with `changePasswordSchema` in
+  `lib/validators.ts`, or the form accepts a password Supabase then rejects.
+
 ## Data
 
-Postgres on Supabase, reached only through Drizzle. Supabase is a database
-host here and nothing more: PostgREST, Supabase Auth, Storage and Realtime are
-all switched off in `supabase/config.toml`, and sessions belong to Auth.js.
+Postgres on Supabase, reached **only through Drizzle** — no `supabase-js` query
+ever touches application data, and there are no RLS policies, so a missing
+`requireRole` is a real hole rather than a second line of defence. Storage,
+Realtime and PostgREST stay switched off in `supabase/config.toml`; the API
+gateway and Auth are on solely because Supabase Auth signs staff in.
 
 Two connection strings, because they are not interchangeable:
 
@@ -153,5 +174,6 @@ worktree, but the worktree must exist before the first file mutation.
   It binds the `544xx` port block (Postgres `54422`, Studio `54423`) rather
   than Supabase's `543xx` default, so it coexists with other local Supabase
   projects.
-- Seeded admin: username `admin`, password `admin123`.
+- Seeded admin: `admin@church.local` / `admin123`. The seed creates it through
+  the Supabase Admin API, so `pnpm db:seed` needs the auth stack running.
 - Commits follow `type(scope): summary`, e.g. `feat(cell-groups): …`.

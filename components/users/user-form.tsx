@@ -58,15 +58,17 @@ export function UserForm({
           </Field>
 
           <Field
-            label="Username"
-            htmlFor="username"
+            label="Email"
+            htmlFor="email"
             required
-            error={errors.username}
+            error={errors.email}
+            hint="Used to sign in"
           >
             <Input
-              id="username"
-              name="username"
-              defaultValue={user.username}
+              id="email"
+              name="email"
+              type="email"
+              defaultValue={user.email}
               autoCapitalize="none"
               required
             />
@@ -82,21 +84,6 @@ export function UserForm({
             />
           </Field>
 
-          <Field
-            label="Email"
-            htmlFor="email"
-            error={errors.email}
-            hint="Optional — for future use"
-            className="sm:col-span-2"
-          >
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              defaultValue={user.email ?? ""}
-              placeholder="name@church.local"
-            />
-          </Field>
         </CardContent>
       </Card>
 
