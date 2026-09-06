@@ -13,9 +13,12 @@ import {
 import { toast } from "sonner";
 
 import { recordAttendance, type ScanResult } from "@/app/(app)/scan/actions";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -65,12 +68,12 @@ const STATUS_META: Record<
 > = {
   ok: {
     icon: CheckCircle2,
-    className: "text-emerald-600 dark:text-emerald-400",
+    className: "text-success",
     label: "Checked in",
   },
   duplicate: {
     icon: XCircle,
-    className: "text-amber-600 dark:text-amber-400",
+    className: "text-warning",
     label: "Already in",
   },
   not_found: {
@@ -295,18 +298,25 @@ export function ScannerPanel({
 
       {/* Live feed */}
       <Card className="h-fit">
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Live check-ins</CardTitle>
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-sm font-semibold text-primary tabular-nums">
-            <CheckCircle2 className="size-3.5" />
-            {checkedInCount}
-          </span>
+          <CardAction>
+            <Badge
+              variant="brand"
+              size="lg"
+              className="font-semibold tabular-nums"
+            >
+              <CheckCircle2 className="size-3.5" />
+              {checkedInCount}
+            </Badge>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {feed.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Scanned members will appear here.
-            </p>
+            <EmptyState
+              variant="inline"
+              title="Scanned members will appear here."
+            />
           ) : (
             <ul className="space-y-1">
               {feed.map((f) => {

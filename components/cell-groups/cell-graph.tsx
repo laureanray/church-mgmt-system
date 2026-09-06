@@ -10,23 +10,13 @@ import {
   type Simulation,
 } from "d3-force";
 
-import type { GraphLink, GraphNode } from "@/lib/cell-graph";
+import { TIER_STYLE, type GraphLink, type GraphNode } from "@/lib/cell-graph";
 
 type SimNode = GraphNode & {
   x: number;
   y: number;
   fx?: number | null;
   fy?: number | null;
-};
-
-const TIER_STYLE: Record<
-  GraphNode["tier"],
-  { fill: string; r: number; label: boolean }
-> = {
-  "leader-of-leaders": { fill: "var(--color-primary)", r: 16, label: true },
-  leader: { fill: "var(--color-chart-2, #10b981)", r: 11, label: true },
-  member: { fill: "var(--color-muted-foreground)", r: 6, label: false },
-  unassigned: { fill: "#9ca3af", r: 6, label: false },
 };
 
 const WIDTH = 900;

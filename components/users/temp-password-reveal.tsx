@@ -27,7 +27,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
           }}
         >
           {copied ? (
-            <Check className="size-4 text-emerald-600" />
+            <Check className="size-4 text-success" />
           ) : (
             <Copy className="size-4" />
           )}

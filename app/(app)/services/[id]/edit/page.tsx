@@ -1,16 +1,13 @@
-import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { updateService } from "../../actions";
 import { db } from "@/db";
 import { services } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
+import { BackLink } from "@/components/patterns/back-link";
 import { ServiceForm } from "@/components/services/service-form";
-import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function EditServicePage({
   params,
@@ -29,16 +26,7 @@ export default async function EditServicePage({
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        href={`/services/${service.id}`}
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to service
-      </Link>
+      <BackLink href={`/services/${service.id}`} label="Back to service" />
       <PageHeader
         title="Edit Service"
         description={`Update ${service.name}.`}

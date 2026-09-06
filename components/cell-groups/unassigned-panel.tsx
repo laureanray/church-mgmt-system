@@ -3,7 +3,10 @@
 import { AlertTriangle } from "lucide-react";
 
 import { assignMemberToCellGroup } from "@/app/(app)/cell-groups/actions";
-import type { SelectOption } from "@/components/form/form-select";
+import {
+  FormSelect,
+  type SelectOption,
+} from "@/components/form/form-select";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -22,9 +25,9 @@ export function UnassignedPanel({
   canManage: boolean;
 }) {
   return (
-    <Card className="border-amber-500/40">
+    <Card className="border-warning/40">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base text-amber-600 dark:text-amber-500">
+        <CardTitle className="flex items-center gap-2 text-base text-warning">
           <AlertTriangle className="size-4" />
           {people.length} not in a cell group
         </CardTitle>
@@ -48,21 +51,13 @@ export function UnassignedPanel({
                     className="flex items-center gap-1"
                   >
                     <input type="hidden" name="memberId" value={m.id} />
-                    <select
+                    <FormSelect
                       name="cellGroupId"
-                      defaultValue=""
+                      placeholder="Assign to…"
+                      options={cellOptions}
                       required
-                      className="h-8 rounded-md border border-input bg-transparent px-2 text-xs outline-none"
-                    >
-                      <option value="" disabled>
-                        Assign to…
-                      </option>
-                      {cellOptions.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+                      className="h-8 w-40 text-xs"
+                    />
                     <Button type="submit" size="sm" variant="secondary">
                       Add
                     </Button>

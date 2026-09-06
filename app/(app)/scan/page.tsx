@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { services } from "@/db/schema";
 import { requireUser } from "@/lib/auth-helpers";
 import { topUpAllSchedules } from "@/lib/occurrences";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/patterns/page-header";
 import { ScannerPanel } from "@/components/scan/scanner-panel";
 
 export default async function ScanPage({

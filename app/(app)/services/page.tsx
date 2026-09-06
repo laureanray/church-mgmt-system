@@ -18,7 +18,8 @@ import { topUpAllSchedules } from "@/lib/occurrences";
 import { cn } from "@/lib/utils";
 import { DeleteScheduleButton } from "@/components/services/delete-schedule-button";
 import { ScheduleActiveToggle } from "@/components/services/schedule-active-toggle";
-import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -121,20 +122,21 @@ export default async function ServicesPage() {
           </CardHeader>
           <CardContent>
             {schedules.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No recurring schedules yet.
-                </p>
-                {manage ? (
-                  <Link
-                    href="/services/schedules/new"
-                    className={cn(buttonVariants({ size: "sm" }), "mt-3")}
-                  >
-                    <CalendarPlus className="size-4" />
-                    Create a weekly service
-                  </Link>
-                ) : null}
-              </div>
+              <EmptyState
+                variant="inline"
+                title="No recurring schedules yet."
+                action={
+                  manage ? (
+                    <Link
+                      href="/services/schedules/new"
+                      className={cn(buttonVariants({ size: "sm" }))}
+                    >
+                      <CalendarPlus className="size-4" />
+                      Create a weekly service
+                    </Link>
+                  ) : null
+                }
+              />
             ) : (
               <div className="divide-y">
                 {schedules.map((s) => (
@@ -197,15 +199,12 @@ export default async function ServicesPage() {
         </CardHeader>
         <CardContent>
           {occurrences.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
-                <CalendarDays className="size-6 text-muted-foreground" />
-              </div>
-              <h3 className="text-sm font-medium">No services yet</h3>
-              <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Create a schedule or a one-off service, then scan members in.
-              </p>
-            </div>
+            <EmptyState
+              variant="inline"
+              icon={CalendarDays}
+              title="No services yet"
+              description="Create a schedule or a one-off service, then scan members in."
+            />
           ) : (
             <Table>
               <TableHeader>

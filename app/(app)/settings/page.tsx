@@ -5,7 +5,7 @@ import { getSettings, saveSheetsConfig } from "@/lib/sheets";
 import { CodeBlock } from "@/components/integrations/code-block";
 import { SheetsSettingsForm } from "@/components/integrations/sheets-settings-form";
 import { SyncAllButton } from "@/components/integrations/sync-buttons";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -88,8 +88,8 @@ export default async function SettingsPage() {
         <CardHeader>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <div className="flex size-9 items-center justify-center rounded-md bg-emerald-500/10">
-                <Sheet className="size-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex size-9 items-center justify-center rounded-md bg-success/10">
+                <Sheet className="size-5 text-success" />
               </div>
               <div>
                 <CardTitle className="text-base">Google Sheets</CardTitle>
@@ -99,7 +99,7 @@ export default async function SettingsPage() {
               </div>
             </div>
             {connected ? (
-              <Badge className="gap-1 bg-emerald-600 text-white hover:bg-emerald-600">
+              <Badge variant="success" className="gap-1">
                 <CheckCircle2 className="size-3.5" />
                 Connected
               </Badge>

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarCheck, Pencil } from "lucide-react";
+import { CalendarCheck, Pencil } from "lucide-react";
 
 import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
 import { db } from "@/db";
@@ -11,6 +11,11 @@ import { GENDER_LABELS, MARITAL_STATUS_LABELS } from "@/lib/constants";
 import { formatDate, formatDateTime, initials } from "@/lib/format";
 import { generateQrDataUrl } from "@/lib/qr";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/patterns/back-link";
+import { DetailList, DetailRow } from "@/components/patterns/detail-list";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { FormSelect } from "@/components/form/form-select";
+import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
 import { MemberQr } from "@/components/members/member-qr";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,21 +36,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-3 gap-2 py-2">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="col-span-2 text-sm">{value || "—"}</dd>
-    </div>
-  );
-}
 
 export default async function MemberDetailPage({
   params,
@@ -91,16 +81,7 @@ export default async function MemberDetailPage({
 
   return (
     <div className="mx-auto max-w-5xl">
-      <Link
-        href="/members"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to members
-      </Link>
+      <BackLink href="/members" label="Back to members" />
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -149,7 +130,7 @@ export default async function MemberDetailPage({
               <CardTitle className="text-base">Member Details</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="divide-y">
+              <DetailList>
                 <DetailRow
                   label="Birthdate"
                   value={formatDate(member.birthdate)}
@@ -197,7 +178,7 @@ export default async function MemberDetailPage({
                     )
                   }
                 />
-              </dl>
+              </DetailList>
             </CardContent>
           </Card>
         </div>
@@ -248,25 +229,21 @@ export default async function MemberDetailPage({
               <CardContent>
                 <form action={promoteMemberToLeader} className="space-y-3">
                   <input type="hidden" name="memberId" value={member.id} />
-                  <input
+                  <Input
                     name="name"
                     required
+                    aria-label="New cell group name"
                     placeholder="New cell group name"
                     defaultValue={`${member.fullName}'s Cell`}
-                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                   />
-                  <select
+                  <FormSelect
                     name="parentCellGroupId"
-                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm outline-none"
-                    defaultValue=""
-                  >
-                    <option value="">Upline: top level</option>
-                    {parentCells.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        Upline: {c.name}
-                      </option>
-                    ))}
-                  </select>
+                    clearLabel="Upline: top level"
+                    options={parentCells.map((c) => ({
+                      value: c.id,
+                      label: `Upline: ${c.name}`,
+                    }))}
+                  />
                   <Button type="submit" size="sm" variant="outline">
                     Create cell &amp; make leader
                   </Button>
@@ -283,9 +260,7 @@ export default async function MemberDetailPage({
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              No attendance recorded yet.
-            </p>
+            <EmptyState variant="inline" title="No attendance recorded yet." />
           ) : (
             <Table>
               <TableHeader>

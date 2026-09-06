@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
 import { DeleteUserButton } from "@/components/users/delete-user-button";
 import { ResetPasswordButton } from "@/components/users/reset-password-button";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/patterns/page-header";
+import { TableCard } from "@/components/patterns/table-card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -38,7 +39,7 @@ export default async function UsersPage() {
         <CreateUserDialog />
       </PageHeader>
 
-      <div className="overflow-hidden rounded-lg border">
+      <TableCard>
         <Table>
           <TableHeader>
             <TableRow>
@@ -90,12 +91,7 @@ export default async function UsersPage() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     {u.mustChangePassword ? (
-                      <Badge
-                        variant="outline"
-                        className="border-amber-500/40 text-amber-600 dark:text-amber-400"
-                      >
-                        Must reset password
-                      </Badge>
+                      <Badge variant="warning">Must reset password</Badge>
                     ) : (
                       <span className="text-sm text-muted-foreground">
                         Active
@@ -128,7 +124,7 @@ export default async function UsersPage() {
             })}
           </TableBody>
         </Table>
-      </div>
+      </TableCard>
     </>
   );
 }

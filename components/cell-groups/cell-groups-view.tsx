@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { List, Share2 } from "lucide-react";
 
-import type { GraphLink, GraphNode } from "@/lib/cell-graph";
+import {
+  TIER_LEGEND,
+  type GraphLink,
+  type GraphNode,
+} from "@/lib/cell-graph";
 import type { SelectOption } from "@/components/form/form-select";
 import { CellGraph } from "@/components/cell-groups/cell-graph";
 import { UnassignedPanel } from "@/components/cell-groups/unassigned-panel";
@@ -63,10 +67,9 @@ export function CellGroupsView({
           <List className="size-4" /> List
         </Button>
         <div className="ml-auto flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <Legend color="var(--color-primary)" label="Leader of leaders" />
-          <Legend color="#10b981" label="Leader" />
-          <Legend color="var(--color-muted-foreground)" label="Member" />
-          <Legend color="#9ca3af" label="Unassigned" />
+          {TIER_LEGEND.map((tier) => (
+            <Legend key={tier.label} color={tier.color} label={tier.label} />
+          ))}
         </div>
       </div>
 

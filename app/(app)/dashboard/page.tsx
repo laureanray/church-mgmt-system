@@ -15,11 +15,14 @@ import { canManage, requireUser } from "@/lib/auth-helpers";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { PageHeader } from "@/components/patterns/page-header";
+import { StatCard } from "@/components/patterns/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardHeader,
   CardTitle,
@@ -32,37 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  accent,
-}: {
-  label: string;
-  value: number | string;
-  icon: typeof Users;
-  accent?: boolean;
-}) {
-  return (
-    <Card>
-      <CardContent className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
-        </div>
-        <div
-          className={cn(
-            "flex size-10 items-center justify-center rounded-lg",
-            accent ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-          )}
-        >
-          <Icon className="size-5" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -141,25 +113,33 @@ export default async function DashboardPage() {
       ) : null}
 
       <Card className="mt-6">
-        <CardHeader className="flex-row items-center justify-between">
+        <CardHeader>
           <CardTitle className="text-base">Recent Services</CardTitle>
-          <Link
-            href="/services"
-            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
-          >
-            View all
-          </Link>
+          {/* CardHeader is a grid, so a trailing element has to be a CardAction
+              to land in the second column. `flex-row justify-between` is inert
+              here and silently wraps the link under the title. */}
+          <CardAction>
+            <Link
+              href="/services"
+              className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+            >
+              View all
+            </Link>
+          </CardAction>
         </CardHeader>
         <CardContent>
           {recent.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No services yet.{" "}
-              {manage ? (
-                <Link href="/services/new" className="underline">
-                  Create one
-                </Link>
-              ) : null}
-            </p>
+            <EmptyState
+              variant="inline"
+              title="No services yet"
+              description={
+                manage ? (
+                  <Link href="/services/new" className="underline">
+                    Create one
+                  </Link>
+                ) : undefined
+              }
+            />
           ) : (
             <Table>
               <TableHeader>

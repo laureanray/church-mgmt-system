@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { asc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil, Users } from "lucide-react";
+import { Pencil, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
 import { formatMeeting } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/patterns/back-link";
+import { EmptyState } from "@/components/patterns/empty-state";
 import { DeleteCellGroupButton } from "@/components/cell-groups/delete-cell-group-button";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
@@ -43,16 +45,7 @@ export default async function CellGroupDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Link
-        href="/cell-groups"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to cell groups
-      </Link>
+      <BackLink href="/cell-groups" label="Back to cell groups" />
 
       <PageHeader
         title={cellGroup.name}
@@ -126,7 +119,7 @@ export default async function CellGroupDetailPage({
           </CardHeader>
           <CardContent>
             {roster.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No members yet.</p>
+              <EmptyState variant="inline" title="No members yet." />
             ) : (
               <ul className="space-y-1 text-sm">
                 {roster.map((m) => (

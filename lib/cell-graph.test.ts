@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { buildCellGraph, wouldCreateCycle } from "./cell-graph";
+import {
+  TIER_LEGEND,
+  TIER_STYLE,
+  buildCellGraph,
+  wouldCreateCycle,
+} from "./cell-graph";
 
 // Network:
 //   Pastor leads "Root" (no parent) and belongs to it.
@@ -70,5 +75,49 @@ describe("wouldCreateCycle", () => {
   it("allows a valid new parent", () => {
     expect(wouldCreateCycle("ana", null, cells)).toBe(false);
     expect(wouldCreateCycle("ana", "root", cells)).toBe(false);
+  });
+});
+
+describe("TIER_STYLE", () => {
+  // The graph paints these into an SVG `fill`, where a literal colour would look
+  // right in whichever theme its author was in and wrong in the other.
+  it("resolves every fill through a CSS custom property", () => {
+    for (const [tier, style] of Object.entries(TIER_STYLE)) {
+      expect(style.fill, tier).toContain("var(--");
+      expect(style.fill, tier).not.toContain("#");
+    }
+  });
+
+  it("sizes nodes by seniority so the hierarchy reads at a glance", () => {
+    expect(TIER_STYLE["leader-of-leaders"].r).toBeGreaterThan(
+      TIER_STYLE.leader.r,
+    );
+    expect(TIER_STYLE.leader.r).toBeGreaterThan(TIER_STYLE.member.r);
+  });
+
+  it("labels only the tiers sparse enough for the text to be legible", () => {
+    expect(TIER_STYLE["leader-of-leaders"].label).toBe(true);
+    expect(TIER_STYLE.leader.label).toBe(true);
+    expect(TIER_STYLE.member.label).toBe(false);
+    expect(TIER_STYLE.unassigned.label).toBe(false);
+  });
+});
+
+describe("TIER_LEGEND", () => {
+  // The legend and the graph read the same table, so a colour cannot drift
+  // between the dot in the key and the dot on the canvas.
+  it("covers every tier, most senior first", () => {
+    expect(TIER_LEGEND.map((t) => t.tier)).toEqual([
+      "leader-of-leaders",
+      "leader",
+      "member",
+      "unassigned",
+    ]);
+  });
+
+  it("carries the same colour the graph paints", () => {
+    for (const entry of TIER_LEGEND) {
+      expect(entry.color).toBe(TIER_STYLE[entry.tier].fill);
+    }
   });
 });
