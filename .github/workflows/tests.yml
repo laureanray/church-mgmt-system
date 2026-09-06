@@ -1,6 +1,10 @@
 name: Tests
 on:
+  # Pull requests already cover every task branch. Without this filter a branch
+  # push and its pull request run the suite twice on one commit, and the two
+  # runs race for the same per-IP registry pull quota.
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
@@ -46,7 +50,18 @@ jobs:
         run: |
           gh pr comment "${{ github.event.pull_request.number }}" \
             --body-file coverage/report.md --edit-last --create-if-none
-      - run: bun run test:db:up
+      - name: Start test database
+        # Anonymous image pulls share a per-IP quota with every other runner, so
+        # `toomanyrequests: Rate exceeded` is a transient registry response
+        # rather than a broken compose file. Back off and try again.
+        run: |
+          for attempt in 1 2 3; do
+            if bun run test:db:up; then exit 0; fi
+            echo "::warning::test:db:up failed (attempt $attempt/3); retrying"
+            bun run test:db:down || true
+            sleep $((attempt * 30))
+          done
+          exit 1
       - run: bun run test:integration
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e

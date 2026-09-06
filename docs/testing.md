@@ -116,6 +116,14 @@ with `bun install --frozen-lockfile`, checks types and lint, runs unit coverage
 and Postgres integration tests, installs Chromium and runs the E2E suite. Reports, screenshots and failure traces are retained for seven days.
 No Supabase or production secrets are required.
 
+Workflow triggers are `pull_request` plus pushes to `main` only. A push filter
+matters beyond CI minutes here: an unfiltered `push` runs the whole suite a
+second time on the same commit, and the two runs compete for the same per-IP
+anonymous registry pull quota, which surfaces as `toomanyrequests: Rate
+exceeded` from `test:db:up`. That step also retries three times with backoff,
+since the quota is shared with every other runner on the host and the failure is
+transient rather than a compose problem.
+
 Every run writes the coverage markdown to the job summary, and pull requests
 additionally get it as a comment that later pushes **edit in place** rather than
 append (`gh pr comment --edit-last --create-if-none`, using the built-in
