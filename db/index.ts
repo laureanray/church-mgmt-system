@@ -33,9 +33,11 @@ function connect(): Database {
     globalForDb.pgClient ??
     postgres(url, {
       prepare: !isTransactionPooler,
-      // One socket per serverless instance keeps the pooler's connection budget
-      // from being exhausted as instances scale out.
-      max: process.env.NODE_ENV === "production" ? 1 : 5,
+      // Must stay >1. Against Supavisor a single socket deadlocks as soon as
+      // two queries overlap — which pages do routinely via Promise.all — and
+      // the connection is then destroyed. Supavisor multiplexes on its side, so
+      // a small per-instance pool costs nothing.
+      max: 5,
     });
 
   if (process.env.NODE_ENV !== "production") {
