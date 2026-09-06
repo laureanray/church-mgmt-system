@@ -58,8 +58,6 @@ export const memberSchema = z.object({
   cellGroupId: optionalId,
 });
 
-export type MemberInput = z.infer<typeof memberSchema>;
-
 export const serviceSchema = z.object({
   name: z.string().trim().min(1, "Service name is required").max(200),
   type: z.enum(SERVICE_TYPES),
@@ -71,8 +69,6 @@ export const serviceSchema = z.object({
   location: optionalText,
   notes: optionalText,
 });
-
-export type ServiceInput = z.infer<typeof serviceSchema>;
 
 export const scheduleSchema = z.object({
   name: z.string().trim().min(1, "Schedule name is required").max(200),
@@ -89,8 +85,6 @@ export const scheduleSchema = z.object({
   notes: optionalText,
 });
 
-export type ScheduleInput = z.infer<typeof scheduleSchema>;
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // Email is the login identity in Supabase Auth, so it is required and unique.
 const emailField = z.preprocess(
@@ -104,8 +98,6 @@ export const createUserSchema = z.object({
   email: emailField,
   role: z.enum(USER_ROLES),
 });
-
-export type CreateUserInput = z.infer<typeof createUserSchema>;
 
 // Editing an existing user (same fields; password handled separately).
 export const editUserSchema = createUserSchema;
@@ -145,8 +137,6 @@ export const cellGroupSchema = z.object({
     z.boolean(),
   ).optional().default(true),
 });
-
-export type CellGroupInput = z.infer<typeof cellGroupSchema>;
 
 // Quick-assign a member to a cell group (or clear it with an empty value).
 export const assignSchema = z.object({

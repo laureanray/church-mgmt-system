@@ -2,13 +2,6 @@
 
 # dependencies
 /node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
 # testing
 /coverage
@@ -39,10 +32,6 @@ yarn-error.log*
 # ...but the placeholder template is what `cp .env.example .env` in the README
 # copies, so it has to be tracked.
 !.env.example
-
-# leftover SQLite database from the pre-Supabase (libSQL/Turso) setup
-/local.db
-/local.db-*
 
 # vercel
 .vercel
