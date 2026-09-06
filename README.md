@@ -123,6 +123,13 @@ duplicates. Columns: `ID · Timestamp · Service · Service Date · Member · Re
 | `pnpm db:seed` | Seed admin + sample data |
 | `pnpm db:studio` | Open Drizzle Studio |
 
+## Testing
+
+See [the testing guide](docs/testing.md) for the assessment, unit/integration/E2E
+setup, database isolation, CI, and coverage priorities. Start with `pnpm test`;
+for all suites, run `pnpm test:db:up`, install Chromium with
+`pnpm exec playwright install chromium`, then run `pnpm test:all`.
+
 ## Deployment (Vercel + Supabase)
 
 1. Connect the **Supabase integration** to the Vercel project (Storage ▸ your

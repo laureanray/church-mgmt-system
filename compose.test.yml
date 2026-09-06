@@ -1,0 +1,16 @@
+services:
+  test-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: church_mgmt_test
+    ports:
+      - "127.0.0.1:54432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d church_mgmt_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

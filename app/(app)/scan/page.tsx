@@ -35,6 +35,8 @@ export default async function ScanPage({
   // Default to the requested service, else the one scheduled closest to now.
   let initialServiceId = serviceParam;
   if (!initialServiceId && rows.length > 0) {
+    // This async Server Component reads the clock after request-bound authentication.
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     initialServiceId = rows.reduce((best, s) =>
       Math.abs(s.scheduledAt.getTime() - now) <

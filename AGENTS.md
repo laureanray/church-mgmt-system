@@ -144,6 +144,10 @@ worktree, but the worktree must exist before the first file mutation.
 - `pnpm test` runs vitest over `lib/**/*.test.ts` only, in a `node`
   environment. Put pure logic in `lib/` so it is testable there —
   `lib/cell-graph.ts` with `lib/cell-graph.test.ts` is the model.
+- Integration tests live in `tests/integration/` (`pnpm test:integration`); E2E
+  tests live in `tests/e2e/` (`pnpm test:e2e`). Both use the disposable test
+  Postgres from `pnpm test:db:up`, never the development database. See
+  `docs/testing.md`; run these suites sequentially.
 - Modules reaching the database or secrets import `"server-only"`.
 - `pnpm db:up` starts the local stack; `pnpm db:reset` rebuilds and reseeds it.
   It binds the `544xx` port block (Postgres `54422`, Studio `54423`) rather
