@@ -24,7 +24,7 @@ USB scanner) to instantly record attendance against a service.
 
 - **Next.js 16** (App Router, Server Actions, Turbopack) + **React 19**
 - **Tailwind CSS 4** + **shadcn/ui** (Base UI variant)
-- **Drizzle ORM** + **PostgreSQL** (local via Docker, Neon in production)
+- **Drizzle ORM** + **PostgreSQL** (Supabase — local CLI stack in dev, hosted in production)
 - **Auth.js (NextAuth v5)** — credentials + role-based access
 - **@yudiel/react-qr-scanner** (scanning) + **qrcode** (generation)
 
@@ -34,7 +34,8 @@ USB scanner) to instantly record attendance against a service.
 
 - Node.js 20+ (24 recommended)
 - pnpm 10+
-- Docker Desktop (for local Postgres)
+- Docker Desktop (the local Supabase stack runs in Docker)
+- [Supabase CLI](https://supabase.com/docs/guides/local-development) 2+
 
 ### 1. Install dependencies
 
@@ -44,8 +45,8 @@ pnpm install
 
 ### 2. Configure environment
 
-Copy the example env and adjust if needed (defaults work with the bundled
-Docker Postgres):
+Copy the example env and adjust if needed (the defaults match the local
+Supabase stack):
 
 ```bash
 cp .env.example .env
@@ -60,10 +61,17 @@ openssl rand -base64 32
 ### 3. Start the database
 
 ```bash
-pnpm db:up        # starts Postgres in Docker on port 5433
-pnpm db:migrate   # applies the schema
+pnpm db:up        # supabase start — Postgres on 54422, Studio on 54423
+pnpm db:migrate   # applies the Drizzle migrations
 pnpm db:seed      # creates an admin user + sample members/services
 ```
+
+> This project uses the `544xx` port block rather than Supabase's `543xx`
+> default, so it can run alongside other local Supabase projects.
+
+Only Postgres and Studio are enabled — the app talks to Postgres directly
+through Drizzle and handles auth with Auth.js, so the API, Auth, Storage and
+Realtime services are switched off in `supabase/config.toml`.
 
 ### 4. Run the app
 
@@ -73,7 +81,7 @@ pnpm dev
 
 Open http://localhost:3000 and sign in with the seeded admin:
 
-- **Email:** `admin@church.local`
+- **Username:** `admin`
 - **Password:** `admin123`
 
 > Change this password (or create your own admin) before using in production.
@@ -108,20 +116,25 @@ duplicates. Columns: `ID · Timestamp · Service · Service Date · Member · Re
 | --- | --- |
 | `pnpm dev` | Start the dev server |
 | `pnpm build` / `pnpm start` | Production build / serve |
-| `pnpm db:up` / `pnpm db:down` | Start / stop local Postgres (Docker) |
+| `pnpm db:up` / `pnpm db:down` | Start / stop the local Supabase stack |
+| `pnpm db:reset` | Drop, re-migrate and re-seed the local database |
 | `pnpm db:generate` | Generate a migration from schema changes |
 | `pnpm db:migrate` | Apply migrations |
 | `pnpm db:seed` | Seed admin + sample data |
 | `pnpm db:studio` | Open Drizzle Studio |
 
-## Deployment (Vercel + Neon)
+## Deployment (Vercel + Supabase)
 
-1. Create a **Neon Postgres** database (Vercel Marketplace) and copy its
-   pooled connection string.
-2. Set project env vars on Vercel: `DATABASE_URL`, `AUTH_SECRET`,
+1. Create a **Supabase** project and open **Connect** to copy two connection
+   strings:
+   - **Transaction pooler** (port 6543) → `DATABASE_URL`, used by the app.
+   - **Session pooler / direct** (port 5432) → `DIRECT_URL`, used by migrations,
+     which run DDL that the transaction pooler does not support.
+2. Set project env vars on Vercel: `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`,
    `AUTH_TRUST_HOST=true`, and `NEXT_PUBLIC_APP_URL`.
-3. Run migrations against the production database (`DATABASE_URL=… pnpm db:migrate`).
-4. Deploy. Camera scanning requires HTTPS — Vercel provides this automatically.
+3. Deploy. `scripts/vercel-build.mjs` applies migrations automatically on
+   **production** deploys (previews skip them). Camera scanning requires
+   HTTPS — Vercel provides this automatically.
 
 ## Project structure
 
@@ -131,6 +144,8 @@ app/login/         Sign-in page
 auth.ts            NextAuth setup (credentials + roles)
 proxy.ts           Route protection (Next.js middleware/proxy)
 db/schema.ts       Drizzle schema (members, services, attendance, users)
+db/migrations/     Versioned SQL migrations (drizzle-kit)
+supabase/          Local Supabase stack config (Postgres + Studio only)
 components/         UI + feature components (shadcn/ui in components/ui)
 lib/               Validators, formatting, QR + auth helpers
 ```

@@ -7,14 +7,16 @@ try {
   // .env may be absent in CI where DATABASE_URL is already set.
 }
 
+// Migrations run DDL, which the transaction pooler does not support. Point
+// DIRECT_URL at the direct or session-pooler connection; locally the Supabase
+// CLI stack serves both from the same address, so DATABASE_URL is the fallback.
+const url = process.env.DIRECT_URL || process.env.DATABASE_URL!;
+
 export default defineConfig({
   schema: "./db/schema.ts",
   out: "./db/migrations",
-  dialect: "turso",
-  dbCredentials: {
-    url: process.env.DATABASE_URL!,
-    authToken: process.env.DATABASE_AUTH_TOKEN,
-  },
+  dialect: "postgresql",
+  dbCredentials: { url },
   verbose: true,
   strict: true,
 });

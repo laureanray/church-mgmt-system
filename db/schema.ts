@@ -1,11 +1,14 @@
-import { relations, sql } from "drizzle-orm";
+import { relations } from "drizzle-orm";
 import {
-  AnySQLiteColumn,
+  AnyPgColumn,
+  boolean,
+  date,
   integer,
-  sqliteTable,
+  pgTable,
   text,
+  timestamp,
   unique,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------
 // Enums are modeled as text columns with a TS-level enum constraint. DB-level
@@ -17,7 +20,7 @@ import {
 // Users — staff who log in (admin / leader / usher)
 // ---------------------------------------------------------------------------
 
-export const users = sqliteTable("users", {
+export const users = pgTable("users", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
@@ -32,22 +35,22 @@ export const users = sqliteTable("users", {
     .notNull()
     .default("usher"),
   // True when an admin has issued a temporary password; forces a reset at login.
-  mustChangePassword: integer("must_change_password", { mode: "boolean" })
+  mustChangePassword: boolean("must_change_password")
     .notNull()
     .default(false),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
 // Members — the church congregation. Each has a unique QR token.
 // ---------------------------------------------------------------------------
 
-export const members = sqliteTable("members", {
+export const members = pgTable("members", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
@@ -55,8 +58,8 @@ export const members = sqliteTable("members", {
   qrToken: text("qr_token").notNull().unique(),
 
   fullName: text("full_name").notNull(),
-  birthdate: text("birthdate"),
-  spiritualBirthday: text("spiritual_birthday"),
+  birthdate: date("birthdate"),
+  spiritualBirthday: date("spiritual_birthday"),
   // "Taon na naging Kaanib ng IRM" — year the member joined IRM.
   memberSinceYear: integer("member_since_year"),
   gender: text("gender", { enum: ["male", "female"] }),
@@ -64,7 +67,7 @@ export const members = sqliteTable("members", {
     enum: ["single", "married", "widowed", "separated", "divorced"],
   }),
   spouseName: text("spouse_name"),
-  weddingAnniversary: text("wedding_anniversary"),
+  weddingAnniversary: date("wedding_anniversary"),
   contactNumber: text("contact_number"),
   homeAddress: text("home_address"),
   motherName: text("mother_name"),
@@ -74,7 +77,7 @@ export const members = sqliteTable("members", {
 
   // The cell group this person belongs to. NULL = not yet in any cell group.
   cellGroupId: text("cell_group_id").references(
-    (): AnySQLiteColumn => cellGroups.id,
+    (): AnyPgColumn => cellGroups.id,
     {
       onDelete: "set null",
     },
@@ -84,12 +87,12 @@ export const members = sqliteTable("members", {
     .references(() => users.id, { onDelete: "set null" })
     .unique(),
 
-  createdAt: integer("created_at", { mode: "timestamp" })
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -97,7 +100,7 @@ export const members = sqliteTable("members", {
 // under a parent cell, forming the leader-of-leaders network.
 // ---------------------------------------------------------------------------
 
-export const cellGroups = sqliteTable("cell_groups", {
+export const cellGroups = pgTable("cell_groups", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
@@ -108,20 +111,20 @@ export const cellGroups = sqliteTable("cell_groups", {
   }),
   // The upline cell. This nesting produces "leaders of leaders".
   parentCellGroupId: text("parent_cell_group_id").references(
-    (): AnySQLiteColumn => cellGroups.id,
+    (): AnyPgColumn => cellGroups.id,
     { onDelete: "set null" },
   ),
   meetingDay: integer("meeting_day"), // 0 = Sunday .. 6 = Saturday
   meetingTime: text("meeting_time"), // "HH:mm" 24h
   meetingLocation: text("meeting_location"),
   notes: text("notes"),
-  active: integer("active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -129,7 +132,7 @@ export const cellGroups = sqliteTable("cell_groups", {
 // that auto-generate dated service occurrences.
 // ---------------------------------------------------------------------------
 
-export const serviceSchedules = sqliteTable("service_schedules", {
+export const serviceSchedules = pgTable("service_schedules", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
@@ -146,10 +149,10 @@ export const serviceSchedules = sqliteTable("service_schedules", {
   location: text("location"),
   notes: text("notes"),
   // When false, no new occurrences are generated.
-  active: integer("active", { mode: "boolean" }).notNull().default(true),
-  createdAt: integer("created_at", { mode: "timestamp" })
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -157,7 +160,7 @@ export const serviceSchedules = sqliteTable("service_schedules", {
 // one-off (scheduleId null) or an occurrence generated from a schedule.
 // ---------------------------------------------------------------------------
 
-export const services = sqliteTable(
+export const services = pgTable(
   "services",
   {
     id: text("id")
@@ -170,16 +173,16 @@ export const services = sqliteTable(
       .notNull()
       .default("sunday_service"),
     // Date + time the service is held.
-    scheduledAt: integer("scheduled_at", { mode: "timestamp" }).notNull(),
+    scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
     location: text("location"),
     notes: text("notes"),
     // The recurring schedule this occurrence came from, if any.
     scheduleId: text("schedule_id").references(() => serviceSchedules.id, {
       onDelete: "set null",
     }),
-    createdAt: integer("created_at", { mode: "timestamp" })
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
-      .default(sql`(unixepoch())`),
+      .defaultNow(),
   },
   // Prevents generating the same occurrence twice for a schedule.
   (t) => [
@@ -194,7 +197,7 @@ export const services = sqliteTable(
 // Attendance — one row per member per service (deduped by unique constraint).
 // ---------------------------------------------------------------------------
 
-export const attendance = sqliteTable(
+export const attendance = pgTable(
   "attendance",
   {
     id: text("id")
@@ -206,9 +209,9 @@ export const attendance = sqliteTable(
     serviceId: text("service_id")
       .notNull()
       .references(() => services.id, { onDelete: "cascade" }),
-    checkedInAt: integer("checked_in_at", { mode: "timestamp" })
+    checkedInAt: timestamp("checked_in_at", { withTimezone: true })
       .notNull()
-      .default(sql`(unixepoch())`),
+      .defaultNow(),
     // Which staff user scanned them in (nullable — user may be deleted later).
     recordedBy: text("recorded_by").references(() => users.id, {
       onDelete: "set null",
@@ -224,13 +227,13 @@ export const attendance = sqliteTable(
 // Google Sheets webhook). Keyed by a constant id so there is only ever one row.
 // ---------------------------------------------------------------------------
 
-export const appSettings = sqliteTable("app_settings", {
+export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey().default("singleton"),
   sheetsWebhookUrl: text("sheets_webhook_url"),
   sheetsWebhookSecret: text("sheets_webhook_secret"),
-  updatedAt: integer("updated_at", { mode: "timestamp" })
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
-    .default(sql`(unixepoch())`),
+    .defaultNow(),
 });
 
 // ---------------------------------------------------------------------------

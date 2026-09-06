@@ -14,9 +14,6 @@ importers:
       '@hookform/resolvers':
         specifier: ^5.4.0
         version: 5.4.0(react-hook-form@7.80.0(react@19.2.4))
-      '@libsql/client':
-        specifier: ^0.17.4
-        version: 0.17.4
       '@yudiel/react-qr-scanner':
         specifier: ^2.6.0
         version: 2.6.0(@types/emscripten@1.41.5)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -53,6 +50,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
@@ -4856,10 +4856,12 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   '@libsql/core@0.17.4':
     dependencies:
       js-base64: 3.8.0
+    optional: true
 
   '@libsql/darwin-arm64@0.5.29':
     optional: true
@@ -4874,6 +4876,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   '@libsql/isomorphic-ws@0.1.5':
     dependencies:
@@ -4882,6 +4885,7 @@ snapshots:
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
+    optional: true
 
   '@libsql/linux-arm-gnueabihf@0.5.29':
     optional: true
@@ -4940,7 +4944,8 @@ snapshots:
       '@tybys/wasm-util': 0.10.3
     optional: true
 
-  '@neon-rs/load@0.0.4': {}
+  '@neon-rs/load@0.0.4':
+    optional: true
 
   '@next/env@16.2.10': {}
 
@@ -5177,6 +5182,7 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 20.19.43
+    optional: true
 
   '@typescript-eslint/eslint-plugin@8.62.1(@typescript-eslint/parser@8.62.1(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)':
     dependencies:
@@ -5774,7 +5780,8 @@ snapshots:
 
   depd@2.0.0: {}
 
-  detect-libc@2.0.2: {}
+  detect-libc@2.0.2:
+    optional: true
 
   detect-libc@2.1.2: {}
 
@@ -6749,7 +6756,8 @@ snapshots:
 
   jose@6.2.3: {}
 
-  js-base64@3.8.0: {}
+  js-base64@3.8.0:
+    optional: true
 
   js-tokens@4.0.0: {}
 
@@ -6825,6 +6833,7 @@ snapshots:
       '@libsql/linux-x64-gnu': 0.5.29
       '@libsql/linux-x64-musl': 0.5.29
       '@libsql/win32-x64-msvc': 0.5.29
+    optional: true
 
   lightningcss-android-arm64@1.32.0:
     optional: true
@@ -7207,8 +7216,7 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postgres@3.4.9:
-    optional: true
+  postgres@3.4.9: {}
 
   powershell-utils@0.1.0: {}
 
@@ -7224,7 +7232,8 @@ snapshots:
     dependencies:
       parse-ms: 4.0.0
 
-  promise-limit@2.7.0: {}
+  promise-limit@2.7.0:
+    optional: true
 
   prompts@2.4.2:
     dependencies:
@@ -7999,7 +8008,8 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  ws@8.21.0: {}
+  ws@8.21.0:
+    optional: true
 
   wsl-utils@0.3.1:
     dependencies:

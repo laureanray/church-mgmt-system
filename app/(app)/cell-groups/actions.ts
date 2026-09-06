@@ -118,10 +118,9 @@ export async function updateCellGroup(
 
 export async function deleteCellGroup(id: string) {
   await requireRole(["admin", "leader"]);
-  // libSQL/Turso does not enforce FK cascades unless PRAGMA foreign_keys is on
-  // (the client does not set it), so null out references explicitly: members
-  // become unassigned, child cells become roots. Idempotent if a cascade also
-  // fires. Order matters only in that the deletes/updates all target this id.
+  // Postgres would fire the ON DELETE SET NULL cascades on its own, but doing
+  // it explicitly also bumps updatedAt on the rows we touch — members become
+  // unassigned, child cells become roots. Harmless alongside the cascade.
   await db
     .update(members)
     .set({ cellGroupId: null, updatedAt: new Date() })

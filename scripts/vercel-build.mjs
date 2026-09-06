@@ -1,6 +1,6 @@
 // Vercel runs `vercel-build` in preference to `build`.
 // Apply DB migrations ONLY on production deploys, then build.
-// Preview deploys skip migration (they point at a separate/no Turso DB).
+// Preview deploys skip migration (they point at a separate/no Supabase DB).
 import { execSync } from "node:child_process";
 
 const run = (cmd) => execSync(cmd, { stdio: "inherit" });
