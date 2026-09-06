@@ -20,6 +20,52 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+  # Vercel applies migrations for real, inside the production build. This job
+  # only proves they are safe to apply, so a broken one fails review instead of
+  # a deploy.
+  migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: church_mgmt_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d church_mgmt_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/church_mgmt_test
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/church_mgmt_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply migrations to an empty database
+        run: pnpm db:migrate
+      - name: Re-apply — must be a no-op
+        run: pnpm db:migrate
+      - name: Fail if db/schema.ts has drifted from db/migrations
+        run: |
+          pnpm db:generate
+          if [ -n "$(git status --porcelain db/migrations)" ]; then
+            echo "::error::db/schema.ts changed without a matching migration. Run 'pnpm db:generate' and commit the result."
+            git status --porcelain db/migrations
+            exit 1
+          fi
+
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
