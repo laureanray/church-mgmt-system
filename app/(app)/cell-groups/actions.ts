@@ -163,6 +163,18 @@ export async function promoteMemberToLeader(formData: FormData) {
   if (!parsed.success) return;
   const { memberId, name, parentCellGroupId } = parsed.data;
 
+  // A member leads at most one cell. Promoting an existing leader would create a
+  // second cell with the same leaderId and then move their single cellGroupId to
+  // it, leaving the first cell led by someone who is no longer one of its
+  // members. The UI hides this form for existing leaders; this covers the rest.
+  const alreadyLeads = await db.query.cellGroups.findFirst({
+    where: eq(cellGroups.leaderId, memberId),
+    columns: { id: true },
+  });
+  if (alreadyLeads) {
+    redirect(`/cell-groups/${alreadyLeads.id}`);
+  }
+
   const [row] = await db
     .insert(cellGroups)
     .values({ name, leaderId: memberId, parentCellGroupId })

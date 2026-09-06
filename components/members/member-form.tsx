@@ -97,6 +97,7 @@ export function MemberForm({
               id="gender"
               name="gender"
               placeholder="Select gender"
+              clearLabel="Not specified"
               options={GENDER_OPTIONS}
               defaultValue={member?.gender}
             />
@@ -111,6 +112,7 @@ export function MemberForm({
               id="maritalStatus"
               name="maritalStatus"
               placeholder="Select status"
+              clearLabel="Not specified"
               options={MARITAL_OPTIONS}
               defaultValue={member?.maritalStatus}
               onValueChange={(v) => setMaritalStatus(v as MaritalStatus)}
@@ -181,6 +183,7 @@ export function MemberForm({
               id="cellGroupId"
               name="cellGroupId"
               placeholder="Not in a cell group"
+              clearLabel="Not in a cell group"
               options={cellOptions}
               defaultValue={member?.cellGroupId}
             />

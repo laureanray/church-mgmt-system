@@ -73,12 +73,21 @@ export default async function MemberDetailPage({
 
   const manage = canManage(user.role);
 
-  const parentCells = manage
+  const allCells = manage
     ? await db
-        .select({ id: cellGroups.id, name: cellGroups.name })
+        .select({
+          id: cellGroups.id,
+          name: cellGroups.name,
+          leaderId: cellGroups.leaderId,
+        })
         .from(cellGroups)
         .orderBy(asc(cellGroups.name))
     : [];
+
+  // A member leads at most one cell, so promoting an existing leader would
+  // orphan their first cell. Offer the form only when they lead nothing yet.
+  const ledCell = allCells.find((c) => c.leaderId === member.id) ?? null;
+  const parentCells = allCells;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -211,7 +220,27 @@ export default async function MemberDetailPage({
             </CardContent>
           </Card>
 
-          {manage ? (
+          {manage && ledCell ? (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="text-base">Cell Leader</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Already leads{" "}
+                  <Link
+                    href={`/cell-groups/${ledCell.id}`}
+                    className="font-medium text-foreground underline underline-offset-4"
+                  >
+                    {ledCell.name}
+                  </Link>
+                  .
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {manage && !ledCell ? (
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle className="text-base">Promote to Leader</CardTitle>
