@@ -2,11 +2,13 @@ import "server-only";
 
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import type { UserRole } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/server";
+import { verifiedUserId } from "@/lib/supabase/verify";
 
 /** The signed-in staff member: Supabase identity joined to their profile row. */
 export type SessionUser = {
@@ -21,21 +23,24 @@ export type SessionUser = {
  * Returns the signed-in user, or redirects to /login if there is none.
  *
  * Identity comes from Supabase Auth; the role lives in our own `users` table,
- * so this reads both. `getUser()` revalidates the token against Supabase rather
- * than trusting the cookie.
+ * so this reads both. The token is verified, not merely decoded — see
+ * lib/supabase/verify.ts.
+ *
+ * Memoised with React `cache()` for the duration of a request. The layout and
+ * the page each call this, as does every server action, and without memoising
+ * a single navigation paid for the identity check and the profile query twice
+ * over — a cost that used to be two extra network round trips deep.
  */
-export async function requireUser(): Promise<SessionUser> {
+export const requireUser = cache(async function requireUser(): Promise<SessionUser> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const userId = await verifiedUserId(supabase);
 
-  if (!user) {
+  if (!userId) {
     redirect("/login");
   }
 
   const profile = await db.query.users.findFirst({
-    where: eq(users.id, user.id),
+    where: eq(users.id, userId),
   });
 
   // Authenticated in Supabase but with no profile row — an account created
@@ -56,7 +61,7 @@ export async function requireUser(): Promise<SessionUser> {
     role: profile.role,
     mustChangePassword: profile.mustChangePassword,
   };
-}
+});
 
 /**
  * Ensures the signed-in user has one of the allowed roles.

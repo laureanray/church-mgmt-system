@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { count, desc, eq, gte } from "drizzle-orm";
+import { desc, eq, gte } from "drizzle-orm";
 import {
   CalendarDays,
   CalendarPlus,
@@ -48,17 +48,22 @@ export default async function DashboardPage() {
       db.$count(services),
       db.$count(attendance),
       db.$count(attendance, gte(attendance.checkedInAt, weekAgo)),
+      // Counted per service rather than by joining and grouping the whole
+      // attendance table: only five rows survive the LIMIT, so five indexed
+      // counts beat aggregating every check-in ever recorded to discard all
+      // but five of the groups.
       db
         .select({
           id: services.id,
           name: services.name,
           type: services.type,
           scheduledAt: services.scheduledAt,
-          attendeeCount: count(attendance.id),
+          attendeeCount: db.$count(
+            attendance,
+            eq(attendance.serviceId, services.id),
+          ),
         })
         .from(services)
-        .leftJoin(attendance, eq(attendance.serviceId, services.id))
-        .groupBy(services.id)
         .orderBy(desc(services.scheduledAt))
         .limit(5),
     ]);
