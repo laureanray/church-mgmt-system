@@ -303,15 +303,8 @@ export const attendanceRelations = relations(attendance, ({ one }) => ({
 // ---------------------------------------------------------------------------
 
 export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
 export type Member = typeof members.$inferSelect;
-export type NewMember = typeof members.$inferInsert;
 export type Service = typeof services.$inferSelect;
-export type NewService = typeof services.$inferInsert;
 export type ServiceSchedule = typeof serviceSchedules.$inferSelect;
-export type NewServiceSchedule = typeof serviceSchedules.$inferInsert;
-export type AppSettings = typeof appSettings.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
-export type NewAttendance = typeof attendance.$inferInsert;
 export type CellGroup = typeof cellGroups.$inferSelect;
-export type NewCellGroup = typeof cellGroups.$inferInsert;

@@ -101,8 +101,8 @@ password. Supabase owns credentials — this codebase never hashes a password.
 - Creating or deleting staff writes to **both** Supabase Auth and the profile
   table; `app/(app)/users/actions.ts` rolls the auth user back if the profile
   insert fails, so neither half is left orphaned.
-- `canManage(role)` covers admin + leader (members, services, cell groups);
-  `canManageUsers(role)` is admin only.
+- `canManage(role)` covers admin + leader (members, services, cell groups).
+  Admin-only routes gate on `requireRole(["admin"])` directly.
 
 Two config traps in `supabase/config.toml`:
 

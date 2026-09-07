@@ -18,7 +18,6 @@ const config: StorybookConfig = {
     name: "@storybook/nextjs-vite",
     options: {},
   },
-  staticDirs: ["../public"],
   async viteFinal(config) {
     // Storybook builds with Vite while the app builds with Turbopack, so
     // Tailwind has to be wired up a second time here. Same `app/globals.css`,
