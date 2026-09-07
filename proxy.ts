@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { verifiedUserId } from "@/lib/supabase/verify";
+
 /**
  * Refreshes the Supabase session on every request and gates the app behind it.
  *
@@ -35,23 +37,22 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // getUser() revalidates the token with Supabase. getSession() only decodes
-  // the cookie, which is trivially forgeable, so it must not gate access here.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Verifies the token's signature rather than trusting the cookie. This used
+  // to be getUser(), an HTTPS call to Supabase on every single request — which,
+  // with this matcher, includes each of Next's route prefetches.
+  const userId = await verifiedUserId(supabase);
 
   const { pathname } = request.nextUrl;
   const isOnLogin = pathname === "/login";
 
   if (isOnLogin) {
-    if (user) {
+    if (userId) {
       return NextResponse.redirect(new URL("/dashboard", request.nextUrl));
     }
     return response;
   }
 
-  if (!user) {
+  if (!userId) {
     const loginUrl = new URL("/login", request.nextUrl);
     if (pathname !== "/") {
       loginUrl.searchParams.set("callbackUrl", pathname);
