@@ -31,10 +31,10 @@ export type FacetOption = {
 /**
  * A multi-select facet.
  *
- * Every other control on the table is a plain link, and this one is not:
- * opening a menu already needs JavaScript, so there is nothing left to protect
- * by refusing to use it — and a real `menuitemcheckbox` announces "checked" to
- * a screen reader, which a link dressed up with a tick does not.
+ * Almost every other control on the table is a plain link, and this one is not.
+ * A facet is multi-select, and a real `menuitemcheckbox` announces "checked" to
+ * a screen reader where a link dressed up with a tick does not — so the menu
+ * earns its keep here in a way it would not for, say, the page size.
  */
 export function DataTableFacetFilter({
   label,

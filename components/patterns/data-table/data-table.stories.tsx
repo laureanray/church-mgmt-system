@@ -146,9 +146,9 @@ function MembersTable({
 
 /**
  * Everything on at once: search, a facet, sortable headers, column visibility
- * and pagination. Each control is a link or a GET form, so the whole thing
- * works before any JavaScript loads — except the two menus, which need it to
- * open at all.
+ * and pagination. Every control is an anchor or a GET form except the two
+ * multi-select menus, so the URL is the whole model and there is no client
+ * table state to hydrate.
  */
 export const Default: Story = {
   render: () => <MembersTable />,

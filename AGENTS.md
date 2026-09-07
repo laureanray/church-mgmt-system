@@ -101,9 +101,18 @@ Four things there are load-bearing, not stylistic:
 - `overRunPage` + `redirect` handles a bookmark to a page that no longer
   exists; without it a stale link shows an empty table that reads as a bug.
 
-Two controls need JavaScript — the facet menu and the column picker — because a
-menu does anyway, and a real `menuitemcheckbox` announces "checked" where a link
-with a tick drawn on it does not. Everything else works without it.
+Every control except two is an anchor or a GET form in the server's HTML. The
+exceptions are the facet menu and the column picker: a menu needs JavaScript to
+open regardless, and a real `menuitemcheckbox` announces "checked" where a link
+with a tick drawn on it does not. Page size is *not* one of them — it is a
+single-select navigation between four fixed URLs, so it is four links.
+
+That is about the URL being the whole model — linkable, back-button-safe,
+prefetchable, and no table state to hydrate — and **not** a no-JavaScript
+guarantee. `app/(app)/loading.tsx` puts every route in the group behind a
+streaming Suspense boundary, and React reveals streamed content with an inline
+script, so a scripting-disabled browser sits on the skeleton however the table
+is built.
 
 `emptyFiltered` is separate from `empty` and deliberately cannot carry an
 action: someone whose *search* missed is one click from creating a duplicate of

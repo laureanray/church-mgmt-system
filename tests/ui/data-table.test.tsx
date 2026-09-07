@@ -356,15 +356,29 @@ describe("DataTable menus", () => {
     ).toHaveAttribute("aria-checked", "false");
   });
 
-  test("rows per page navigates without losing the search", async () => {
-    const user = userEvent.setup();
+  test("rows per page is a link, not a menu — nothing to open", () => {
     render(<Filtered />);
 
-    await user.click(screen.getByRole("button", { name: "Rows per page" }));
+    // A menu needs JavaScript to open at all, and page size is a single-select
+    // navigation between fixed URLs; only the two checkbox menus above earn one.
+    expect(screen.queryByRole("button", { name: /rows per page/i })).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "50 rows per page" }),
+    ).toHaveAttribute("href", "/members?q=re&per=50&gender=female");
+  });
 
-    expect(await screen.findByRole("menuitem", { name: "50" })).toHaveAttribute(
-      "href",
-      "/members?q=re&per=50&gender=female",
-    );
+  test("marks the page size in force and returns to page one on a change", () => {
+    render(<LastPage />);
+
+    expect(
+      screen.getByRole("link", { name: "20 rows per page" }),
+    ).toHaveAttribute("aria-current", "true");
+    expect(
+      screen.getByRole("link", { name: "50 rows per page" }),
+    ).not.toHaveAttribute("aria-current");
+    // Standing on page 13, a wider page must not keep the page number.
+    expect(
+      screen.getByRole("link", { name: "100 rows per page" }),
+    ).toHaveAttribute("href", "/members?per=100");
   });
 });

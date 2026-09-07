@@ -33,12 +33,12 @@ export type DataTableSearchConfig = {
 /**
  * Search, facets and column visibility above the table.
  *
- * The search is a GET form with no `action`, so it submits to the current
- * route and a search is a plain navigation: linkable, back-button-safe and
- * working before any JavaScript has loaded. That is also why every other
- * parameter is re-emitted as a hidden input — submitting a GET form *replaces*
- * the query string rather than merging into it, so a sort not repeated here
- * would be dropped the moment someone searched.
+ * The search is a GET form with no `action`, so it submits to the current route
+ * and a search is a plain navigation — linkable, back-button-safe, and with no
+ * client state to keep in step. That is also why every other parameter is
+ * re-emitted as a hidden input: submitting a GET form *replaces* the query
+ * string rather than merging into it, so a sort not repeated here would be
+ * dropped the moment someone searched.
  */
 export function DataTableToolbar<TRow>({
   ctx,

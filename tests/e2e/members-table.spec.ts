@@ -153,4 +153,33 @@ test.describe('members table', () => {
     await expect(page.getByRole('columnheader', { name: 'Gender' })).toHaveCount(0);
     await expect(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
   });
+
+  // Every control except the two checkbox menus is an anchor or a GET form in
+  // the server's HTML. That is the property worth pinning: the URL is the whole
+  // model, so a control is linkable and prefetchable and there is no table
+  // state to hydrate. It is *not* a no-JavaScript guarantee — `(app)/loading.tsx`
+  // puts the group behind a streaming boundary that React reveals with an
+  // inline script, so scripting-off sits on the skeleton whatever the table does.
+  test('renders sorting, paging and page size as server-side links', async ({
+    page,
+  }) => {
+    await signIn(page);
+
+    const response = await page.request.get(
+      `/members?q=${encodeURIComponent(PREFIX)}`,
+    );
+    const html = await response.text();
+    const hrefs = [...html.matchAll(/href="([^"]*\/members\?[^"]*)"/g)].map((m) =>
+      m[1].replaceAll('&amp;', '&'),
+    );
+
+    expect(hrefs).toContain('/members?q=ZZ+Table&sort=name&dir=desc');
+    expect(hrefs).toContain('/members?q=ZZ+Table&page=2');
+    // The control Codex flagged: a link, so it needs no popup to reach.
+    expect(hrefs).toContain('/members?q=ZZ+Table&per=50');
+
+    // The search is a GET form whose field name is the query parameter.
+    expect(html).toMatch(/<form[^>]*>(?:(?!<\/form>)[\s\S])*?name="q"/);
+    expect(html).not.toMatch(/<form[^>]*method="post"/i);
+  });
 });

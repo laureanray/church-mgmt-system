@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -17,14 +16,6 @@ import {
 } from "@/lib/data-table";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 /**
  * A page control, or a disabled button at the ends of the list.
@@ -74,38 +65,45 @@ function PageLink({
   );
 }
 
+/**
+ * Page size, as four links rather than a menu.
+ *
+ * Unlike the facet filter and the column picker, there is nothing a menu would
+ * buy here: this is a single-select navigation between four fixed URLs, not a
+ * set of checkboxes whose "checked" state has to be announced. Four links are
+ * less code, need no popup to reach, and match the page numbers beside them.
+ */
 function RowsPerPage({ ctx }: { ctx: TableContext }) {
   const { perPage } = ctx.state;
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={<Button variant="ghost" size="sm" aria-label="Rows per page" />}
-      >
-        <span className="tabular-nums">{perPage}</span>
-        <span className="hidden md:inline">per page</span>
-        <ChevronDown aria-hidden />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-36">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Rows per page</DropdownMenuLabel>
-          {PER_PAGE_OPTIONS.map((option) => (
-            <DropdownMenuItem
-              key={option}
-              render={
-                <Link href={tableHref(ctx, { perPage: option })} scroll={false} />
-              }
-              className={cn(
-                "tabular-nums",
-                option === perPage && "font-medium text-foreground",
-              )}
-            >
-              {option}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <span
+      role="group"
+      aria-label="Rows per page"
+      className="flex items-center gap-0.5"
+    >
+      {PER_PAGE_OPTIONS.map((option) => {
+        const current = option === perPage;
+        return (
+          <Link
+            key={option}
+            href={tableHref(ctx, { perPage: option })}
+            scroll={false}
+            aria-label={`${option} rows per page`}
+            aria-current={current ? "true" : undefined}
+            className={cn(
+              buttonVariants({
+                variant: current ? "secondary" : "ghost",
+                size: "xs",
+              }),
+              "tabular-nums",
+            )}
+          >
+            {option}
+          </Link>
+        );
+      })}
+    </span>
   );
 }
 
@@ -134,18 +132,19 @@ export function DataTablePagination({
       aria-label="Pagination"
       className="flex flex-col-reverse items-center justify-between gap-2 border-t px-2 py-1.5 sm:flex-row"
     >
-      <p
-        className="text-xs text-muted-foreground tabular-nums"
-        aria-live="polite"
-      >
-        {total === 0
-          ? "No rows"
-          : `Showing ${from}–${to} of ${total} row${total === 1 ? "" : "s"}`}
-      </p>
+      <div className="flex items-center gap-2">
+        <p
+          className="text-xs text-muted-foreground tabular-nums"
+          aria-live="polite"
+        >
+          {total === 0
+            ? "No rows"
+            : `Showing ${from}–${to} of ${total} row${total === 1 ? "" : "s"}`}
+        </p>
+        <RowsPerPage ctx={ctx} />
+      </div>
 
       <div className="flex items-center gap-0.5">
-        <RowsPerPage ctx={ctx} />
-
         <PageLink
           href={tableHref(ctx, { page: 1 })}
           label="First page"

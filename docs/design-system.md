@@ -160,12 +160,18 @@ Four rules are load-bearing rather than stylistic:
   list that has since shrunk lands on the last page that has rows — and says so
   in the URL, rather than showing an empty table.
 
-Two menus break the no-JavaScript rule the rest of the table keeps: the facet
-filter and the column picker. Opening a menu already needs JavaScript, so there
-is nothing left to protect by refusing to use it — and a real
-`menuitemcheckbox` announces "checked" to a screen reader, which a link dressed
-up with a tick does not. A facet deliberately stays open after a toggle, since
-it is multi-select.
+Two controls are menus rather than links: the facet filter and the column
+picker. Both are multi-select, and a real `menuitemcheckbox` announces "checked"
+to a screen reader where a link dressed up with a tick does not. A facet
+deliberately stays open after a toggle. Everything else — sorting, paging, page
+size, reset — is an anchor, and the search is a GET form.
+
+Read that as "the URL is the whole model", not as "it runs without JavaScript".
+`app/(app)/loading.tsx` puts the group behind a streaming Suspense boundary that
+React reveals with an inline script, so scripting-off never gets past the
+skeleton. What the anchors buy is real all the same: a control is linkable and
+prefetchable, and there is no client table state to hydrate or to disagree with
+the server.
 
 Two behaviours in there are load-bearing rather than cosmetic:
 
