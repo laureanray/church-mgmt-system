@@ -1,19 +1,27 @@
 import Link from "next/link";
 import { asc, desc, eq } from "drizzle-orm";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CalendarCheck, Pencil } from "lucide-react";
 
 import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
 import { db } from "@/db";
-import { attendance, cellGroups, members } from "@/db/schema";
+import { attendance, cellGroups, members, services } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
 import { GENDER_LABELS, MARITAL_STATUS_LABELS } from "@/lib/constants";
+import {
+  overRunPage,
+  tableContext,
+  tableHref,
+  tableOffset,
+  type RawSearchParams,
+} from "@/lib/data-table";
 import { formatDate, formatDateTime, initials } from "@/lib/format";
 import { generateQrDataUrl } from "@/lib/qr";
 import { cn } from "@/lib/utils";
 import { BackLink } from "@/components/patterns/back-link";
+import { DataTable } from "@/components/patterns/data-table";
+import type { DataTableColumn } from "@/components/patterns/data-table";
 import { DetailList, DetailRow } from "@/components/patterns/detail-list";
-import { EmptyState } from "@/components/patterns/empty-state";
 import { FormSelect } from "@/components/form/form-select";
 import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
@@ -28,19 +36,25 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
+type HistoryRow = {
+  id: string;
+  serviceId: string | null;
+  serviceName: string | null;
+  checkedInAt: Date;
+};
+
+const HISTORY_SORT_COLUMNS = {
+  service: services.name,
+  date: attendance.checkedInAt,
+} as const;
 
 export default async function MemberDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<RawSearchParams>;
 }) {
   const user = await requireUser();
   const { id } = await params;
@@ -51,15 +65,75 @@ export default async function MemberDetailPage({
   });
   if (!member) notFound();
 
-  const [qrDataUrl, history] = await Promise.all([
+  // The page carries two independent lists, so this table namespaces its state
+  // and a sort here cannot collide with anything else on the route.
+  const historyCtx = tableContext(`/members/${member.id}`, await searchParams, {
+    prefix: "att",
+    sortKeys: Object.keys(HISTORY_SORT_COLUMNS),
+    defaultSort: "date",
+    defaultDirection: "desc",
+    defaultPerPage: 10,
+  });
+  const historyState = historyCtx.state;
+  const attended = eq(attendance.memberId, member.id);
+  const historyDirection = historyState.direction === "asc" ? asc : desc;
+
+  const [qrDataUrl, history, attendedCount] = await Promise.all([
     generateQrDataUrl(member.qrToken),
-    db.query.attendance.findMany({
-      where: eq(attendance.memberId, member.id),
-      with: { service: true },
-      orderBy: desc(attendance.checkedInAt),
-      limit: 50,
-    }),
+    db
+      .select({
+        id: attendance.id,
+        serviceId: services.id,
+        serviceName: services.name,
+        checkedInAt: attendance.checkedInAt,
+      })
+      .from(attendance)
+      .leftJoin(services, eq(services.id, attendance.serviceId))
+      .where(attended)
+      .orderBy(
+        historyDirection(
+          HISTORY_SORT_COLUMNS[
+            historyState.sort as keyof typeof HISTORY_SORT_COLUMNS
+          ],
+        ),
+        asc(attendance.id),
+      )
+      .limit(historyState.perPage)
+      .offset(tableOffset(historyState)),
+    db.$count(attendance, attended),
   ]);
+
+  const clampedHistoryPage = overRunPage(historyState, attendedCount);
+  if (clampedHistoryPage !== null) {
+    redirect(tableHref(historyCtx, { page: clampedHistoryPage }));
+  }
+
+  const historyColumns: DataTableColumn<HistoryRow>[] = [
+    {
+      id: "service",
+      header: "Service",
+      sortKey: "service",
+      hideable: false,
+      cellClassName: "font-medium",
+      cell: (row) =>
+        row.serviceId ? (
+          <Link href={`/services/${row.serviceId}`} className="hover:underline">
+            {row.serviceName}
+          </Link>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      id: "date",
+      header: "Checked In",
+      label: "Checked in",
+      sortKey: "date",
+      sortDirection: "desc",
+      cellClassName: "text-muted-foreground",
+      cell: (row) => formatDateTime(row.checkedInAt),
+    },
+  ];
 
   const manage = canManage(user.role);
 
@@ -103,7 +177,7 @@ export default async function MemberDetailPage({
               ) : null}
               <Badge variant="outline" className="gap-1">
                 <CalendarCheck className="size-3" />
-                {history.length} attended
+                {attendedCount} attended
               </Badge>
             </div>
           </div>
@@ -259,39 +333,17 @@ export default async function MemberDetailPage({
           <CardTitle className="text-base">Attendance History</CardTitle>
         </CardHeader>
         <CardContent>
-          {history.length === 0 ? (
-            <EmptyState variant="inline" title="No attendance recorded yet." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service</TableHead>
-                  <TableHead>Checked In</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="font-medium">
-                      {row.service ? (
-                        <Link
-                          href={`/services/${row.service.id}`}
-                          className="hover:underline"
-                        >
-                          {row.service.name}
-                        </Link>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDateTime(row.checkedInAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            ctx={historyCtx}
+            caption="Services this member has attended"
+            columns={historyColumns}
+            rows={history}
+            rowKey={(row) => row.id}
+            total={attendedCount}
+            framed={false}
+            columnVisibility={false}
+            empty={{ title: "No attendance recorded yet." }}
+          />
         </CardContent>
       </Card>
     </div>

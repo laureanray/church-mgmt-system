@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { and, asc, count, desc, eq, gte } from "drizzle-orm";
+import { redirect } from "next/navigation";
+import { and, asc, count, desc, eq, gte, ilike, inArray } from "drizzle-orm";
 import {
   CalendarDays,
   CalendarPlus,
@@ -12,12 +13,26 @@ import {
 import { db } from "@/db";
 import { attendance, serviceSchedules, services } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
-import { DAYS_OF_WEEK, SERVICE_TYPE_LABELS } from "@/lib/constants";
+import {
+  DAYS_OF_WEEK,
+  SERVICE_TYPES,
+  SERVICE_TYPE_LABELS,
+} from "@/lib/constants";
+import {
+  allowedValues,
+  overRunPage,
+  tableContext,
+  tableHref,
+  tableOffset,
+  type RawSearchParams,
+} from "@/lib/data-table";
 import { formatDateTime, formatTimeOfDay } from "@/lib/format";
 import { topUpAllSchedules } from "@/lib/occurrences";
 import { cn } from "@/lib/utils";
 import { DeleteScheduleButton } from "@/components/services/delete-schedule-button";
 import { ScheduleActiveToggle } from "@/components/services/schedule-active-toggle";
+import { DataTable } from "@/components/patterns/data-table";
+import type { DataTableColumn } from "@/components/patterns/data-table";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -28,16 +43,29 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
-export default async function ServicesPage() {
+type ServiceRow = {
+  id: string;
+  name: string;
+  type: (typeof SERVICE_TYPES)[number];
+  scheduledAt: Date;
+  location: string | null;
+  scheduleId: string | null;
+  attendeeCount: number;
+};
+
+const SORT_COLUMNS = {
+  name: services.name,
+  type: services.type,
+  date: services.scheduledAt,
+  location: services.location,
+} as const;
+
+export default async function ServicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<RawSearchParams>;
+}) {
   const user = await requireUser();
   const manage = canManage(user.role);
 
@@ -50,7 +78,36 @@ export default async function ServicesPage() {
 
   const now = new Date();
 
-  const [schedules, occurrences] = await Promise.all([
+  const ctx = tableContext("/services", await searchParams, {
+    sortKeys: [...Object.keys(SORT_COLUMNS), "attendance"],
+    filterKeys: ["type"],
+    defaultSort: "date",
+    // A service list reads newest-first; the oldest Sunday of 2019 is not what
+    // anyone opens this page for.
+    defaultDirection: "desc",
+  });
+  const { state } = ctx;
+
+  const types = allowedValues(state.filters.type, SERVICE_TYPES);
+  const where = and(
+    state.query ? ilike(services.name, `%${state.query}%`) : undefined,
+    types.length ? inArray(services.type, types) : undefined,
+  );
+
+  // Counted per service rather than by joining and grouping every check-in:
+  // only one page of services survives the LIMIT, so a handful of indexed
+  // counts beat aggregating the whole attendance table to discard most groups.
+  const attendeeCount = db.$count(
+    attendance,
+    eq(attendance.serviceId, services.id),
+  );
+  const sortExpression =
+    state.sort === "attendance"
+      ? attendeeCount
+      : SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS];
+  const direction = state.direction === "asc" ? asc : desc;
+
+  const [schedules, occurrences, [{ matching }]] = await Promise.all([
     db
       .select({
         id: serviceSchedules.id,
@@ -80,13 +137,82 @@ export default async function ServicesPage() {
         scheduledAt: services.scheduledAt,
         location: services.location,
         scheduleId: services.scheduleId,
-        attendeeCount: count(attendance.id),
+        attendeeCount,
       })
       .from(services)
-      .leftJoin(attendance, eq(attendance.serviceId, services.id))
-      .groupBy(services.id)
-      .orderBy(desc(services.scheduledAt)),
+      .where(where)
+      // Two services can share a timestamp, and a LIMIT/OFFSET walk over a
+      // non-unique ordering can repeat or skip rows between pages.
+      .orderBy(direction(sortExpression), asc(services.id))
+      .limit(state.perPage)
+      .offset(tableOffset(state)),
+    db.select({ matching: count() }).from(services).where(where),
   ]);
+
+  const clamped = overRunPage(state, matching);
+  if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
+
+  const serviceColumns: DataTableColumn<ServiceRow>[] = [
+    {
+      id: "name",
+      header: "Service",
+      sortKey: "name",
+      hideable: false,
+      cellClassName: "font-medium",
+      cell: (s) => (
+        <Link
+          href={`/services/${s.id}`}
+          className="flex items-center gap-1.5 hover:underline"
+        >
+          {s.scheduleId ? (
+            <Repeat
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-label="From a recurring schedule"
+            />
+          ) : null}
+          {s.name}
+        </Link>
+      ),
+    },
+    {
+      id: "type",
+      header: "Type",
+      sortKey: "type",
+      hideBelow: "sm",
+      cell: (s) => <Badge variant="secondary">{SERVICE_TYPE_LABELS[s.type]}</Badge>,
+    },
+    {
+      id: "date",
+      header: "Date & Time",
+      label: "Date and time",
+      sortKey: "date",
+      sortDirection: "desc",
+      cellClassName: "text-muted-foreground",
+      cell: (s) => formatDateTime(s.scheduledAt),
+    },
+    {
+      id: "location",
+      header: "Location",
+      sortKey: "location",
+      hideBelow: "md",
+      cellClassName: "text-muted-foreground",
+      cell: (s) => s.location ?? "—",
+    },
+    {
+      id: "attendance",
+      header: "Attendance",
+      sortKey: "attendance",
+      sortDirection: "desc",
+      align: "end",
+      numeric: true,
+      cell: (s) => (
+        <span className="inline-flex items-center gap-1">
+          <Users className="size-3.5 text-muted-foreground" aria-hidden />
+          {s.attendeeCount}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -198,60 +324,41 @@ export default async function ServicesPage() {
           <CardTitle className="text-base">All Services</CardTitle>
         </CardHeader>
         <CardContent>
-          {occurrences.length === 0 ? (
-            <EmptyState
-              variant="inline"
-              icon={CalendarDays}
-              title="No services yet"
-              description="Create a schedule or a one-off service, then scan members in."
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service</TableHead>
-                  <TableHead className="hidden sm:table-cell">Type</TableHead>
-                  <TableHead>Date &amp; Time</TableHead>
-                  <TableHead className="hidden md:table-cell">Location</TableHead>
-                  <TableHead className="text-right">Attendance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {occurrences.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        href={`/services/${s.id}`}
-                        className="flex items-center gap-1.5 hover:underline"
-                      >
-                        {s.scheduleId ? (
-                          <Repeat className="size-3.5 shrink-0 text-muted-foreground" />
-                        ) : null}
-                        {s.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Badge variant="secondary">
-                        {SERVICE_TYPE_LABELS[s.type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDateTime(s.scheduledAt)}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">
-                      {s.location ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <span className="inline-flex items-center gap-1 tabular-nums">
-                        <Users className="size-3.5 text-muted-foreground" />
-                        {s.attendeeCount}
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            ctx={ctx}
+            caption="All services"
+            columns={serviceColumns}
+            rows={occurrences}
+            rowKey={(s) => s.id}
+            total={matching}
+            // Already inside a Card, and a second border inside the first
+            // reads as a mistake.
+            framed={false}
+            search={{
+              placeholder: "Search services…",
+              label: "Search services by name",
+            }}
+            facets={[
+              {
+                id: "type",
+                label: "Type",
+                options: SERVICE_TYPES.map((value) => ({
+                  value,
+                  label: SERVICE_TYPE_LABELS[value],
+                })),
+              },
+            ]}
+            empty={{
+              icon: CalendarDays,
+              title: "No services yet",
+              description:
+                "Create a schedule or a one-off service, then scan members in.",
+            }}
+            emptyFiltered={{
+              icon: CalendarDays,
+              title: "No services match your search",
+            }}
+          />
         </CardContent>
       </Card>
     </>
