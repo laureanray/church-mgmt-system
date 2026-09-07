@@ -32,6 +32,10 @@ const EXEMPT = new Set([
   "lib/qr.ts",
   // Documents the rule it enforces, in prose and in a counter-example.
   "components/ui/badge.stories.tsx",
+  // Read by the OS to paint the splash screen and task switcher, before any
+  // stylesheet loads. The manifest spec takes a literal CSS colour, so there
+  // is no document for a custom property to resolve against.
+  "app/manifest.ts",
 ]);
 
 function sourceFiles(): string[] {
@@ -70,5 +74,18 @@ describe("design tokens", () => {
 
   test("no component hardcodes a hex colour", () => {
     expect(offences(HEX_LITERAL)).toEqual([]);
+  });
+
+  // app/manifest.ts is exempt above because the manifest spec has nowhere to
+  // resolve a custom property. That exemption is the only way its colours can
+  // drift from the token they mirror, so pin them together here instead.
+  test("the manifest's colours stay in step with the light background token", async () => {
+    const css = readFileSync("app/globals.css", "utf8");
+    const light = css.match(/:root\s*\{[^}]*?--background:\s*([^;]+);/)?.[1];
+    expect(light?.trim()).toBe("oklch(1 0 0)");
+
+    const manifest = (await import("../../app/manifest")).default();
+    expect(manifest.background_color).toBe("#ffffff");
+    expect(manifest.theme_color).toBe("#ffffff");
   });
 });
