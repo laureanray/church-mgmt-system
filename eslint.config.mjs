@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
   globalIgnores([
     "coverage/**",
     "playwright-report/**",
+    // `storybook build` output — thousands of bundled files.
+    "storybook-static/**",
     "test-results/**",
     // Default ignores of eslint-config-next:
     ".next/**",

@@ -146,3 +146,63 @@ export function wouldCreateCycle(
   }
   return false;
 }
+
+/**
+ * How each tier is drawn in the cell-group graph — the single source of truth
+ * for both the SVG nodes and the legend beside them, so a colour can never
+ * drift between the two.
+ *
+ * Every fill resolves through a CSS custom property rather than a literal
+ * colour. That is what lets the graph follow the theme; a hex here would look
+ * right in light mode and disappear in dark. `lib/cell-graph.test.ts` enforces
+ * it.
+ *
+ * They are the **raw** `--chart-*` properties, not the `--color-chart-*`
+ * Tailwind aliases, and that distinction is load-bearing. `@theme inline`
+ * substitutes theme values directly into generated utilities, so whether an
+ * alias is also emitted as a custom property depends on the bundler finding
+ * that exact name spelled out in a scanned file. It is emitted by the Next
+ * build today and was *not* emitted by the Storybook build — same stylesheet,
+ * different scan. The raw properties are authored in `:root` and `.dark`, so
+ * they are unconditionally present.
+ */
+export const TIER_STYLE: Record<
+  Tier,
+  { fill: string; r: number; label: boolean; legend: string }
+> = {
+  "leader-of-leaders": {
+    fill: "var(--chart-1)",
+    r: 16,
+    label: true,
+    legend: "Leader of leaders",
+  },
+  leader: {
+    fill: "var(--chart-2)",
+    r: 11,
+    label: true,
+    legend: "Leader",
+  },
+  member: {
+    fill: "var(--muted-foreground)",
+    r: 6,
+    label: false,
+    legend: "Member",
+  },
+  // Dimmer than `member` but still visible. `--border` is not usable here: it is
+  // a translucent white in dark mode, which vanishes as a filled dot.
+  unassigned: {
+    fill: "color-mix(in oklch, var(--muted-foreground), var(--background) 45%)",
+    r: 6,
+    label: false,
+    legend: "Unassigned",
+  },
+};
+
+/** Tiers in the order the legend lists them, most senior first. */
+export const TIER_LEGEND = (
+  ["leader-of-leaders", "leader", "member", "unassigned"] as const
+).map((tier) => ({
+  tier,
+  label: TIER_STYLE[tier].legend,
+  color: TIER_STYLE[tier].fill,
+}));

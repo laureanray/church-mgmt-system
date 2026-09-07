@@ -1,15 +1,12 @@
-import Link from "next/link";
 import { asc } from "drizzle-orm";
-import { ArrowLeft } from "lucide-react";
 
 import { createCellGroup } from "../actions";
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
+import { BackLink } from "@/components/patterns/back-link";
 import { CellGroupForm } from "@/components/cell-groups/cell-group-form";
-import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewCellGroupPage() {
   await requireRole(["admin", "leader"]);
@@ -30,16 +27,7 @@ export default async function NewCellGroupPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        href="/cell-groups"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to cell groups
-      </Link>
+      <BackLink href="/cell-groups" label="Back to cell groups" />
       <PageHeader
         title="New Cell Group"
         description="Create a cell group and assign its leader."

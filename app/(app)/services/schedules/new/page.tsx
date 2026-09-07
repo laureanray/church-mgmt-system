@@ -1,28 +1,16 @@
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
 import { createSchedule } from "../actions";
 import { requireRole } from "@/lib/auth-helpers";
+import { BackLink } from "@/components/patterns/back-link";
 import { ScheduleForm } from "@/components/services/schedule-form";
-import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewSchedulePage() {
   await requireRole(["admin", "leader"]);
 
   return (
     <div className="mx-auto max-w-2xl">
-      <Link
-        href="/services"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to services
-      </Link>
+      <BackLink href="/services" label="Back to services" />
       <PageHeader
         title="New Recurring Schedule"
         description="Set a weekly service. Upcoming dates are generated automatically."

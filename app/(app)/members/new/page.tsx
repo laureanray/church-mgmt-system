@@ -1,15 +1,12 @@
-import Link from "next/link";
 import { asc } from "drizzle-orm";
-import { ArrowLeft } from "lucide-react";
 
 import { createMember } from "../actions";
 import { db } from "@/db";
 import { cellGroups } from "@/db/schema";
 import { requireRole } from "@/lib/auth-helpers";
+import { BackLink } from "@/components/patterns/back-link";
 import { MemberForm } from "@/components/members/member-form";
-import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewMemberPage() {
   await requireRole(["admin", "leader"]);
@@ -22,16 +19,7 @@ export default async function NewMemberPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        href="/members"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to members
-      </Link>
+      <BackLink href="/members" label="Back to members" />
       <PageHeader
         title="Add Member"
         description="Create a member record. A unique attendance QR code is generated automatically."

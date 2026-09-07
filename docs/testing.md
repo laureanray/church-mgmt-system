@@ -9,14 +9,14 @@ report, or CI workflow. Keep three distinct layers:
 | Layer | Runner | What belongs here |
 | --- | --- | --- |
 | Unit | `bun test`, Bun runtime | Pure validators, graph rules, date formatting and transformations |
+| UI | `bun test` + happy-dom | Presentational components, rendered from their Storybook stories |
 | Integration | `bun test` + real Postgres | Actions and database helpers, constraints, transactions, deletion behavior |
 | End-to-end | Playwright + production Next.js | Real sign-in, role protection, forms, navigation and persisted results |
 
 Next.js's bundled testing guide recommends browser tests for async Server
-Components. Don't attempt to render these in `bun test`. Add React Testing
-Library and a separate happy-dom setup when client components need isolated
-interaction tests; the current foundation intentionally doesn't install unused
-DOM tooling.
+Components. Don't attempt to render those in `bun test` — the UI layer covers
+presentational components only, and anything that awaits a database belongs in
+the integration or E2E suite.
 
 ### Bun test specifics
 
@@ -33,6 +33,43 @@ details do not carry over from Vitest:
 - **No `globalSetup`.** Migrations run from `tests/support/integration-setup.ts`,
   passed as `--preload` in the `test:integration` script; `bun test` runs files
   sequentially in one process, so it executes exactly once.
+
+## UI tests
+
+`bun run test:ui` runs `tests/ui/` against happy-dom, preloading
+`tests/support/ui-setup.ts`. It is scoped to that directory on purpose: the DOM
+is registered only there, so a `lib/` module that reaches for `window` still
+fails in the unit suite rather than passing and then breaking on the server.
+
+The tests render **the Storybook stories themselves**, through `composeStories`
+from `@storybook/react`. The stories are the fixtures, which is what stops the
+documented example and the asserted behaviour from drifting apart — a story
+edited to show something new fails the test that relied on the old shape.
+Project annotations from `.storybook/preview.tsx` are deliberately *not*
+applied: it imports `app/globals.css`, which bun cannot parse. Assertions are
+therefore about structure, roles and class names, never computed styles.
+
+Three details of the setup are non-obvious:
+
+- Everything after `GlobalRegistrator.register()` in `ui-setup.ts` is imported
+  **dynamically**. ESM evaluates static imports before any statement in the
+  file, and `@testing-library/dom` builds its `screen` object at module scope
+  from `document.body`. Import it statically and it captures an undefined
+  document, leaving `screen.getByRole` throwing for the whole run while
+  `render(...)` still works — a confusing half-failure.
+- Testing Library's `cleanup` is wired to `afterEach` explicitly. It normally
+  self-registers when it detects a global `afterEach`, which it cannot under
+  bun, and `bun test` shares one process across files — so without it a mounted
+  component leaks into the next file.
+- `tests/support/testing-library.d.ts` augments bun's `Matchers` with jest-dom's
+  signatures. The package ships exactly this file as `types/bun.d.ts`, but does
+  not expose that path in its `exports` map, so it cannot be referenced under
+  `moduleResolution: "bundler"`.
+
+`tests/ui/design-tokens.test.ts` is not a render test: it scans `app/`,
+`components/` and `lib/` for Tailwind palette utilities and hex literals, and
+fails on any colour that bypasses the design tokens. See
+[design-system.md](./design-system.md).
 
 Coverage is `bun test --coverage`, reported as text plus `coverage/lcov.info` —
 there is no HTML report, and only files a test actually loads appear, so
@@ -52,6 +89,7 @@ mistaken for whole-directory coverage.
 bun install
 bun test lib                       # fast unit suite; no Docker or env needed
 bun run test:watch
+bun run test:ui                    # component suite via happy-dom; no Docker either
 bun run test:coverage              # text + coverage/lcov.info; loaded lib/ files
 bun run coverage:report            # the markdown CI posts, from the last lcov run
 bun run test:db:up                 # dedicated, disposable Postgres via Docker
@@ -94,7 +132,10 @@ No development seed data or external integration credentials are needed.
 ## Initial coverage
 
 - Unit: existing cell graph/validator rules plus calendar date, local datetime,
-  optional meeting and initials formatting.
+  optional meeting and initials formatting, and the cell-graph tier styling.
+- UI: the design-system patterns and primitives — empty-state wording rules,
+  `Field`'s error/`aria-invalid` wiring, `CardAction` placement, `DetailRow`'s
+  em-dash fallback, badge status tokens, and the token guardrail scan.
 - Integration: concurrent attendance deduplication, QR URL compatibility,
   invalid scans, authentication boundary, concurrent/idempotent schedule
   generation, preservation of past/attended services and paused schedules.

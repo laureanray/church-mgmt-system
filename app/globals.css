@@ -4,12 +4,32 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Design tokens.
+ *
+ * Two layers, and the split is the whole point:
+ *
+ *   1. The `:root` / `.dark` blocks below hold *raw values* — the only place an
+ *      oklch() literal is allowed to appear in this codebase.
+ *   2. `@theme inline` maps each raw value to a Tailwind utility, so components
+ *      say `bg-primary` or `text-warning` and never a literal colour.
+ *
+ * A component that hardcodes `text-amber-600 dark:text-amber-400` has escaped
+ * this system: it will not follow a rebrand and it has no dark-mode contract.
+ * Reach for a semantic token instead, and add one here if none fits.
+ *
+ * See docs/design-system.md for the palette rationale and contrast figures.
+ */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-geist-sans);
+  /* Fallbacks, not decoration: `--font-geist-*` is published by next/font at
+     runtime, so any context that renders a component without the app shell
+     — Storybook, a test, a print window — would otherwise land on the
+     browser's default serif. */
+  --font-sans: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
+  --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, monospace);
+  --font-heading: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -27,6 +47,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -55,32 +78,48 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+
+  /* IRM indigo. Dark enough to carry white text on a filled button and to sit
+     under the neutral greys without competing with them. */
+  --primary: oklch(0.47 0.142 264);
   --primary-foreground: oklch(0.985 0 0);
+
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
+
+  /* Status. Every one of these is used as `text-x` on a `bg-x/10` tint, so it
+     is the text contrast that has to hold, not the swatch. */
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.52 0.128 155);
+  --warning: oklch(0.55 0.126 75);
+  --info: oklch(0.52 0.122 240);
+
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --ring: oklch(0.47 0.142 264);
+
+  /* Categorical, not sequential: these identify cell-group tiers, so the hues
+     are spread and the lightness held roughly constant. */
+  --chart-1: oklch(0.55 0.142 264);
+  --chart-2: oklch(0.6 0.13 162);
+  --chart-3: oklch(0.66 0.14 70);
+  --chart-4: oklch(0.62 0.16 12);
+  --chart-5: oklch(0.6 0.13 205);
+
   --radius: 0.625rem;
+
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: oklch(0.47 0.142 264);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.47 0.142 264);
 }
 
 .dark {
@@ -90,31 +129,42 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+
+  /* The light-mode indigo is too dark to fill a button on a near-black
+     surface, so dark mode lifts it and flips the label to dark. */
+  --primary: oklch(0.72 0.132 264);
+  --primary-foreground: oklch(0.19 0.03 264);
+
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
   --accent: oklch(0.269 0 0);
   --accent-foreground: oklch(0.985 0 0);
+
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.75 0.145 158);
+  --warning: oklch(0.79 0.135 80);
+  --info: oklch(0.74 0.115 235);
+
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --ring: oklch(0.72 0.132 264);
+
+  --chart-1: oklch(0.72 0.132 264);
+  --chart-2: oklch(0.74 0.13 162);
+  --chart-3: oklch(0.79 0.135 75);
+  --chart-4: oklch(0.72 0.15 15);
+  --chart-5: oklch(0.74 0.115 205);
+
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.72 0.132 264);
+  --sidebar-primary-foreground: oklch(0.19 0.03 264);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.72 0.132 264);
 }
 
 @layer base {

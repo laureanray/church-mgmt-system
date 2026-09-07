@@ -20,6 +20,12 @@ export type SelectOption = { value: string; label: string };
  * an optional field also needs `clearLabel` to prepend a real "none" item.
  * Without it a value can be set but never unset. The empty string it submits is
  * what `emptyToNull` in lib/validators.ts turns back into a NULL column.
+ *
+ * The two ARIA props are forwarded to the trigger because `Field` clones them
+ * onto whatever it wraps. Since this component takes a fixed prop list rather
+ * than spreading the rest, dropping them here would silently break the contract
+ * for every select in a form — no description, and no error ring, because
+ * `SelectTrigger` styles that off `aria-invalid`.
  */
 export function FormSelect({
   name,
@@ -31,6 +37,8 @@ export function FormSelect({
   className,
   onValueChange,
   clearLabel,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
 }: {
   name: string;
   defaultValue?: string | null;
@@ -41,6 +49,8 @@ export function FormSelect({
   className?: string;
   onValueChange?: (value: string) => void;
   clearLabel?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }) {
   const items = clearLabel
     ? [{ value: "", label: clearLabel }, ...options]
@@ -54,7 +64,12 @@ export function FormSelect({
       required={required}
       onValueChange={(value) => onValueChange?.(value as string)}
     >
-      <SelectTrigger id={id} className={cn("w-full", className)}>
+      <SelectTrigger
+        id={id}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+        className={cn("w-full", className)}
+      >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

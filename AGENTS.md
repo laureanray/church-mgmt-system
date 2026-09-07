@@ -23,14 +23,53 @@ is no pnpm/npm lockfile, and every command in this file is `bun …`.
 ## shadcn here is the Base UI variant
 
 `components.json` sets `"style": "base-nova"`, so `components/ui/*` wraps
-`@base-ui/react`, not Radix. Three differences bite:
+`@base-ui/react`, not Radix. Four differences bite:
 
 - Composition uses **`render`**, not `asChild` —
   `<SidebarMenuButton render={<Link href="/x" />}>`.
 - `Select` takes `name` (so its value lands in `FormData`) and `items` (so the
   trigger can render a label instead of the raw value). `FormSelect` in
   `components/form/form-select.tsx` wires this up; use it for selects in forms.
+- `CardHeader` is a **grid**, and only opens a second column for a child with
+  `data-slot="card-action"`. Trailing header content therefore goes in
+  `CardAction`. `<CardHeader className="flex-row justify-between">` reads as
+  correct and does nothing — `flex-row` sets a direction on an element that is
+  not a flex container — so the content silently wraps under the title.
 - There is no shadcn `form.tsx`, so no `<Form>` / `<FormField>` primitives.
+
+## Design system
+
+Three layers: **tokens** in `app/globals.css`, **primitives** in
+`components/ui/*` (Base UI, above), **patterns** in `components/patterns/*`.
+`docs/design-system.md` is the full account; the rules that matter while editing:
+
+- **Colour comes from a token, never from Tailwind's palette.** `text-warning`,
+  not `text-amber-600 dark:text-amber-400`; a palette utility opts out of the
+  theme and its dark variant is an unchecked guess.
+  `tests/ui/design-tokens.test.ts` fails the build on one, hex literals
+  included.
+- Adding a colour means adding it to `:root` **and** `.dark`, then mapping it in
+  `@theme inline`.
+- Before hand-rolling a placeholder, a stat card, a bordered table or a back
+  link, check `components/patterns/` — each of those already exists there, and
+  each was extracted from several near-identical copies.
+- `Field` wires `aria-describedby` and `aria-invalid` onto the control it wraps,
+  which is what makes a server-action error visibly red. It derives ids from
+  `htmlFor`, so pass one on every field. A custom control must forward both
+  props, as `FormSelect` does — otherwise the clone lands on a component that
+  drops them.
+- Reading a token at runtime (an SVG `fill`, an inline style) means the **raw**
+  `--chart-1`, not the `--color-chart-1` alias: `@theme inline` only emits an
+  alias the bundler saw spelled out, and the Next and Storybook builds disagree
+  about which ones that is.
+- Every component gets a `*.stories.tsx` beside it, and every story is checked
+  in **both** themes — the toolbar switch is right there. Story args stay
+  JSON-serializable, so React elements *and* component references (`icon: Users`)
+  are built in `render` instead; `tests/ui/story-args.test.ts` enforces it.
+
+`bun run storybook` serves it on :6006, `bun run storybook:network` does the
+same over your tailnet (for checking a component on a real phone), and
+`bun run build-storybook` is what CI builds.
 
 ## Forms are server actions over FormData
 
@@ -191,6 +230,9 @@ worktree, but the worktree must exist before the first file mutation.
   `lib/cell-graph.test.ts` is the model. Import from `bun:test`, never
   `vitest`. A bare `bun test` would also sweep up the integration and
   Playwright specs, so always run the scoped scripts.
+- Component tests live in `tests/ui/` (`bun run test:ui`) and render the
+  Storybook stories themselves via `composeStories`, so the stories are the
+  fixtures. happy-dom is registered only for that suite. No Docker needed.
 - Integration tests live in `tests/integration/` (`bun run test:integration`);
   E2E tests live in `tests/e2e/` (`bun run test:e2e`). Both use the disposable
   test Postgres from `bun run test:db:up`, never the development database. See

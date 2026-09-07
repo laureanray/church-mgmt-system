@@ -5,7 +5,7 @@ import { services } from "@/db/schema";
 import { requireUser } from "@/lib/auth-helpers";
 import { topUpAllSchedules } from "@/lib/occurrences";
 import { selectScanServices } from "@/lib/scan-selection";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/patterns/page-header";
 import { ScannerPanel } from "@/components/scan/scanner-panel";
 
 /** How many services either side of now the picker offers. */

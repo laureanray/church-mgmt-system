@@ -8,7 +8,8 @@ import { canManage, requireUser } from "@/lib/auth-helpers";
 import { buildCellGraph } from "@/lib/cell-graph";
 import { cn } from "@/lib/utils";
 import { CellGroupsView } from "@/components/cell-groups/cell-groups-view";
-import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { PageHeader } from "@/components/patterns/page-header";
 import { buttonVariants } from "@/components/ui/button";
 
 export default async function CellGroupsPage() {
@@ -66,16 +67,11 @@ export default async function CellGroupsPage() {
       </PageHeader>
 
       {cells.length === 0 && unassigned.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
-          <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
-            <Network className="size-6 text-muted-foreground" />
-          </div>
-          <h3 className="text-sm font-medium">No cell groups yet</h3>
-          <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-            Create your first cell group, then assign members to see the network
-            graph.
-          </p>
-        </div>
+        <EmptyState
+          icon={Network}
+          title="No cell groups yet"
+          description="Create your first cell group, then assign members to see the network graph."
+        />
       ) : (
         <CellGroupsView
           nodes={graph.nodes}

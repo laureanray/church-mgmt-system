@@ -11,7 +11,7 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -20,6 +20,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
+      # A story that fails to compile is invisible to typecheck — Storybook
+      # resolves them through its own Vite build, not tsc's project graph.
+      - run: bun run build-storybook
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -50,6 +53,11 @@ jobs:
         run: |
           gh pr comment "${{ github.event.pull_request.number }}" \
             --body-file coverage/report.md --edit-last --create-if-none
+      # Needs neither Docker nor a database, so it runs ahead of the slow steps
+      # and a broken component fails the job in seconds rather than minutes. It
+      # stays below the coverage comment, which must land before anything else
+      # can fail the job.
+      - run: bun run test:ui
       - name: Start test database
         # Anonymous image pulls share a per-IP quota with every other runner, so
         # `toomanyrequests: Rate exceeded` is a transient registry response

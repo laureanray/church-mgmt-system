@@ -4,9 +4,9 @@ import { useActionState } from "react";
 import { LogIn } from "lucide-react";
 
 import { login, type LoginState } from "./actions";
+import { Field } from "@/components/form/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(
@@ -18,8 +18,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="callbackUrl" value={callbackUrl ?? ""} />
 
-      <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+      <Field label="Email" htmlFor="email">
         <Input
           id="email"
           name="email"
@@ -29,10 +28,9 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
           required
           autoFocus
         />
-      </div>
+      </Field>
 
-      <div className="space-y-2">
-        <Label htmlFor="password">Password</Label>
+      <Field label="Password" htmlFor="password">
         <Input
           id="password"
           name="password"
@@ -41,8 +39,10 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
           placeholder="••••••••"
           required
         />
-      </div>
+      </Field>
 
+      {/* A whole-form failure, not a field error — Supabase will not say which
+          of the two credentials was wrong, and guessing would be a disclosure. */}
       {state?.error ? (
         <p className="text-sm font-medium text-destructive" role="alert">
           {state.error}

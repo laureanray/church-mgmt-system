@@ -1,14 +1,7 @@
 import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  CalendarDays,
-  MapPin,
-  Pencil,
-  QrCode,
-  Users,
-} from "lucide-react";
+import { CalendarDays, MapPin, Pencil, QrCode, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { attendance, services } from "@/db/schema";
@@ -17,9 +10,12 @@ import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { formatDateTime, formatTime, initials } from "@/lib/format";
 import { getSheetsConfig } from "@/lib/sheets";
 import { cn } from "@/lib/utils";
+import { BackLink } from "@/components/patterns/back-link";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { InfoTile } from "@/components/patterns/info-tile";
 import { SyncServiceButton } from "@/components/integrations/sync-buttons";
 import { DeleteServiceButton } from "@/components/services/delete-service-button";
-import { PageHeader } from "@/components/page-header";
+import { PageHeader } from "@/components/patterns/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -62,16 +58,7 @@ export default async function ServiceDetailPage({
 
   return (
     <div className="mx-auto max-w-4xl">
-      <Link
-        href="/services"
-        className={cn(
-          buttonVariants({ variant: "ghost", size: "sm" }),
-          "mb-2 -ml-2",
-        )}
-      >
-        <ArrowLeft className="size-4" />
-        Back to services
-      </Link>
+      <BackLink href="/services" label="Back to services" />
 
       <PageHeader title={service.name}>
         <Link
@@ -97,43 +84,23 @@ export default async function ServiceDetailPage({
       </PageHeader>
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardContent className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-md bg-muted">
-              <CalendarDays className="size-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">When</p>
-              <p className="text-sm font-medium">
-                {formatDateTime(service.scheduledAt)}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-md bg-muted">
-              <MapPin className="size-4 text-muted-foreground" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Location</p>
-              <p className="text-sm font-medium">{service.location ?? "—"}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-3">
-            <div className="flex size-9 items-center justify-center rounded-md bg-primary/10">
-              <Users className="size-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Attendance</p>
-              <p className="text-sm font-medium tabular-nums">
-                {attendees.length}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <InfoTile
+          label="When"
+          value={formatDateTime(service.scheduledAt)}
+          icon={CalendarDays}
+        />
+        <InfoTile
+          label="Location"
+          value={service.location ?? "—"}
+          icon={MapPin}
+        />
+        <InfoTile
+          label="Total Attendance"
+          value={attendees.length}
+          icon={Users}
+          accent
+          numeric
+        />
       </div>
 
       <div className="mb-4 flex items-center gap-2">
@@ -149,18 +116,19 @@ export default async function ServiceDetailPage({
         </CardHeader>
         <CardContent>
           {attendees.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-10 text-center">
-              <p className="text-sm text-muted-foreground">
-                No one scanned in yet.
-              </p>
-              <Link
-                href={`/scan?service=${service.id}`}
-                className={cn(buttonVariants({ size: "sm" }), "mt-3")}
-              >
-                <QrCode className="size-4" />
-                Start scanning
-              </Link>
-            </div>
+            <EmptyState
+              variant="inline"
+              title="No one scanned in yet."
+              action={
+                <Link
+                  href={`/scan?service=${service.id}`}
+                  className={cn(buttonVariants({ size: "sm" }))}
+                >
+                  <QrCode className="size-4" />
+                  Start scanning
+                </Link>
+              }
+            />
           ) : (
             <Table>
               <TableHeader>
