@@ -1,9 +1,10 @@
-import { asc, desc, gte, lt } from "drizzle-orm";
+import { asc, desc, eq, gte, lt } from "drizzle-orm";
 
 import { db } from "@/db";
 import { services } from "@/db/schema";
 import { requireUser } from "@/lib/auth-helpers";
 import { topUpAllSchedules } from "@/lib/occurrences";
+import { selectScanServices } from "@/lib/scan-selection";
 import { PageHeader } from "@/components/page-header";
 import { ScannerPanel } from "@/components/scan/scanner-panel";
 
@@ -37,9 +38,14 @@ export default async function ScanPage({
   // The nearest occurrences on either side of now, rather than every service
   // ever held. Ushers only ever scan into something close to today, and this
   // list is a dropdown — left unbounded it grows by one row per service per
-  // week, forever. Taking a window from both sides keeps the default below
-  // exactly as accurate as reading the whole table would.
-  const [upcoming, past] = await Promise.all([
+  // week, forever.
+  //
+  // A ?service= deep link can name something outside that window, though: every
+  // service detail page links here, however old. So it is fetched alongside and
+  // folded into the list, which also means a link naming a service that no
+  // longer exists resolves to nothing and falls back, rather than selecting an
+  // id the picker cannot show.
+  const [upcoming, past, requested] = await Promise.all([
     db
       .select(columns)
       .from(services)
@@ -52,22 +58,16 @@ export default async function ScanPage({
       .where(lt(services.scheduledAt, now))
       .orderBy(desc(services.scheduledAt))
       .limit(SCAN_WINDOW),
+    serviceParam
+      ? db.select(columns).from(services).where(eq(services.id, serviceParam))
+      : [],
   ]);
 
-  // Newest first, matching what the panel used to be given.
-  const rows = [...upcoming.reverse(), ...past];
-
-  // Default to the requested service, else the one scheduled closest to now.
-  let initialServiceId = serviceParam;
-  if (!initialServiceId && rows.length > 0) {
-    const nowMs = now.getTime();
-    initialServiceId = rows.reduce((best, s) =>
-      Math.abs(s.scheduledAt.getTime() - nowMs) <
-      Math.abs(best.scheduledAt.getTime() - nowMs)
-        ? s
-        : best,
-    ).id;
-  }
+  const { rows, initialServiceId } = selectScanServices(
+    [...upcoming, ...past],
+    requested.at(0),
+    now.getTime(),
+  );
 
   return (
     <>

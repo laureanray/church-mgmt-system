@@ -1,5 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
+import { inArray } from 'drizzle-orm';
 import { testEmail, TEST_PASSWORD } from '../support/auth';
+import { connectTestDatabase } from '../support/database';
+import { services } from '../../db/schema';
 
 async function signIn(page: Page, role: string) {
   await page.goto('/login');
@@ -86,4 +89,33 @@ test('cell graph renders simulation nodes and supports selection and dragging', 
     const moved = await circle.boundingBox();
     return moved ? moved.x - bounds.x : 0;
   }).toBeGreaterThan(40);
+});
+
+test('a deep link to a service outside the picker window still selects it', async ({ page }) => {
+  // /scan lists a window of services either side of now, but every service
+  // detail page links to /scan?service=<id> however old that service is. If the
+  // link's service is missing from the list the trigger renders blank while the
+  // camera silently records against it.
+  const { client, db } = connectTestDatabase();
+  const OLD = 'e2e-old-service';
+  const recent = Array.from({ length: 30 }, (_, i) => ({
+    id: `e2e-recent-${i}`,
+    name: `Recent Service ${i}`,
+    scheduledAt: new Date(Date.now() - (i + 1) * 86_400_000),
+  }));
+
+  try {
+    await db.insert(services).values([
+      ...recent,
+      { id: OLD, name: 'Very Old Service', scheduledAt: new Date('2020-01-05T09:00:00Z') },
+    ]);
+
+    await signIn(page, 'admin');
+    await page.goto(`/scan?service=${OLD}`);
+
+    await expect(page.getByLabel('Recording attendance for')).toContainText('Very Old Service');
+  } finally {
+    await db.delete(services).where(inArray(services.id, [OLD, ...recent.map(r => r.id)]));
+    await client.end();
+  }
 });
