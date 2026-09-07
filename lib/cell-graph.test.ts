@@ -88,6 +88,16 @@ describe("TIER_STYLE", () => {
     }
   });
 
+  // `--color-*` are Tailwind aliases that `@theme inline` may or may not emit,
+  // depending on whether the bundler finds the literal name in a scanned file —
+  // the Next and Storybook builds disagreed on exactly these. The raw
+  // properties are authored in `:root`/`.dark` and always exist.
+  it("uses raw theme properties, not the emit-dependent --color-* aliases", () => {
+    for (const [tier, style] of Object.entries(TIER_STYLE)) {
+      expect(style.fill, tier).not.toContain("var(--color-");
+    }
+  });
+
   it("sizes nodes by seniority so the hierarchy reads at a glance", () => {
     expect(TIER_STYLE["leader-of-leaders"].r).toBeGreaterThan(
       TIER_STYLE.leader.r,

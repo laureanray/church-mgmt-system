@@ -55,10 +55,17 @@ Three layers: **tokens** in `app/globals.css`, **primitives** in
   each was extracted from several near-identical copies.
 - `Field` wires `aria-describedby` and `aria-invalid` onto the control it wraps,
   which is what makes a server-action error visibly red. It derives ids from
-  `htmlFor`, so pass one on every field.
+  `htmlFor`, so pass one on every field. A custom control must forward both
+  props, as `FormSelect` does — otherwise the clone lands on a component that
+  drops them.
+- Reading a token at runtime (an SVG `fill`, an inline style) means the **raw**
+  `--chart-1`, not the `--color-chart-1` alias: `@theme inline` only emits an
+  alias the bundler saw spelled out, and the Next and Storybook builds disagree
+  about which ones that is.
 - Every component gets a `*.stories.tsx` beside it, and every story is checked
   in **both** themes — the toolbar switch is right there. Story args stay
-  JSON-serializable; build node props in `render`.
+  JSON-serializable, so React elements *and* component references (`icon: Users`)
+  are built in `render` instead; `tests/ui/story-args.test.ts` enforces it.
 
 `bun run storybook` serves it on :6006; `bun run build-storybook` is what CI
 builds.

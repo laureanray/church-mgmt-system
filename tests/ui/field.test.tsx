@@ -4,7 +4,7 @@ import { composeStories } from "@storybook/react";
 
 import * as stories from "@/components/form/field.stories";
 
-const { Default, Required, WithHint, WithError, FormRow } =
+const { Default, Required, WithHint, WithError, SelectWithError, FormRow } =
   composeStories(stories);
 
 describe("Field", () => {
@@ -62,6 +62,18 @@ describe("Field", () => {
     expect(screen.getByLabelText("Full name")).not.toHaveAttribute(
       "aria-invalid",
     );
+  });
+
+  // Field clones its ARIA props onto whatever it wraps, but FormSelect takes a
+  // fixed prop list instead of spreading the rest — so without an explicit
+  // hand-off the attributes land on a component that discards them, and every
+  // select in a form silently loses its error state.
+  test("carries the error contract through to a select trigger", () => {
+    render(<SelectWithError />);
+
+    const trigger = screen.getByRole("combobox");
+    expect(trigger).toHaveAttribute("aria-invalid", "true");
+    expect(trigger).toHaveAccessibleDescription("Choose a marital status.");
   });
 
   test("keeps every control in a form row labelled", () => {

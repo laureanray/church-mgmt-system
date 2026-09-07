@@ -45,6 +45,10 @@ constant. `TIER_STYLE` in `lib/cell-graph.ts` is the single source of truth for
 which tier gets which, and both the SVG and the legend beside it read from it,
 so a colour cannot drift between the dot in the key and the dot on the canvas.
 
+Those fills name the **raw** `--chart-*` properties, not the `--color-chart-*`
+Tailwind aliases, and anywhere else reading a variable at runtime should do the
+same — see the trap under [Adding a token](#adding-a-token).
+
 ### Adding a token
 
 Add the raw value to **both** `:root` and `.dark`, then map it in
@@ -54,9 +58,13 @@ catch a token that was only ever eyeballed in light mode.
 
 One trap when writing a story or a component that reads a variable directly:
 `@theme inline` **substitutes** theme values into utilities instead of emitting
-`--color-*` properties, so `var(--color-success)` resolves to nothing unless
-some file happens to spell that name out literally. Read the raw `--success`
-instead.
+`--color-*` properties, so whether `var(--color-success)` resolves at all
+depends on the bundler finding that exact name spelled out in a scanned file.
+This is not hypothetical — the Next build emits every alias while the Storybook
+build emitted only the handful named literally in source, from the same
+stylesheet. Read the raw `--success`, which is authored in `:root` and `.dark`
+and therefore always present. `lib/cell-graph.test.ts` pins this for the graph
+tiers.
 
 ## Primitives
 
@@ -77,7 +85,10 @@ classes.
 
 `Field` (`components/form/field.tsx`) wires the accessibility contract onto
 whatever single element it wraps: `aria-describedby` pointing at the hint or
-error, and `aria-invalid` while there is an error. That second one is not only
+error, and `aria-invalid` while there is an error. **A custom control has to
+accept and forward both**, or the clone lands on a component that discards them
+— `FormSelect` takes a fixed prop list rather than spreading the rest, so it
+passes them to `SelectTrigger` explicitly. That second one is not only
 for screen readers — `Input` styles its error ring off `aria-invalid`, so this
 is what turns a failed server-action round-trip into a visibly red field. It
 derives its ids from `htmlFor`, deliberately not `useId`, so it stays renderable
@@ -125,8 +136,14 @@ Storybook builds with Vite while the app builds with Turbopack, so
 `@tailwindcss/vite`. Same `app/globals.css`, same tokens — only the bundler
 differs.
 
-Args stay JSON-serializable. A React element passed as an arg trips Storybook's
-cycle detection, so anything with a node prop is built in `render` instead.
+Args stay JSON-serializable, because Storybook round-trips them through the
+manager/preview channel, the Controls panel and shareable URLs. That rules out
+both React elements (which also carry a cycle through `_owner` in development,
+and make Storybook log a warning) and component references such as
+`icon: Users`. Build those inside the story's `render`.
+
+Neither one crashes — the symptom is a dead control and a lossy URL — so
+`tests/ui/story-args.test.ts` imports every story module and fails on one.
 
 ## Testing
 

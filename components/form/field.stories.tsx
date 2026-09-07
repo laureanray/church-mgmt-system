@@ -47,6 +47,34 @@ export const WithError: Story = {
  * passes `name` (so the value reaches `FormData`) and `items` (so the trigger
  * shows a label instead of the stored value).
  */
+/**
+ * The select path of the same contract. `FormSelect` takes a fixed prop list
+ * rather than spreading the rest, so it has to accept `aria-describedby` and
+ * `aria-invalid` explicitly and hand them to `SelectTrigger` — otherwise Field
+ * clones them onto a component that quietly drops them, and every select in a
+ * form loses both its description and its error ring.
+ */
+export const SelectWithError: Story = {
+  args: {
+    label: "Marital status",
+    htmlFor: "maritalStatus",
+    error: "Choose a marital status.",
+  },
+  render: (args) => (
+    <Field {...args}>
+      <FormSelect
+        id="maritalStatus"
+        name="maritalStatus"
+        placeholder="Select status"
+        options={[
+          { value: "single", label: "Single" },
+          { value: "married", label: "Married" },
+        ]}
+      />
+    </Field>
+  ),
+};
+
 export const WithSelect: Story = {
   args: { label: "Marital status", htmlFor: "maritalStatus" },
   render: (args) => (

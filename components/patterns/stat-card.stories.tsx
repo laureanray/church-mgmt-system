@@ -4,19 +4,25 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import { StatCard } from "./stat-card";
 
-const meta = {
+// `icon` is passed through `render`, never `args`: Storybook expects args to be
+// JSON-serializable, and a component reference is not. The meta is annotated
+// rather than `satisfies`-checked because `icon` is a required prop that the
+// args no longer carry.
+const meta: Meta<typeof StatCard> = {
   title: "Patterns/StatCard",
   component: StatCard,
-  args: { label: "Members", value: 248, icon: Users },
-} satisfies Meta<typeof StatCard>;
+  args: { label: "Members", value: 248 },
+  render: (args) => <StatCard {...args} icon={Users} />,
+};
 
 export default meta;
-type Story = StoryObj<typeof meta>;
+type Story = StoryObj<typeof StatCard>;
 
 export const Default: Story = {};
 
 export const Accented: Story = {
-  args: { label: "Check-ins (7 days)", value: 96, icon: TrendingUp, accent: true },
+  args: { label: "Check-ins (7 days)", value: 96, accent: true },
+  render: (args) => <StatCard {...args} icon={TrendingUp} />,
 };
 
 /**

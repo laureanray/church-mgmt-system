@@ -11,13 +11,16 @@ import { EmptyState } from "./empty-state";
 const meta = {
   title: "Patterns/EmptyState",
   component: EmptyState,
-  argTypes: { icon: { control: false } },
   args: {
-    icon: Users,
     title: "No members yet",
     description:
       "Add your first member to generate their attendance QR code.",
   },
+  // `icon` is supplied here rather than through args for the same reason as the
+  // node props below: Storybook expects args to be JSON-serializable, and a
+  // component reference is not. Stories needing a different icon (or none)
+  // override `render`.
+  render: (args) => <EmptyState {...args} icon={Users} />,
 } satisfies Meta<typeof EmptyState>;
 
 export default meta;
@@ -25,13 +28,11 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-// React elements stay out of `args` throughout this file: Storybook expects
-// args to be JSON-serializable, and an element carries a cycle in development
-// builds. Anything with a node prop is built in `render` instead.
 export const WithAction: Story = {
   render: (args) => (
     <EmptyState
       {...args}
+      icon={Users}
       action={
         <Link href="/members/new" className={cn(buttonVariants())}>
           <Plus className="size-4" />
@@ -55,7 +56,8 @@ export const NoSearchResults: Story = {
 };
 
 export const WithoutIcon: Story = {
-  args: { icon: undefined, description: undefined, title: "No members yet." },
+  args: { description: undefined, title: "No members yet." },
+  render: (args) => <EmptyState {...args} />,
 };
 
 /**
@@ -65,7 +67,6 @@ export const WithoutIcon: Story = {
 export const Inline: Story = {
   args: {
     variant: "inline",
-    icon: CalendarDays,
     title: "No services yet",
     description: "Create a schedule or a one-off service, then scan members in.",
   },
@@ -75,7 +76,7 @@ export const Inline: Story = {
         <CardTitle className="text-base">All Services</CardTitle>
       </CardHeader>
       <CardContent>
-        <EmptyState {...args} />
+        <EmptyState {...args} icon={CalendarDays} />
       </CardContent>
     </Card>
   ),
