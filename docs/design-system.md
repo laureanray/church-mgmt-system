@@ -120,8 +120,23 @@ Two behaviours in there are load-bearing rather than cosmetic:
 
 ```bash
 bun run storybook          # dev server on :6006
+bun run storybook:network  # same, reachable from your tailnet
 bun run build-storybook    # static build into storybook-static/
 ```
+
+`storybook:network` is for checking a component on a real phone rather than a
+desktop viewport emulator. It mirrors `dev:network`, but is shorter for a
+reason worth knowing: the Next dev server has to be *told* its own address,
+because the browser reads `NEXT_PUBLIC_SUPABASE_URL` and would otherwise call
+back to a `localhost` that means the phone. Storybook has no backend to point
+at, so it only needs to stop binding to the loopback interface.
+
+It does set `STORYBOOK_ALLOWED_HOSTS`, which `.storybook/main.ts` turns into
+`core.allowedHosts`. Binding to `0.0.0.0` listens on *every* interface — café
+wifi included — and Storybook otherwise answers to any `Host` header, which is
+what lets a DNS-rebinding attack reach a dev server. Naming the tailnet
+addresses narrows it back. `STORYBOOK_PORT` overrides the port; note it is
+deliberately not `PORT`, which `dev:network` reads.
 
 Stories sit beside their component as `*.stories.tsx`; the foundations live in
 `.storybook/foundations.stories.tsx`.

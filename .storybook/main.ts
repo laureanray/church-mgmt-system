@@ -4,7 +4,19 @@ import type { StorybookConfig } from "@storybook/nextjs-vite";
 
 const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
+// Set by `scripts/storybook-network.sh` to this machine's tailnet addresses.
+//
+// Binding to 0.0.0.0 listens on *every* interface, including whatever café
+// wifi the laptop is on, and Storybook otherwise accepts any `Host` header —
+// which is what makes a DNS-rebinding attack reach a dev server. Naming the
+// hosts narrows it back to the tailnet, and silences Storybook's warning about
+// allowing all of them.
+const allowedHosts = process.env.STORYBOOK_ALLOWED_HOSTS?.split(",")
+  .map((host) => host.trim())
+  .filter(Boolean);
+
 const config: StorybookConfig = {
+  ...(allowedHosts?.length ? { core: { allowedHosts } } : {}),
   stories: [
     "../.storybook/**/*.stories.@(ts|tsx)",
     "../components/**/*.stories.@(ts|tsx)",

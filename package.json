@@ -10,6 +10,7 @@
     "start": "next start",
     "lint": "eslint",
     "storybook": "storybook dev -p 6006",
+    "storybook:network": "bash scripts/storybook-network.sh",
     "build-storybook": "storybook build",
     "test": "bun test lib",
     "db:up": "supabase start",

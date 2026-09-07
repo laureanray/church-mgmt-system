@@ -67,8 +67,9 @@ Three layers: **tokens** in `app/globals.css`, **primitives** in
   JSON-serializable, so React elements *and* component references (`icon: Users`)
   are built in `render` instead; `tests/ui/story-args.test.ts` enforces it.
 
-`bun run storybook` serves it on :6006; `bun run build-storybook` is what CI
-builds.
+`bun run storybook` serves it on :6006, `bun run storybook:network` does the
+same over your tailnet (for checking a component on a real phone), and
+`bun run build-storybook` is what CI builds.
 
 ## Forms are server actions over FormData
 
