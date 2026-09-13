@@ -1,8 +1,9 @@
 # `irm`
 
 `irm` is the local worktree and development-service manager for IRM Ministries.
-It borrows the useful parts of Tails In Tub's `tit` workflow while keeping its
-installation independent of disposable feature worktrees.
+It borrows the useful parts of Tails In Tub's `tit` workflow. The executable is
+kept in this repository and linked into the user's path, so every CLI change is
+reviewed and versioned with the application.
 
 Install or update it from the primary checkout:
 
@@ -10,12 +11,13 @@ Install or update it from the primary checkout:
 bun run irm:install
 ```
 
-The installer copies the standalone CLI to `~/.local/share/irm/` and creates
-`~/.local/bin/irm`. Its configuration lives at `~/.config/irm/config.json` and
-service logs live under `~/.local/state/irm/`. Initialization also adds the
-managed directory to the repository's local Git exclude, so it stays invisible
-even while the primary checkout is on an older branch without the tracked
-`.gitignore` rule.
+The installer creates `~/.local/bin/irm` as a symlink to the tracked
+`tools/irm/irm.ts`; it does not keep a second copy. Run it from the primary
+checkout after merging so the link has a permanent target. Its configuration
+lives at `~/.config/irm/config.json` and service logs live under
+`~/.local/state/irm/`. Initialization also adds the managed directory to the
+repository's local Git exclude, so it stays invisible even while the primary
+checkout is on an older branch without the tracked `.gitignore` rule.
 
 ## Worktrees
 
