@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
+    ".worktrees/**",
     "coverage/**",
     "playwright-report/**",
     // `storybook build` output — thousands of bundled files.

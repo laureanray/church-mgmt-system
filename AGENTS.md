@@ -211,8 +211,12 @@ generated files, and this `AGENTS.md`.
    existing work; do not stash, reset, move, or overwrite unrelated changes.
 2. Run `git fetch origin main`. If fetching fails, stop before editing and
    report the blocker; do not silently use a stale local `main`.
-3. Create a task-specific branch and sibling worktree from `origin/main`:
-   `git worktree add -b <task-branch> ../church-mgmt-system-<task> origin/main`.
+3. Create a task-specific branch and worktree inside the primary checkout's
+   ignored `.worktrees/` directory. Prefer `irm new <task-branch>`, which
+   fetches first, branches from `origin/main`, links the shared environment and
+   installs dependencies. If `irm` is unavailable, use the equivalent:
+   `git worktree add -b <task-branch> .worktrees/<task> origin/main` from the
+   primary checkout after fetching.
 4. Confirm the new worktree's branch and starting commit match the intended
    branch and fetched `origin/main`, then perform all edits and checks there.
 5. Report the branch and worktree path when starting work and in the handoff.
@@ -223,6 +227,14 @@ start edits in the original checkout, on `main`, or on another task's branch.
 Read-only assessment may run in the existing checkout before creating a
 worktree, but the worktree must exist before the first file mutation.
 
+Use `irm wt` or `irm context` to review the active work before editing. Existing
+sibling worktrees can be relocated without losing local changes via
+`irm move <branch-or-directory>`. To clear stale work, preview with `irm clean`
+and apply with `irm clean --apply`; the tool refuses to remove the primary
+checkout, dirty trees, detached trees and branches with commits not on
+`origin/main`. Never bypass those protections with a force removal. See
+`tools/irm/README.md` for the complete CLI workflow.
+
 ### Project conventions
 
 - `bun test lib` (the `test` script) runs the unit suite over `lib/**/*.test.ts`.
@@ -230,6 +242,8 @@ worktree, but the worktree must exist before the first file mutation.
   `lib/cell-graph.test.ts` is the model. Import from `bun:test`, never
   `vitest`. A bare `bun test` would also sweep up the integration and
   Playwright specs, so always run the scoped scripts.
+- CLI tests live in `tools/irm/` and run with `bun run test:cli`; they need no
+  database or environment file.
 - Component tests live in `tests/ui/` (`bun run test:ui`) and render the
   Storybook stories themselves via `composeStories`, so the stories are the
   fixtures. happy-dom is registered only for that suite. No Docker needed.

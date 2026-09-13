@@ -3,6 +3,9 @@
 # dependencies
 /node_modules
 
+# task worktrees (managed by `irm`)
+/.worktrees/
+
 # testing
 /coverage
 

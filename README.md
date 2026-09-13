@@ -36,6 +36,22 @@ USB scanner) to instantly record attendance against a service.
 - Docker Desktop (the local Supabase stack runs in Docker)
 - [Supabase CLI](https://supabase.com/docs/guides/local-development) 2+
 
+### Worktree and dev CLI
+
+Install the project-local `irm` manager once from the primary checkout:
+
+```bash
+bun run irm:install
+irm new feat/my-change
+cd "$(irm cd)"
+```
+
+New task checkouts live under the primary repository's hidden `.worktrees/`
+directory instead of creating sibling folders throughout `~/projects`. The
+same command manages persistent dev and Storybook servers (`irm run all`),
+worktree selection and safe cleanup. See [`tools/irm/README.md`](tools/irm/README.md)
+for all commands and the safeguards around moving or removing existing work.
+
 ### 1. Install dependencies
 
 ```bash
@@ -117,6 +133,7 @@ duplicates. Columns: `ID · Timestamp · Service · Service Date · Member · Re
 | --- | --- |
 | `bun run dev` | Start the dev server (Next runs on the Bun runtime) |
 | `bun run build` / `bun run start` | Production build / serve (Node, as on Vercel) |
+| `bun run irm` / `bun run irm:install` | Run or install the worktree/dev CLI |
 | `bun run db:up` / `bun run db:down` | Start / stop the local Supabase stack |
 | `bun run db:reset` | Drop, re-migrate and re-seed the local database |
 | `bun run db:generate` | Generate a migration from schema changes |
