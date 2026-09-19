@@ -1,0 +1,5 @@
+{
+  "features": ["git-sync"],
+  "platforms": ["Darwin", "Linux"],
+  "network_modes": ["auto", "local", "lan", "tailscale"]
+}

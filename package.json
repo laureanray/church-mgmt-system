@@ -32,7 +32,10 @@
     "test:all": "bun run test:unit && bun run test:ui && bun run test:integration && bun run test:e2e",
     "test:db:up": "docker compose -p church-mgmt-tests -f compose.test.yml up -d --wait",
     "test:db:down": "docker compose -p church-mgmt-tests -f compose.test.yml down",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "irm": "python3 tools/irm/launch.py",
+    "irm:install": "python3 tools/irm/install.py",
+    "test:irm": "python3 -m unittest discover -s tools/irm -v && bun test tools/irm && bun tools/irm/check-render.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -59,6 +62,7 @@
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.14.0",
+    "@opentui/core": "0.5.11",
     "@playwright/test": "^1.63.0",
     "@storybook/addon-a11y": "^10.6.0",
     "@storybook/addon-docs": "^10.6.0",
