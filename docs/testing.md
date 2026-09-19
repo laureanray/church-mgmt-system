@@ -49,7 +49,7 @@ Project annotations from `.storybook/preview.tsx` are deliberately *not*
 applied: it imports `app/globals.css`, which bun cannot parse. Assertions are
 therefore about structure, roles and class names, never computed styles.
 
-Three details of the setup are non-obvious:
+Four details of the setup are non-obvious:
 
 - Everything after `GlobalRegistrator.register()` in `ui-setup.ts` is imported
   **dynamically**. ESM evaluates static imports before any statement in the
@@ -65,6 +65,20 @@ Three details of the setup are non-obvious:
   signatures. The package ships exactly this file as `types/bun.d.ts`, but does
   not expose that path in its `exports` map, so it cannot be referenced under
   `moduleResolution: "bundler"`.
+- One project annotation *is* registered: a decorator supplying Next's
+  `AppRouterContext`. Without it any story containing a component that calls
+  `useRouter` — the table's facet filter and column picker — dies on "expected
+  app router to be mounted". Storybook's own Next mocks are not reachable here,
+  because `@storybook/nextjs-vite` pulls in `storybook/preview-api`, which bun
+  cannot resolve. The stub in `tests/support/router.ts` records the pushes
+  instead of navigating, so a test can assert *where* a menu click would have
+  gone; `resetRouterCalls` runs in `afterEach`.
+
+`tests/e2e/members-table.spec.ts` is where the table's two halves meet. The
+unit suite pins the URLs it builds and the UI suite pins the markup it renders,
+but only the browser proves that `?sort=since&dir=desc` reaches Postgres as the
+right `ORDER BY` — so those specs assert on the rows that come back, not on the
+query string alone.
 
 `tests/ui/design-tokens.test.ts` is not a render test: it scans `app/`,
 `components/` and `lib/` for Tailwind palette utilities and hex literals, and

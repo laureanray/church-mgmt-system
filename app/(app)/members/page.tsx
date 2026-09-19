@@ -1,51 +1,152 @@
 import Link from "next/link";
-import { asc, count, ilike } from "drizzle-orm";
+import { redirect } from "next/navigation";
+import { and, asc, count, desc, ilike, inArray } from "drizzle-orm";
 import { Plus, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { members } from "@/db/schema";
-import { requireUser } from "@/lib/auth-helpers";
-import { canManage } from "@/lib/auth-helpers";
+import { canManage, requireUser } from "@/lib/auth-helpers";
 import {
+  GENDERS,
   GENDER_LABELS,
+  MARITAL_STATUSES,
   MARITAL_STATUS_LABELS,
 } from "@/lib/constants";
+import {
+  allowedValues,
+  overRunPage,
+  tableContext,
+  tableHref,
+  tableOffset,
+  type RawSearchParams,
+} from "@/lib/data-table";
 import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/patterns/empty-state";
+import { DataTable } from "@/components/patterns/data-table";
+import type { DataTableColumn } from "@/components/patterns/data-table";
 import { PageHeader } from "@/components/patterns/page-header";
-import { SearchField } from "@/components/patterns/search-field";
-import { TableCard } from "@/components/patterns/table-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
+type MemberRow = typeof members.$inferSelect;
+
+/**
+ * The sort keys the URL is allowed to name, and the column each maps to.
+ * `tableContext` rejects anything outside this map, so `?sort=` can never
+ * reach the query with a column the page did not choose to expose.
+ */
+const SORT_COLUMNS = {
+  name: members.fullName,
+  gender: members.gender,
+  marital: members.maritalStatus,
+  since: members.memberSinceYear,
+  contact: members.contactNumber,
+} as const;
 
 export default async function MembersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<RawSearchParams>;
 }) {
   const user = await requireUser();
-  const { q } = await searchParams;
-  const query = q?.trim();
+  const manage = canManage(user.role);
 
-  const where = query ? ilike(members.fullName, `%${query}%`) : undefined;
+  const ctx = tableContext("/members", await searchParams, {
+    sortKeys: Object.keys(SORT_COLUMNS),
+    filterKeys: ["gender", "status"],
+    defaultSort: "name",
+  });
+  const { state } = ctx;
 
-  const [rows, [{ total }]] = await Promise.all([
+  const gender = allowedValues(state.filters.gender, GENDERS);
+  const status = allowedValues(state.filters.status, MARITAL_STATUSES);
+  const where = and(
+    state.query ? ilike(members.fullName, `%${state.query}%`) : undefined,
+    gender.length ? inArray(members.gender, gender) : undefined,
+    status.length ? inArray(members.maritalStatus, status) : undefined,
+  );
+
+  const sortColumn = SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS];
+  const direction = state.direction === "asc" ? asc : desc;
+
+  const [rows, [{ matching }], total] = await Promise.all([
     db
       .select()
       .from(members)
       .where(where)
-      .orderBy(asc(members.fullName))
-      .limit(200),
-    db.select({ total: count() }).from(members),
+      // A LIMIT/OFFSET walk over a non-unique sort column can repeat or skip
+      // rows between pages; the id breaks every remaining tie.
+      .orderBy(direction(sortColumn), asc(members.id))
+      .limit(state.perPage)
+      .offset(tableOffset(state)),
+    db.select({ matching: count() }).from(members).where(where),
+    db.$count(members),
   ]);
+
+  // A bookmark to page 9 of a list that has since shrunk should land on the
+  // last page with rows, and say so in the URL.
+  const clamped = overRunPage(state, matching);
+  if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
+
+  const addMember = (
+    <Link href="/members/new" className={cn(buttonVariants())}>
+      <Plus className="size-4" />
+      Add Member
+    </Link>
+  );
+
+  const columns: DataTableColumn<MemberRow>[] = [
+    {
+      id: "name",
+      header: "Name",
+      sortKey: "name",
+      hideable: false,
+      cellClassName: "font-medium",
+      cell: (m) => (
+        <Link href={`/members/${m.id}`} className="block hover:underline">
+          {m.fullName}
+        </Link>
+      ),
+    },
+    {
+      id: "gender",
+      header: "Gender",
+      sortKey: "gender",
+      hideBelow: "sm",
+      cell: (m) => (m.gender ? GENDER_LABELS[m.gender] : "—"),
+    },
+    {
+      id: "marital",
+      header: "Marital Status",
+      label: "Marital status",
+      sortKey: "marital",
+      hideBelow: "md",
+      cell: (m) =>
+        m.maritalStatus ? (
+          <Badge variant="secondary">
+            {MARITAL_STATUS_LABELS[m.maritalStatus]}
+          </Badge>
+        ) : (
+          "—"
+        ),
+    },
+    {
+      id: "since",
+      header: "Member Since",
+      label: "Member since",
+      sortKey: "since",
+      hideBelow: "lg",
+      numeric: true,
+      cell: (m) => m.memberSinceYear ?? "—",
+    },
+    {
+      id: "contact",
+      header: "Contact",
+      sortKey: "contact",
+      hideBelow: "sm",
+      cellClassName: "text-muted-foreground",
+      cell: (m) => m.contactNumber ?? "—",
+    },
+  ];
 
   return (
     <>
@@ -53,89 +154,50 @@ export default async function MembersPage({
         title="Members"
         description={`${total} member${total === 1 ? "" : "s"} in your church directory.`}
       >
-        {canManage(user.role) ? (
-          <Link href="/members/new" className={cn(buttonVariants())}>
-            <Plus className="size-4" />
-            Add Member
-          </Link>
-        ) : null}
+        {manage ? addMember : null}
       </PageHeader>
 
-      <SearchField
-        defaultValue={query}
-        placeholder="Search by name…"
-        label="Search members by name"
+      <DataTable
+        ctx={ctx}
+        caption="Church members"
+        columns={columns}
+        rows={rows}
+        rowKey={(m) => m.id}
+        total={matching}
+        search={{
+          placeholder: "Search by name…",
+          label: "Search members by name",
+        }}
+        facets={[
+          {
+            id: "gender",
+            label: "Gender",
+            options: GENDERS.map((value) => ({
+              value,
+              label: GENDER_LABELS[value],
+            })),
+          },
+          {
+            id: "status",
+            label: "Marital status",
+            options: MARITAL_STATUSES.map((value) => ({
+              value,
+              label: MARITAL_STATUS_LABELS[value],
+            })),
+          },
+        ]}
+        empty={{
+          icon: Users,
+          title: "No members yet",
+          description:
+            "Add your first member to generate their attendance QR code.",
+          action: manage ? addMember : null,
+        }}
+        emptyFiltered={{
+          icon: Users,
+          title: "No members match your search",
+        }}
       />
-
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title={query ? "No members match your search" : "No members yet"}
-          description={
-            query
-              ? "Try a different name."
-              : "Add your first member to generate their attendance QR code."
-          }
-          action={
-            !query && canManage(user.role) ? (
-              <Link href="/members/new" className={cn(buttonVariants())}>
-                <Plus className="size-4" />
-                Add Member
-              </Link>
-            ) : null
-          }
-        />
-      ) : (
-        <TableCard>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden sm:table-cell">Gender</TableHead>
-                <TableHead className="hidden md:table-cell">
-                  Marital Status
-                </TableHead>
-                <TableHead className="hidden lg:table-cell">
-                  Member Since
-                </TableHead>
-                <TableHead className="hidden sm:table-cell">Contact</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((m) => (
-                <TableRow key={m.id} className="cursor-pointer">
-                  <TableCell className="font-medium">
-                    <Link
-                      href={`/members/${m.id}`}
-                      className="block hover:underline"
-                    >
-                      {m.fullName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell">
-                    {m.gender ? GENDER_LABELS[m.gender] : "—"}
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    {m.maritalStatus ? (
-                      <Badge variant="secondary">
-                        {MARITAL_STATUS_LABELS[m.maritalStatus]}
-                      </Badge>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell tabular-nums">
-                    {m.memberSinceYear ?? "—"}
-                  </TableCell>
-                  <TableCell className="hidden sm:table-cell text-muted-foreground">
-                    {m.contactNumber ?? "—"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableCard>
-      )}
     </>
   );
 }

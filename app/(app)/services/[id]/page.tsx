@@ -1,17 +1,25 @@
 import Link from "next/link";
-import { desc, eq } from "drizzle-orm";
-import { notFound } from "next/navigation";
+import { and, asc, count, desc, eq, ilike } from "drizzle-orm";
+import { notFound, redirect } from "next/navigation";
 import { CalendarDays, MapPin, Pencil, QrCode, Users } from "lucide-react";
 
 import { db } from "@/db";
-import { attendance, services } from "@/db/schema";
+import { attendance, members, services } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
+import {
+  overRunPage,
+  tableContext,
+  tableHref,
+  tableOffset,
+  type RawSearchParams,
+} from "@/lib/data-table";
 import { formatDateTime, formatTime, initials } from "@/lib/format";
 import { getSheetsConfig } from "@/lib/sheets";
 import { cn } from "@/lib/utils";
 import { BackLink } from "@/components/patterns/back-link";
-import { EmptyState } from "@/components/patterns/empty-state";
+import { DataTable } from "@/components/patterns/data-table";
+import type { DataTableColumn } from "@/components/patterns/data-table";
 import { InfoTile } from "@/components/patterns/info-tile";
 import { SyncServiceButton } from "@/components/integrations/sync-buttons";
 import { DeleteServiceButton } from "@/components/services/delete-service-button";
@@ -25,19 +33,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
+type AttendeeRow = {
+  id: string;
+  memberId: string;
+  fullName: string | null;
+  checkedInAt: Date;
+};
+
+const SORT_COLUMNS = {
+  member: members.fullName,
+  time: attendance.checkedInAt,
+} as const;
 
 export default async function ServiceDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<RawSearchParams>;
 }) {
   const user = await requireUser();
   const { id } = await params;
@@ -47,14 +61,86 @@ export default async function ServiceDetailPage({
   });
   if (!service) notFound();
 
-  const attendees = await db.query.attendance.findMany({
-    where: eq(attendance.serviceId, service.id),
-    with: { member: true },
-    orderBy: desc(attendance.checkedInAt),
+  const ctx = tableContext(`/services/${service.id}`, await searchParams, {
+    sortKeys: Object.keys(SORT_COLUMNS),
+    defaultSort: "time",
+    // Latest arrivals first — this list is read while people are still coming in.
+    defaultDirection: "desc",
   });
+  const { state } = ctx;
+
+  const scanned = eq(attendance.serviceId, service.id);
+  const where = and(
+    scanned,
+    state.query ? ilike(members.fullName, `%${state.query}%`) : undefined,
+  );
+  const direction = state.direction === "asc" ? asc : desc;
 
   const manage = canManage(user.role);
-  const sheetsOn = manage ? Boolean(await getSheetsConfig()) : false;
+  const [attendees, [{ matching }], total, sheetsOn] = await Promise.all([
+    db
+      .select({
+        id: attendance.id,
+        memberId: attendance.memberId,
+        fullName: members.fullName,
+        checkedInAt: attendance.checkedInAt,
+      })
+      .from(attendance)
+      .leftJoin(members, eq(members.id, attendance.memberId))
+      .where(where)
+      .orderBy(
+        direction(SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS]),
+        asc(attendance.id),
+      )
+      .limit(state.perPage)
+      .offset(tableOffset(state)),
+    db
+      .select({ matching: count() })
+      .from(attendance)
+      .leftJoin(members, eq(members.id, attendance.memberId))
+      .where(where),
+    // The headline figure counts everyone who scanned in, not the page or the
+    // search — it is the service's attendance, and narrowing the list below
+    // must not appear to change it.
+    db.$count(attendance, scanned),
+    manage ? getSheetsConfig().then(Boolean) : Promise.resolve(false),
+  ]);
+
+  const clamped = overRunPage(state, matching);
+  if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
+
+  const columns: DataTableColumn<AttendeeRow>[] = [
+    {
+      id: "member",
+      header: "Member",
+      sortKey: "member",
+      hideable: false,
+      cell: (row) => (
+        <Link
+          href={`/members/${row.memberId}`}
+          className="flex items-center gap-2 font-medium hover:underline"
+        >
+          <Avatar className="size-7">
+            <AvatarFallback className="text-xs">
+              {initials(row.fullName ?? "?")}
+            </AvatarFallback>
+          </Avatar>
+          {row.fullName ?? "Unknown"}
+        </Link>
+      ),
+    },
+    {
+      id: "time",
+      header: "Checked In",
+      label: "Checked in",
+      sortKey: "time",
+      sortDirection: "desc",
+      align: "end",
+      numeric: true,
+      cellClassName: "text-muted-foreground",
+      cell: (row) => formatTime(row.checkedInAt),
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -96,7 +182,7 @@ export default async function ServiceDetailPage({
         />
         <InfoTile
           label="Total Attendance"
-          value={attendees.length}
+          value={total}
           icon={Users}
           accent
           numeric
@@ -115,11 +201,22 @@ export default async function ServiceDetailPage({
           <CardTitle className="text-base">Attendees</CardTitle>
         </CardHeader>
         <CardContent>
-          {attendees.length === 0 ? (
-            <EmptyState
-              variant="inline"
-              title="No one scanned in yet."
-              action={
+          <DataTable
+            ctx={ctx}
+            caption="Members who scanned in to this service"
+            columns={columns}
+            rows={attendees}
+            rowKey={(row) => row.id}
+            total={matching}
+            framed={false}
+            columnVisibility={false}
+            search={{
+              placeholder: "Search attendees…",
+              label: "Search attendees by name",
+            }}
+            empty={{
+              title: "No one scanned in yet.",
+              action: (
                 <Link
                   href={`/scan?service=${service.id}`}
                   className={cn(buttonVariants({ size: "sm" }))}
@@ -127,40 +224,10 @@ export default async function ServiceDetailPage({
                   <QrCode className="size-4" />
                   Start scanning
                 </Link>
-              }
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Member</TableHead>
-                  <TableHead className="text-right">Checked In</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {attendees.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <Link
-                        href={`/members/${row.memberId}`}
-                        className="flex items-center gap-2 font-medium hover:underline"
-                      >
-                        <Avatar className="size-7">
-                          <AvatarFallback className="text-xs">
-                            {initials(row.member?.fullName ?? "?")}
-                          </AvatarFallback>
-                        </Avatar>
-                        {row.member?.fullName ?? "Unknown"}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground tabular-nums">
-                      {formatTime(row.checkedInAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+              ),
+            }}
+            emptyFiltered={{ title: "No attendees match your search" }}
+          />
         </CardContent>
       </Card>
     </div>

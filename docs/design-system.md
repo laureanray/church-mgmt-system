@@ -106,6 +106,72 @@ from a Server Component; pass `htmlFor` on every field.
 | `DetailList` / `DetailRow` | The label/value description list on a record |
 | `TableCard` | The bordered, clipped frame around a full-width table |
 | `SearchField` | The list-page search box |
+| `DataTable` | Every table in the app: sorting, paging, search, facets, columns |
+
+### DataTable
+
+`components/patterns/data-table/` is the only thing that renders a `<table>`
+outside Storybook. `components/ui/table.tsx` is still the primitive underneath,
+but nothing else imports it — which is the point: six pages previously
+hand-rolled a header row, and they had already drifted on alignment, on which
+columns dropped at which breakpoint, and on whether an empty list said anything
+at all.
+
+All of its state lives in the URL, parsed by `lib/data-table.ts`:
+
+```
+/members?q=santos&sort=since&dir=desc&page=2&per=50&gender=male&hide=contact
+```
+
+That is what keeps the whole component renderable from a Server Component. A
+sort is a `<Link>`, a page is a `<Link>`, a search is a GET form — so the
+*page* does the ordering and the `LIMIT`/`OFFSET` in SQL, and `cell` can return
+ordinary server JSX holding a `<Link>`, an `<Avatar>` or a delete button. It
+also means a narrowed table is linkable, survives a refresh and steps back
+correctly.
+
+The corollary is that **`DataTable` never sorts or filters anything itself**.
+Handing it every row and hoping is how you ship a table that is correct at 50
+members and wrong at 5,000.
+
+A page wires it up in three parts — the `sortKeys` whitelist, the `WHERE`, and
+the columns:
+
+```tsx
+const SORT_COLUMNS = { name: members.fullName, since: members.memberSinceYear };
+
+const ctx = tableContext("/members", await searchParams, {
+  sortKeys: Object.keys(SORT_COLUMNS),
+  filterKeys: ["gender"],
+  defaultSort: "name",
+});
+```
+
+Four rules are load-bearing rather than stylistic:
+
+- **Whitelist the sort keys.** `?sort=` picks the `ORDER BY` column. Anything
+  outside `sortKeys` falls back to the default instead of reaching the query.
+- **Give the `ORDER BY` a unique tiebreaker.** A `LIMIT`/`OFFSET` walk over a
+  non-unique column can repeat or skip rows between pages; every list here ends
+  its ordering with the id.
+- **Narrow facet values with `allowedValues`.** They arrive from the URL and the
+  enum columns are typed.
+- **Redirect an over-run page** with `overRunPage`, so a bookmark to page 9 of a
+  list that has since shrunk lands on the last page that has rows — and says so
+  in the URL, rather than showing an empty table.
+
+Two controls are menus rather than links: the facet filter and the column
+picker. Both are multi-select, and a real `menuitemcheckbox` announces "checked"
+to a screen reader where a link dressed up with a tick does not. A facet
+deliberately stays open after a toggle. Everything else — sorting, paging, page
+size, reset — is an anchor, and the search is a GET form.
+
+Read that as "the URL is the whole model", not as "it runs without JavaScript".
+`app/(app)/loading.tsx` puts the group behind a streaming Suspense boundary that
+React reveals with an inline script, so scripting-off never gets past the
+skeleton. What the anchors buy is real all the same: a control is linkable and
+prefetchable, and there is no client table state to hydrate or to disagree with
+the server.
 
 Two behaviours in there are load-bearing rather than cosmetic:
 
@@ -115,6 +181,8 @@ Two behaviours in there are load-bearing rather than cosmetic:
 - **`DetailRow` renders `value || "—"`**, so a nullable column can be passed
   straight through — but a real zero is falsy and would vanish behind the dash.
   Pass `String(0)`.
+- **`DataTable` takes two empty states**, and `emptyFiltered` cannot carry an
+  action for the same reason: it is what a missed *search* shows.
 
 ## Storybook
 

@@ -12,10 +12,12 @@ import {
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
 import { canManage, requireUser } from "@/lib/auth-helpers";
-import { SERVICE_TYPE_LABELS } from "@/lib/constants";
+import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@/lib/constants";
+import { tableContext } from "@/lib/data-table";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { EmptyState } from "@/components/patterns/empty-state";
+import { DataTable } from "@/components/patterns/data-table";
+import type { DataTableColumn } from "@/components/patterns/data-table";
 import { PageHeader } from "@/components/patterns/page-header";
 import { StatCard } from "@/components/patterns/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -27,14 +29,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+
+type RecentServiceRow = {
+  id: string;
+  name: string;
+  type: (typeof SERVICE_TYPES)[number];
+  scheduledAt: Date;
+  attendeeCount: number;
+};
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -69,6 +71,42 @@ export default async function DashboardPage() {
     ]);
 
   const manage = canManage(user.role);
+
+  // A fixed five-row summary: no state to read, but the same table so the
+  // dashboard's rows look and behave like every other list in the app.
+  const recentCtx = tableContext("/dashboard", {});
+
+  const recentColumns: DataTableColumn<RecentServiceRow>[] = [
+    {
+      id: "name",
+      header: "Service",
+      cellClassName: "font-medium",
+      cell: (s) => (
+        <Link href={`/services/${s.id}`} className="hover:underline">
+          {s.name}
+        </Link>
+      ),
+    },
+    {
+      id: "type",
+      header: "Type",
+      hideBelow: "sm",
+      cell: (s) => <Badge variant="secondary">{SERVICE_TYPE_LABELS[s.type]}</Badge>,
+    },
+    {
+      id: "date",
+      header: "Date",
+      cellClassName: "text-muted-foreground",
+      cell: (s) => formatDateTime(s.scheduledAt),
+    },
+    {
+      id: "attendance",
+      header: "Attendance",
+      align: "end",
+      numeric: true,
+      cell: (s) => s.attendeeCount,
+    },
+  ];
 
   return (
     <>
@@ -133,55 +171,23 @@ export default async function DashboardPage() {
           </CardAction>
         </CardHeader>
         <CardContent>
-          {recent.length === 0 ? (
-            <EmptyState
-              variant="inline"
-              title="No services yet"
-              description={
-                manage ? (
-                  <Link href="/services/new" className="underline">
-                    Create one
-                  </Link>
-                ) : undefined
-              }
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Service</TableHead>
-                  <TableHead className="hidden sm:table-cell">Type</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Attendance</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recent.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">
-                      <Link
-                        href={`/services/${s.id}`}
-                        className="hover:underline"
-                      >
-                        {s.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Badge variant="secondary">
-                        {SERVICE_TYPE_LABELS[s.type]}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDateTime(s.scheduledAt)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {s.attendeeCount}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <DataTable
+            ctx={recentCtx}
+            caption="The five most recent services"
+            columns={recentColumns}
+            rows={recent}
+            rowKey={(s) => s.id}
+            framed={false}
+            columnVisibility={false}
+            empty={{
+              title: "No services yet",
+              description: manage ? (
+                <Link href="/services/new" className="underline">
+                  Create one
+                </Link>
+              ) : undefined,
+            }}
+          />
         </CardContent>
       </Card>
     </>

@@ -26,3 +26,33 @@ expect.extend(matchers as unknown as Parameters<typeof expect.extend>[0]);
 // Library only auto-cleans when it can see a global `afterEach`, which it
 // cannot under bun — wire it up explicitly.
 afterEach(cleanup);
+
+// `useRouter` throws "expected app router to be mounted" outside a Next tree,
+// and Storybook's own Next mocks are not reachable from here: the framework
+// package pulls in `storybook/preview-api`, which bun cannot resolve. Providing
+// the context directly is both smaller and closer to what the app does.
+//
+// This goes through `setProjectAnnotations`, not a per-test wrapper, so it
+// applies to every `composeStories` call in the suite — including stories that
+// render a client component several levels down.
+const React = await import("react");
+const { setProjectAnnotations } = await import("@storybook/react");
+const { AppRouterContext } = await import(
+  "next/dist/shared/lib/app-router-context.shared-runtime"
+);
+const { testRouter, resetRouterCalls } = await import("./router");
+
+setProjectAnnotations({
+  decorators: [
+    (Story: React.ComponentType) =>
+      React.createElement(
+        AppRouterContext.Provider,
+        // The stub records rather than navigates; `tests/support/router.ts`
+        // holds what it recorded.
+        { value: testRouter as never },
+        React.createElement(Story),
+      ),
+  ],
+});
+
+afterEach(resetRouterCalls);

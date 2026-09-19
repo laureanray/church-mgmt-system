@@ -53,6 +53,8 @@ Three layers: **tokens** in `app/globals.css`, **primitives** in
 - Before hand-rolling a placeholder, a stat card, a bordered table or a back
   link, check `components/patterns/` — each of those already exists there, and
   each was extracted from several near-identical copies.
+- **Every table is `DataTable`.** `components/ui/table.tsx` is the primitive it
+  is built from, and nothing else imports it. See the section below.
 - `Field` wires `aria-describedby` and `aria-invalid` onto the control it wraps,
   which is what makes a server-action error visibly red. It derives ids from
   `htmlFor`, so pass one on every field. A custom control must forward both
@@ -70,6 +72,51 @@ Three layers: **tokens** in `app/globals.css`, **primitives** in
 `bun run storybook` serves it on :6006, `bun run storybook:network` does the
 same over your tailnet (for checking a component on a real phone), and
 `bun run build-storybook` is what CI builds.
+
+## Tables are `DataTable`, and their state is the URL
+
+`components/patterns/data-table/` renders every table in the app. Its state —
+search, sort, page, page size, facets, hidden columns — lives entirely in the
+query string, parsed and rebuilt by `lib/data-table.ts`:
+
+```
+/members?q=santos&sort=since&dir=desc&page=2&per=50&gender=male&hide=contact
+```
+
+That is what keeps it renderable from a Server Component: a sort is a `<Link>`,
+a page is a `<Link>`, a search is a GET form, so `cell` returns ordinary server
+JSX and no row data reaches the browser. The **page** does the work — it reads
+`ctx.state`, turns it into `WHERE`, `ORDER BY` and `LIMIT`, and hands back one
+page of rows plus the matching total. `DataTable` sorts and filters nothing
+itself; `app/(app)/members/page.tsx` is the reference.
+
+Four things there are load-bearing, not stylistic:
+
+- `?sort=` picks the `ORDER BY` column, so the page passes a `sortKeys`
+  whitelist and `tableContext` drops anything outside it.
+- Every `orderBy` ends with the row id. A `LIMIT`/`OFFSET` walk over a
+  non-unique column repeats or skips rows between pages.
+- Facet values come from the URL, so they go through `allowedValues` before
+  they reach a typed enum column.
+- `overRunPage` + `redirect` handles a bookmark to a page that no longer
+  exists; without it a stale link shows an empty table that reads as a bug.
+
+Every control except two is an anchor or a GET form in the server's HTML. The
+exceptions are the facet menu and the column picker: a menu needs JavaScript to
+open regardless, and a real `menuitemcheckbox` announces "checked" where a link
+with a tick drawn on it does not. Page size is *not* one of them — it is a
+single-select navigation between four fixed URLs, so it is four links.
+
+That is about the URL being the whole model — linkable, back-button-safe,
+prefetchable, and no table state to hydrate — and **not** a no-JavaScript
+guarantee. `app/(app)/loading.tsx` puts every route in the group behind a
+streaming Suspense boundary, and React reveals streamed content with an inline
+script, so a scripting-disabled browser sits on the skeleton however the table
+is built.
+
+`emptyFiltered` is separate from `empty` and deliberately cannot carry an
+action: someone whose *search* missed is one click from creating a duplicate of
+the record they were looking for.
 
 ## Forms are server actions over FormData
 
