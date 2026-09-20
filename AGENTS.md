@@ -351,3 +351,7 @@ being routine, continue with the primary agent and explain the fallback briefly.
 - Seeded admin: `admin@church.local` / `admin123`. The seed creates it through
   the Supabase Admin API, so `bun run db:seed` needs the auth stack running.
 - Commits follow `type(scope): summary`, e.g. `feat(cell-groups): …`.
+- CI is `.github/workflows/tests.yml`. Its jobs run on GitHub-hosted runners
+  until the repository variable `AWS_CODEBUILD_PROJECT` is set, after which each
+  job runs in an ephemeral AWS CodeBuild container. `infra/github-runner/`
+  holds the stack and its README covers deploying, verifying and switching.
