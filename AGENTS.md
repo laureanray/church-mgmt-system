@@ -259,7 +259,11 @@ generated files, and this `AGENTS.md`.
 2. Run `git fetch origin main`. If fetching fails, stop before editing and
    report the blocker; do not silently use a stale local `main`.
 3. Create a task-specific branch and sibling worktree from `origin/main`:
-   `git worktree add -b <task-branch> ../church-mgmt-system-<task> origin/main`.
+   `irm new <task-branch> <task-slug>`. The helper fetches again,
+   creates the worktree beside the primary checkout (even when invoked from
+   another worktree), and avoids tracking `origin/main` with a task branch.
+   Without the manager, use `git worktree add --no-track -b <task-branch>
+   <absolute-sibling-path> origin/main`.
 4. Confirm the new worktree's branch and starting commit match the intended
    branch and fetched `origin/main`, then perform all edits and checks there.
 5. Report the branch and worktree path when starting work and in the handoff.
@@ -269,6 +273,45 @@ create a fresh pair from newly fetched `origin/main` for each new task. Never
 start edits in the original checkout, on `main`, or on another task's branch.
 Read-only assessment may run in the existing checkout before creating a
 worktree, but the worktree must exist before the first file mutation.
+
+### Worktree lifecycle
+
+The `irm` manager lives in `tools/irm/`; see its README for installation and
+commands. Run `irm context` and `irm wt` before starting work. Saved selection
+is independent of the shell directory: use `irm ws <branch>` then
+`cd "$(irm cd)"`. Follow-ups reuse the same task's worktree. Stop managed services
+before selecting a different one. `irm setup` links an ignored `.env` and installs
+locked dependencies without replacing existing environment files.
+
+Once merged, preview with `irm cleanup --dry-run`, then run `irm cleanup` in a
+terminal to choose removals. Stop external servers/agents using candidates first.
+Primary, selected, current, manager-source, running-service and locked worktrees
+are protected. Uncommitted/untracked files and ignored local configuration block
+removal. Actual HEAD ancestry is required: a merged PR can have later unmerged
+commits, and squash/rebase merges need manual review. Branches are retained.
+Never use force removal, automatic stashing, or branch deletion to bypass a
+blocked cleanup. Lock ongoing worktrees when they should be reserved.
+
+`irm run` never changes database schema. `irm migrate` explicitly runs Drizzle
+against the selected project's local Supabase only; review compatibility because
+worktrees share the database. No Supabase migration runner, reset, or history
+repair is used. `bun run test:irm` checks the manager and terminal renderer.
+
+### Delegating repetitive tasks
+
+Use a GPT-5.6 Luna sub-agent (`gpt-5.6-luna`) for routine, bounded work such as
+staging reviewed changes, creating conventional commits, pushing task branches,
+and creating or updating pull requests. Prefer this model for repetitive
+repository chores to reduce token costs; keep implementation decisions, ambiguous
+requirements, and complex debugging with the primary agent.
+
+Delegate only actions authorized by the current request. Give the sub-agent the
+exact branch/worktree, intended files, validation results, and requested outcome.
+Commit/push/PR follow-ups stay in the task's existing worktree. The sub-agent
+must preserve unrelated work, inspect the staged diff, exclude secrets and local
+artifacts, and report the commit, branch, PR URL, and any failed checks. The
+primary agent verifies the handoff. If Luna is unavailable or the task stops
+being routine, continue with the primary agent and explain the fallback briefly.
 
 ### Project conventions
 

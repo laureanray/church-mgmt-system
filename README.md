@@ -166,3 +166,9 @@ supabase/          Local Supabase stack config (Postgres + Studio only)
 components/         UI + feature components (shadcn/ui in components/ui)
 lib/               Validators, formatting, QR + auth helpers
 ```
+
+## Local development manager
+
+`irm` provides a terminal dashboard, saved worktree selection, dev/Storybook
+controls, logs, networking, and safe merged-worktree cleanup. See
+[tools/irm/README.md](tools/irm/README.md) for installation and commands.
