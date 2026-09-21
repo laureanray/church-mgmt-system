@@ -108,7 +108,9 @@ aws cloudformation deploy \
 ```
 
 Add `--no-execute-changeset` to preview changes without applying them. Normal
-deployment creates/updates the webhook automatically. An account with zero
+deployment creates/updates the webhook automatically; it appears under the
+repository's Settings → Webhooks as an `api.github.com/repos/…/hooks/<id>` entry
+and `aws codebuild batch-get-projects --names church-mgmt-ci` shows its URL. An account with zero
 Medium on-demand concurrency needs an AWS quota increase. Inspect a failed
 deployment with `aws cloudformation describe-stack-events --stack-name
 church-mgmt-github-runner`; fix permissions/token scopes and retry. A stack in
