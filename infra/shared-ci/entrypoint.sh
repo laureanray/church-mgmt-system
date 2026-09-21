@@ -23,7 +23,14 @@ done
 if [[ "$ready" != true ]]; then cat /var/log/dockerd.log; exit 1; fi
 docker ps -aq | xargs -r docker rm -f >/dev/null
 docker volume prune --all --force >/dev/null
-docker image prune --all --force --filter 'until=168h' >/dev/null
+# Image age is its upstream creation date, not its last use. Pruning by age
+# would discard freshly pulled Supabase images on every job. Evict caches only
+# under disk pressure; application/database volumes were already removed above.
+usage=$(df --output=pcent /var/lib/docker | tail -n 1 | tr -d ' %')
+if (( usage >= 80 )); then
+  docker image prune --all --force >/dev/null
+  docker builder prune --all --force >/dev/null
+fi
 mkdir -p /opt/hostedtoolcache /home/runner/.cache/ms-playwright \
   /home/runner/.local/share/pnpm/store /home/runner/.bun/install/cache
 chown runner:runner /opt/hostedtoolcache /home/runner/.cache/ms-playwright \

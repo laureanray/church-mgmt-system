@@ -85,8 +85,8 @@ a running workflow.
 ## Routing and rollout
 
 In each repository, set `AWS_EC2_RUNNER_ENABLED=true` to select the new labels
-in migrated workflows. The existing `AWS_CODEBUILD_PROJECT` and smoke-project
-variables remain available for rollback. The code change must be on a branch
+in migrated workflows. During validation the existing `AWS_CODEBUILD_PROJECT`
+and smoke-project variables remain available for rollback. The code change must be on a branch
 for that branch's workflows to use EC2; setting the variable alone does not
 modify old workflow files on main.
 
@@ -113,8 +113,17 @@ Do not print Docker container environment/configuration or Lambda `claim`
 responses: they contain short-lived JIT runner credentials.
 
 To route future jobs back to CodeBuild, set `AWS_EC2_RUNNER_ENABLED=false` in
-both repositories. Let already queued EC2 jobs drain, or cancel those workflow
-runs explicitly. Disable the controller only after draining, then stop EC2.
-The CodeBuild projects incur no idle compute charge and remain a rollback path.
+both repositories **while the CodeBuild projects still exist**. Let already
+queued EC2 jobs drain, or cancel those workflow runs explicitly. Disable the
+controller only after draining, then stop EC2.
+
+After both full workflows, idle stop, wake-up, and main's routing are validated,
+the old `tailsintub-github-runner` and `church-mgmt-github-runner` stacks can be
+deleted and their CodeBuild routing variables removed. Keep the existing
+`tailsintub/github-runner` and `church-mgmt/github-runner` credential secrets:
+the EC2 controller uses them too. The old templates stay in each repository;
+after retirement, redeploy those stacks and restore the CodeBuild variables
+before selecting CodeBuild as a rollback target.
+
 Stopping EC2 retains the disk and cached images; deleting the stack destroys
 the VM's disk. Repository code and GitHub reports are not stored only on EC2.

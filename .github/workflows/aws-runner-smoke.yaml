@@ -54,6 +54,8 @@ jobs:
           python3 --version
           docker version
           docker compose version
+          git --version
+          git worktree list --porcelain -z >/dev/null
       - name: Verify the Compose test stack starts
         # Same command the Tests job runs: Postgres, GoTrue and nginx under
         # Docker, which needs the project's privileged mode.
