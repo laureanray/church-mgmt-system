@@ -180,6 +180,36 @@ class ControllerTests(unittest.TestCase):
         Controller(aws, 401).tick()
         self.assertEqual(aws.stops, 1)
 
+    def test_failed_boot_cannot_leave_host_billed_indefinitely(self):
+        aws = FakeAWS({"waiting_since": 100}, [job()])
+        Controller(aws, 1000).tick()
+        self.assertEqual(aws.stops, 1)
+        self.assertTrue(aws.data["paused"])
+        self.assertEqual(Controller(aws, 1001).claim(), {})
+
+    def test_github_recovery_outage_does_not_disable_idle_stop(self):
+        aws = FakeAWS({"last_busy": 100})
+        aws.recover_deliveries = lambda: (_ for _ in ()).throw(RuntimeError("offline"))
+        Controller(aws, 1000).handle({"action": "tick"})
+        self.assertEqual(aws.stops, 1)
+
+    def test_started_job_clears_startup_watchdog(self):
+        aws = FakeAWS({**lease(), "waiting_since": 50})
+        Controller(aws, 200).handle({"action": "heartbeat", "lease_id": "lease", "started": True})
+        self.assertNotIn("waiting_since", aws.data)
+
+    def test_completed_job_with_dead_host_does_not_strand_slot_for_80_minutes(self):
+        aws = FakeAWS(lease())
+        aws.status = "completed"
+        Controller(aws, 401).tick()
+        self.assertEqual(aws.stops, 1)
+        self.assertTrue(aws.data["recovering"])
+
+    def test_cancelled_queue_clears_startup_timer_for_next_burst(self):
+        aws = FakeAWS({"waiting_since": 100, "last_busy": 100})
+        Controller(aws, 500).tick()
+        self.assertNotIn("waiting_since", aws.data)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,8 +23,12 @@ RUN curl -fsSL "https://github.com/actions/runner/releases/download/v${RUNNER_VE
 # System dependencies persist in the image. Each repository's pinned browser
 # binary is installed by its existing workflow into a persistent cache volume.
 RUN npx --yes playwright@1.63.0 install-deps chromium
+RUN useradd --create-home --uid 1001 --groups docker runner \
+    && echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/runner \
+    && chmod 0440 /etc/sudoers.d/runner \
+    && chown -R runner:runner /opt/actions-runner
 COPY entrypoint.sh /usr/local/bin/runner-entrypoint
 RUN chmod 0755 /usr/local/bin/runner-entrypoint
-RUN printf '#!/bin/sh\ntouch /run/shared-ci-job-started\n' > /usr/local/bin/mark-job-started \
-    && chmod 0755 /usr/local/bin/mark-job-started
+RUN printf '#!/bin/sh\ntouch /opt/actions-runner/.job-started\n' > /usr/local/bin/mark-job-started.sh \
+    && chmod 0755 /usr/local/bin/mark-job-started.sh
 ENTRYPOINT ["/usr/local/bin/runner-entrypoint"]

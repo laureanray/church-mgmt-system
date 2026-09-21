@@ -12,6 +12,7 @@ import urllib.request
 
 IDLE_SECONDS = 600
 MAX_LEASE_SECONDS = 4800
+MAX_STARTUP_SECONDS = 900
 LEASE_FIELDS = ("lease_id", "job_id", "repo", "runner_id", "lease_started", "heartbeat", "cancel")
 
 
@@ -197,12 +198,14 @@ class Controller:
         machine = self.aws.instance_state()
         if state.get("recovering"):
             if machine == "stopped":
+                if self.aws.job_status(state["job_id"]) == "queued":
+                    self.aws.unclaimed(state["job_id"])
                 self.release(state)
             return {"state": "recovering"}
         if state.get("lease_id"):
             status = self.aws.job_status(state["job_id"])
-            stalled_start = status == "queued" and self.now - int(state["heartbeat"]) > 300
-            if self.now - int(state["lease_started"]) > MAX_LEASE_SECONDS or stalled_start:
+            stalled_host = status in {"queued", "completed", "runner_finished"} and self.now - int(state["heartbeat"]) > 300
+            if self.now - int(state["lease_started"]) > MAX_LEASE_SECONDS or stalled_host:
                 # Upper bound on a wedged host, beyond every workflow timeout.
                 # Never free the slot until the old VM has actually stopped.
                 if machine in {"running", "pending"}:
@@ -214,12 +217,24 @@ class Controller:
             return {"state": "busy"}
         # An API error propagates before any stop decision. Unknown != idle.
         jobs = self.aws.jobs()
+        if state.get("paused"):
+            if machine == "running":
+                self.aws.stop()
+            return {"state": "paused", "reason": "Host startup failed; inspect logs before resuming"}
         if jobs:
-            self.aws.patch({"last_busy": self.now})
+            waiting_since = int(state.get("waiting_since", self.now))
+            if self.now - waiting_since >= MAX_STARTUP_SECONDS:
+                if machine in {"running", "pending"}:
+                    self.aws.stop()
+                self.aws.patch({"paused": True})
+                return {"state": "paused", "reason": "No job started within 15 minutes"}
+            self.aws.patch({"last_busy": self.now, "waiting_since": waiting_since})
             if machine == "stopped":
                 self.aws.start()
             return {"state": machine, "waiting": len(jobs)}
         last_busy = int(state.get("last_busy", self.now))
+        if "waiting_since" in state:
+            self.aws.patch({"waiting_since": None})
         if "last_busy" not in state:
             self.aws.patch({"last_busy": self.now})
         if machine == "running" and self.now - last_busy >= IDLE_SECONDS:
@@ -229,7 +244,7 @@ class Controller:
 
     def claim(self):
         state = self.aws.state()
-        if state.get("lease_id") or state.get("recovering"):
+        if state.get("lease_id") or state.get("recovering") or state.get("paused"):
             return {}
         jobs = [job for job in self.aws.jobs() if job["status"] == "queued"]
         job = choose_job(jobs, state.get("last_repo"))
@@ -259,7 +274,13 @@ class Controller:
     def handle(self, event):
         action = event.get("action", "tick")
         if action == "tick":
-            self.aws.recover_deliveries()
+            try:
+                self.aws.recover_deliveries()
+            except Exception as error:
+                # A GitHub API outage must not disable the local active-job
+                # watchdog or leave an idle host billed indefinitely. Lost
+                # events are retried when the API returns, and can wake EC2.
+                print("Webhook recovery unavailable:", type(error).__name__)
             return self.tick()
         if action == "claim":
             return self.claim()
@@ -280,7 +301,10 @@ class Controller:
                     self.aws.unclaimed(state["job_id"])
                 self.release(state)
                 return {"released": True}
-            self.aws.patch({"heartbeat": self.now}, expected_lease=event["lease_id"])
+            fields = {"heartbeat": self.now}
+            if event.get("started") or self.aws.job_status(state["job_id"]) in {"in_progress", "completed"}:
+                fields["waiting_since"] = None
+            self.aws.patch(fields, expected_lease=event["lease_id"])
             return {"cancel": bool(state.get("cancel")),
                     "started": self.aws.job_status(state["job_id"]) in {"in_progress", "completed"}}
         raise ValueError("Unsupported action")

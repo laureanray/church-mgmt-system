@@ -46,15 +46,15 @@ def run_job(job):
     try:
         docker("run", "-d", "--name", CONTAINER, "--privileged", "--init",
                "--memory", "7g", "--memory-swap", "7g", "--env-file", str(env_file),
-               "--env", "RUNNER_ALLOW_RUNAS_ROOT=1", "--env", "CI=true",
+               "--env", "CI=true",
                "--env", "AGENT_TOOLSDIRECTORY=/opt/hostedtoolcache",
                "--env", "RUNNER_TOOL_CACHE=/opt/hostedtoolcache",
-               "--env", "ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/mark-job-started",
+               "--env", "ACTIONS_RUNNER_HOOK_JOB_STARTED=/usr/local/bin/mark-job-started.sh",
                "--volume", f"{repository}-docker:/var/lib/docker",
                "--volume", f"{repository}-tools:/opt/hostedtoolcache",
-               "--volume", f"{repository}-browser-cache:/root/.cache/ms-playwright",
-               "--volume", f"{repository}-pnpm:/root/.local/share/pnpm/store",
-               "--volume", f"{repository}-bun:/root/.bun/install/cache",
+               "--volume", f"{repository}-browser-cache:/home/runner/.cache/ms-playwright",
+               "--volume", f"{repository}-pnpm:/home/runner/.local/share/pnpm/store",
+               "--volume", f"{repository}-bun:/home/runner/.bun/install/cache",
                IMAGE)
         env_file.unlink(missing_ok=True)
         while True:
@@ -62,11 +62,11 @@ def run_job(job):
                                     capture_output=True, text=True, check=True)
             if result.stdout.strip() != "true":
                 break
-            marker = subprocess.run(["docker", "exec", CONTAINER, "test", "-f", "/run/shared-ci-job-started"],
+            marker = subprocess.run(["docker", "exec", CONTAINER, "test", "-f", "/opt/actions-runner/.job-started"],
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             saw_started = saw_started or marker.returncode == 0
             try:
-                heartbeat = invoke("heartbeat", lease_id=lease)
+                heartbeat = invoke("heartbeat", lease_id=lease, started=saw_started)
             except Exception:
                 logging.warning("Heartbeat unavailable; keeping current job running")
                 heartbeat = {}
@@ -81,7 +81,15 @@ def run_job(job):
     finally:
         env_file.unlink(missing_ok=True)
         docker("rm", "-f", CONTAINER, check=False)
-        invoke("finish", lease_id=lease, started=saw_started)
+        # A brief Lambda update/outage must not strand the slot after Docker
+        # has exited. No new job can be claimed until this release succeeds.
+        while True:
+            try:
+                invoke("finish", lease_id=lease, started=saw_started)
+                break
+            except Exception:
+                logging.warning("Retrying release for completed runner job %s", job["job_id"])
+                time.sleep(15)
         logging.info("Released job %s", job["job_id"])
 
 

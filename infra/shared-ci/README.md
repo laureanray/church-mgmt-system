@@ -28,6 +28,10 @@ prevents a claim racing an idle-stop decision. A watchdog stops a wedged host
 after 80 minutes, beyond the existing job timeouts, and does not release its
 slot until EC2 is stopped. Three unclaimed runner attempts stop automatic
 retries for that job; inspect the controller/host logs before rerunning it.
+A host that cannot start any queued job within 15 minutes is stopped and the
+controller pauses, preventing a broken bootstrap or expired PAT from running
+up an indefinite compute bill. After fixing the cause, remove `paused` and
+`waiting_since` from the table's `control` item to resume scheduling.
 
 All existing GitHub job names, test commands, coverage checks/comments, reports,
 and artifacts stay in their workflows. Sharing a machine reduces parallelism:

@@ -24,9 +24,15 @@ if [[ "$ready" != true ]]; then cat /var/log/dockerd.log; exit 1; fi
 docker ps -aq | xargs -r docker rm -f >/dev/null
 docker volume prune --all --force >/dev/null
 docker image prune --all --force --filter 'until=168h' >/dev/null
+mkdir -p /opt/hostedtoolcache /home/runner/.cache/ms-playwright \
+  /home/runner/.local/share/pnpm/store /home/runner/.bun/install/cache
+chown runner:runner /opt/hostedtoolcache /home/runner/.cache/ms-playwright \
+  /home/runner/.local/share/pnpm/store /home/runner/.bun/install/cache
+# Parent directories created before mounted cache roots must be traversable.
+chown -R runner:runner /home/runner/.local /home/runner/.bun /home/runner/.cache
 
 config="$JIT_CONFIG"
 unset JIT_CONFIG
-./run.sh --jitconfig "$config" &
+sudo -E -H -u runner ./run.sh --jitconfig "$config" &
 runner_pid=$!
 wait "$runner_pid"

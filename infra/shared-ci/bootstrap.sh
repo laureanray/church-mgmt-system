@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 source /etc/shared-ci.env
+# The host AWS CLI uses Amazon Linux's system Python, while the worker SDK
+# uses Python 3.12. Do not inject the worker's libraries into the AWS CLI/dnf.
+unset PYTHONPATH
 mkdir -p /opt/shared-ci/runtime
-aws s3 sync "s3://${ARTIFACT_BUCKET}/runtime/" /opt/shared-ci/runtime/ --only-show-errors
+# These files are tiny. Always fetch them: size/mtime-based sync can otherwise
+# leave an old same-length image digest beside newly downloaded build inputs.
+aws s3 cp "s3://${ARTIFACT_BUCKET}/runtime/" /opt/shared-ci/runtime/ --recursive --only-show-errors
 
 if ! command -v docker >/dev/null; then
   dnf install -y docker
