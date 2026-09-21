@@ -6,6 +6,7 @@ import { Loader2, Save } from "lucide-react";
 
 import type { MemberFormState } from "@/app/(app)/members/actions";
 import { Field } from "@/components/form/field";
+import { DatePicker } from "@/components/form/date-picker";
 import { FormSelect, type SelectOption } from "@/components/form/form-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -120,10 +121,9 @@ export function MemberForm({
           </Field>
 
           <Field label="Birthdate" htmlFor="birthdate" error={errors.birthdate}>
-            <Input
+            <DatePicker
               id="birthdate"
               name="birthdate"
-              type="date"
               defaultValue={member?.birthdate ?? ""}
             />
           </Field>
@@ -134,10 +134,9 @@ export function MemberForm({
             hint="Date of water baptism / rebirth"
             error={errors.spiritualBirthday}
           >
-            <Input
+            <DatePicker
               id="spiritualBirthday"
               name="spiritualBirthday"
-              type="date"
               defaultValue={member?.spiritualBirthday ?? ""}
             />
           </Field>
@@ -217,10 +216,9 @@ export function MemberForm({
                 htmlFor="weddingAnniversary"
                 error={errors.weddingAnniversary}
               >
-                <Input
+                <DatePicker
                   id="weddingAnniversary"
                   name="weddingAnniversary"
-                  type="date"
                   defaultValue={member?.weddingAnniversary ?? ""}
                 />
               </Field>

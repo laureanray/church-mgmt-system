@@ -43,6 +43,31 @@ Three layers: **tokens** in `app/globals.css`, **primitives** in
 `components/ui/*` (Base UI, above), **patterns** in `components/patterns/*`.
 `docs/design-system.md` is the full account; the rules that matter while editing:
 
+- **Build UI in Storybook first.** Before building or changing a screen, inspect
+  the Storybook catalog and reuse the shared components it documents. Application
+  code imports the component implementation, never a story or its sample data.
+- **If a needed component does not exist, create it and its colocated
+  `*.stories.tsx` before integrating it into a screen.** Put primitives in
+  `components/ui/`, reusable compositions in `components/patterns/`, and
+  domain-specific components in the relevant feature directory. If an existing
+  component has no story, add its missing coverage as part of the work. Extend
+  an existing component when appropriate instead of creating a competing copy.
+- **Every component must be accounted for in Storybook.** Document its purpose
+  and supported variants, and demonstrate the relevant default, loading, empty,
+  error, disabled, and interactive states. Build interactions with deterministic
+  sample data first; wire server actions and real data after the UI is established.
+  Stories must remain usable without a database, credentials, or external services.
+- **Follow the selected Register design throughout.** Use the shared fonts in
+  `lib/fonts.ts` (IBM Plex Sans), burgundy brand tokens, neutral surfaces, the
+  shared radius scale, compact rows, and restrained decoration. Colors,
+  typography, borders, focus states, and corners must use the design system;
+  do not introduce a local palette, font, or competing component style.
+  Add any genuinely new token to the shared system and document its purpose.
+- **Verify the component in Storybook before considering UI work complete.**
+  Check both light and dark themes, narrow and wide layouts, and applicable
+  keyboard and pointer interactions. Update the affected stories and design-system
+  documentation alongside implementation changes, and run the relevant UI checks
+  and Storybook build. A successful build alone does not verify the rendered UI.
 - **Colour comes from a token, never from Tailwind's palette.** `text-warning`,
   not `text-amber-600 dark:text-amber-400`; a palette utility opts out of the
   theme and its dark variant is an unchecked guess.

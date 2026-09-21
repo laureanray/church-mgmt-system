@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 /**
  * A headline number in a card, for the dashboard's top row.
  *
- * `accent` tints the icon well with the brand colour. It marks the one figure a
+ * `accent` marks the icon with the brand colour. It marks the one figure a
  * row is *about* — use it at most once per row, or it stops meaning anything.
  *
  * The value is `tabular-nums` so a counter ticking 9 → 10 does not reflow the
@@ -27,17 +27,17 @@ export function StatCard({
 }) {
   return (
     <Card className={className}>
-      <CardContent className="flex items-center justify-between">
+      <CardContent className="flex items-center justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+          <p className="mt-1 text-2xl font-medium tabular-nums">{value}</p>
         </div>
         <div
           className={cn(
-            "flex size-10 items-center justify-center rounded-lg",
+            "flex shrink-0 items-center justify-center",
             accent
-              ? "bg-primary/10 text-primary"
-              : "bg-muted text-muted-foreground",
+              ? "text-primary"
+              : "text-muted-foreground",
           )}
         >
           <Icon className="size-5" aria-hidden />

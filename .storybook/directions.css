@@ -1,0 +1,45 @@
+/* Preview-only remapping of application tokens. No product theme is selected. */
+.direction {
+  font-family: var(--font-body), sans-serif;
+}
+.direction[data-direction="warm"] {
+  --font-body: var(--font-explore-dm);
+  --primary: var(--explore-forest);
+  --background: var(--explore-paper);
+  --card: var(--explore-paper-card);
+  --foreground: var(--explore-paper-ink);
+  --muted: var(--explore-paper-muted);
+  --muted-foreground: var(--explore-paper-secondary);
+  --border: var(--explore-paper-border);
+  --radius: 1rem;
+}
+.direction[data-direction="warm"] h2 { font-family: var(--font-explore-lora), serif; font-weight: 500; }
+.direction[data-direction="calm"] {
+  --font-body: var(--font-explore-dm);
+  --primary: var(--explore-teal);
+  --background: var(--explore-cool);
+  --card: var(--explore-cool-card);
+  --foreground: var(--explore-cool-ink);
+  --muted: var(--explore-cool-muted);
+  --muted-foreground: var(--explore-cool-secondary);
+  --border: var(--explore-cool-border);
+  --radius: 0.875rem;
+}
+.direction[data-direction="clear"] { --font-body: var(--font-explore-manrope); --radius: 0.375rem; --primary: var(--chart-1); }
+.direction {
+  --card-foreground: var(--foreground);
+  --primary-foreground: var(--explore-on-brand);
+  --input: var(--border);
+  --ring: var(--primary);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: var(--muted);
+  --accent-foreground: var(--foreground);
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.direction[data-direction="register"] {
+ --primary: var(--explore-register);
+ --radius: 0.125rem;
+}

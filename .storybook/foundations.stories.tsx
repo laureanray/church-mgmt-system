@@ -122,6 +122,7 @@ export const Color: StoryObj = {
 export const Typography: StoryObj = {
   render: () => (
     <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">IBM Plex Sans · Register type system</p>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
           Page title — text-2xl font-semibold tracking-tight
@@ -153,7 +154,7 @@ export const Radius: StoryObj = {
         <div key={r} className="space-y-2 text-center">
           <div
             className="size-20 border bg-muted"
-            style={{ borderRadius: `var(--radius-${r})` }}
+            style={{ borderRadius: `calc(var(--radius) * ${{ sm: 0.6, md: 0.8, lg: 1, xl: 1.4, "2xl": 1.8, "3xl": 2.2, "4xl": 2.6 }[r]})` }}
           />
           <code className="text-xs text-muted-foreground">rounded-{r}</code>
         </div>
