@@ -1,14 +1,15 @@
-name: AWS runner smoke
+name: Runner smoke
 
 on:
   pull_request:
     paths:
       - infra/github-runner/**
+      - infra/shared-ci/**
       - .github/workflows/aws-runner-smoke.yaml
   workflow_dispatch:
     inputs:
       project:
-        description: Deployed CodeBuild project name
+        description: CodeBuild fallback project (unused when EC2 routing is enabled)
         required: true
         default: church-mgmt-ci
         type: string
@@ -18,8 +19,8 @@ permissions:
 
 jobs:
   smoke:
-    if: github.event_name == 'workflow_dispatch' || (vars.AWS_CODEBUILD_SMOKE_PROJECT != '' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: codebuild-${{ inputs.project || vars.AWS_CODEBUILD_SMOKE_PROJECT }}-${{ github.run_id }}-${{ github.run_attempt }}
+    if: github.event_name == 'workflow_dispatch' || ((vars.AWS_EC2_RUNNER_ENABLED == 'true' || vars.AWS_CODEBUILD_SMOKE_PROJECT != '') && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.AWS_EC2_RUNNER_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('ec2-shared-ci-{0}-{1}-{2}-smoke', github.repository_id, github.run_id, github.run_attempt) || format('codebuild-{0}-{1}-{2}', inputs.project || vars.AWS_CODEBUILD_SMOKE_PROJECT, github.run_id, github.run_attempt) }}
     timeout-minutes: 15
     env:
       TZ: Asia/Manila
@@ -27,6 +28,16 @@ jobs:
       - uses: actions/checkout@v4
       # CodeBuild's image defaults to Node 18. Bun runs the Next, Playwright and
       # Storybook CLIs under whatever `node` is on PATH, and all three need 20+.
+      - name: Verify EC2 job isolation
+        if: vars.AWS_EC2_RUNNER_ENABLED == 'true'
+        run: |
+          test "$(docker info --format '{{.Name}}')" = "$(hostname)"
+          if curl -fsS --max-time 3 -X PUT \
+            -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+            http://169.254.169.254/latest/api/token >/dev/null 2>&1; then
+            echo '::error::The job can access the EC2 instance role.'
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -43,6 +54,8 @@ jobs:
           python3 --version
           docker version
           docker compose version
+          git --version
+          git worktree list --porcelain -z >/dev/null
       - name: Verify the Compose test stack starts
         # Same command the Tests job runs: Postgres, GoTrue and nginx under
         # Docker, which needs the project's privileged mode.
