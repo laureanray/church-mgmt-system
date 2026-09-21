@@ -61,6 +61,10 @@ export const members = pgTable(
     qrToken: text("qr_token").notNull().unique(),
 
     fullName: text("full_name").notNull(),
+    // Nullable for legacy records: never guess boundaries in an existing name.
+    firstName: text("first_name"),
+    middleName: text("middle_name"),
+    lastName: text("last_name"),
     birthdate: date("birthdate"),
     spiritualBirthday: date("spiritual_birthday"),
     // "Taon na naging Kaanib ng IRM" — year the member joined IRM.

@@ -33,7 +33,9 @@ const CURRENT_YEAR = new Date().getFullYear();
 const optionalId = z.preprocess(emptyToNull, z.string().min(1).nullable());
 
 export const memberSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name is required").max(200),
+  firstName: z.string().trim().min(1, "First name is required").max(200),
+  middleName: z.preprocess(emptyToNull, z.string().trim().max(200).nullish()).transform((v) => v ?? null),
+  lastName: z.string().trim().min(1, "Last name is required").max(200),
   birthdate: optionalDate,
   spiritualBirthday: optionalDate,
   memberSinceYear: z.preprocess(
@@ -56,7 +58,10 @@ export const memberSchema = z.object({
   educationalLevel: optionalText,
   occupation: optionalText,
   cellGroupId: optionalId,
-});
+}).transform((member) => ({
+  ...member,
+  fullName: [member.firstName, member.middleName, member.lastName].filter(Boolean).join(" "),
+}));
 
 export const serviceSchema = z.object({
   name: z.string().trim().min(1, "Service name is required").max(200),

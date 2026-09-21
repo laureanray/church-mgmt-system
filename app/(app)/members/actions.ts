@@ -16,7 +16,9 @@ export type MemberFormState =
 
 function readMemberForm(formData: FormData) {
   return memberSchema.safeParse({
-    fullName: formData.get("fullName"),
+    firstName: formData.get("firstName"),
+    middleName: formData.get("middleName"),
+    lastName: formData.get("lastName"),
     birthdate: formData.get("birthdate"),
     spiritualBirthday: formData.get("spiritualBirthday"),
     memberSinceYear: formData.get("memberSinceYear"),
