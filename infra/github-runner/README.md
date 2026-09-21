@@ -16,6 +16,13 @@ secrets remain the source of truth. The `quality` job has an 8-minute timeout
 and `tests` 20 minutes; the project allows 30. Each job has a distinct runner
 label (`job-quality`, `job-tests`) so one run's jobs never share a request.
 
+Fork pull requests never reach CodeBuild. The build's service role can read the
+repository PAT from Secrets Manager (CodeBuild needs it to clone and register
+the runner), so running fork-controlled code there would let a malicious PR
+exfiltrate an administration-capable credential. Both workflows route forks
+to `ubuntu-latest` instead, where they fail on the exhausted quota rather than
+run with the secret in reach. Same-repository branches are the trust boundary.
+
 Two things differ from GitHub-hosted runners and are already handled:
 
 - The CodeBuild image does not ship the `gh` CLI, so the coverage comment step

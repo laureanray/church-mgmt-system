@@ -11,10 +11,12 @@ permissions:
 # Jobs run on GitHub-hosted runners until the repository variable
 # AWS_CODEBUILD_PROJECT names a deployed CodeBuild project; then each job runs
 # in its own ephemeral CodeBuild container. The trailing `job-*` label keeps
-# every job's runner request distinct. See infra/github-runner/README.md.
+# every job's runner request distinct. Fork pull requests stay on GitHub-hosted
+# runners: the CodeBuild service role can read the repository PAT, and fork
+# code must never run where it can. See infra/github-runner/README.md.
 jobs:
   quality:
-    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && format('codebuild-{0}-{1}-{2} job-quality', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-quality', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +40,7 @@ jobs:
       # resolves them through its own Vite build, not tsc's project graph.
       - run: bun run build-storybook
   tests:
-    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && format('codebuild-{0}-{1}-{2} job-tests', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-tests', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
