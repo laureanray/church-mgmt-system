@@ -28,6 +28,16 @@ jobs:
       - uses: actions/checkout@v4
       # CodeBuild's image defaults to Node 18. Bun runs the Next, Playwright and
       # Storybook CLIs under whatever `node` is on PATH, and all three need 20+.
+      - name: Verify EC2 job isolation
+        if: vars.AWS_EC2_RUNNER_ENABLED == 'true'
+        run: |
+          test "$(docker info --format '{{.Name}}')" = "$(hostname)"
+          if curl -fsS --max-time 3 -X PUT \
+            -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' \
+            http://169.254.169.254/latest/api/token >/dev/null 2>&1; then
+            echo '::error::The job can access the EC2 instance role.'
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 24
