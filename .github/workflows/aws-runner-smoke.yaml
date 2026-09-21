@@ -25,6 +25,11 @@ jobs:
       TZ: Asia/Manila
     steps:
       - uses: actions/checkout@v4
+      # CodeBuild's image defaults to Node 18. Bun runs the Next, Playwright and
+      # Storybook CLIs under whatever `node` is on PATH, and all three need 20+.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
