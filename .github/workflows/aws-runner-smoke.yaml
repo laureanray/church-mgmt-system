@@ -1,0 +1,63 @@
+name: AWS runner smoke
+
+on:
+  pull_request:
+    paths:
+      - infra/github-runner/**
+      - .github/workflows/aws-runner-smoke.yaml
+  workflow_dispatch:
+    inputs:
+      project:
+        description: Deployed CodeBuild project name
+        required: true
+        default: church-mgmt-ci
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || (vars.AWS_CODEBUILD_SMOKE_PROJECT != '' && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: codebuild-${{ inputs.project || vars.AWS_CODEBUILD_SMOKE_PROJECT }}-${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 15
+    env:
+      TZ: Asia/Manila
+    steps:
+      - uses: actions/checkout@v4
+      # CodeBuild's image defaults to Node 18. Bun runs the Next, Playwright and
+      # Storybook CLIs under whatever `node` is on PATH, and all three need 20+.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify the toolchain the Tests workflow expects
+        run: |
+          bun --version
+          python3 --version
+          docker version
+          docker compose version
+      - name: Verify the Compose test stack starts
+        # Same command the Tests job runs: Postgres, GoTrue and nginx under
+        # Docker, which needs the project's privileged mode.
+        run: bun run test:db:up
+      - name: Verify Chromium can launch
+        run: |
+          bunx playwright install --with-deps chromium
+          cat > "$RUNNER_TEMP/smoke.mjs" <<'JS'
+          import { chromium } from '@playwright/test'
+          const browser = await chromium.launch({ headless: true })
+          const page = await browser.newPage()
+          await page.setContent('<title>Runner ready</title>')
+          if (await page.title() !== 'Runner ready') throw new Error('Browser check failed')
+          await browser.close()
+          JS
+          bun "$RUNNER_TEMP/smoke.mjs"
+      - run: bun run test:db:down
+        if: always()

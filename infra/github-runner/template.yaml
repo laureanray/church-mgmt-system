@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Ephemeral CodeBuild GitHub Actions runners for the IRM church management system
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: church-mgmt-ci
+    AllowedPattern: '[A-Za-z][A-Za-z0-9-]{1,100}'
+  Repository:
+    Type: String
+    Default: laureanray/church-mgmt-system
+    AllowedPattern: '[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+'
+  GitHubSecretArn:
+    Type: String
+    Description: Existing Secrets Manager secret containing the repository-scoped GitHub PAT
+    AllowedPattern: 'arn:aws:secretsmanager:ap-southeast-1:[0-9]{12}:secret:.+'
+
+Resources:
+  Logs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/codebuild/${ProjectName}
+      RetentionInDays: 7
+
+  RunnerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnEquals:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ProjectName}
+      Policies:
+        - PolicyName: RunnerLogsAndSource
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt Logs.Arn
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Ref GitHubSecretArn
+
+  Runner:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Ref ProjectName
+      Description: One disposable GitHub runner per job; no idle fleet
+      ServiceRole: !GetAtt RunnerRole.Arn
+      # Do not set ConcurrentBuildLimit: it rejects excess webhook jobs rather
+      # than queuing them. Let the regional account quota provide the queue.
+      # The longest CI job allows 20 minutes; leave headroom for runner setup.
+      TimeoutInMinutes: 30
+      QueuedTimeoutInMinutes: 60
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Cache:
+        Type: NO_CACHE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_MEDIUM
+        Image: aws/codebuild/standard:7.0
+        ImagePullCredentialsType: CODEBUILD
+        # The Tests job starts Postgres, GoTrue and nginx with Docker Compose.
+        PrivilegedMode: true
+      Source:
+        Type: GITHUB
+        Location: !Sub https://github.com/${Repository}
+        Auth:
+          Type: SECRETS_MANAGER
+          Resource: !Ref GitHubSecretArn
+        ReportBuildStatus: false
+      Triggers:
+        Webhook: true
+        FilterGroups:
+          - - Type: EVENT
+              Pattern: WORKFLOW_JOB_QUEUED
+      LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: !Ref Logs
+        S3Logs:
+          Status: DISABLED
+
+Outputs:
+  ProjectName:
+    Value: !Ref Runner
+  ProjectArn:
+    Value: !GetAtt Runner.Arn

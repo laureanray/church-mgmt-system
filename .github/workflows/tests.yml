@@ -8,12 +8,24 @@ on:
   pull_request:
 permissions:
   contents: read
+# Jobs run on GitHub-hosted runners until the repository variable
+# AWS_CODEBUILD_PROJECT names a deployed CodeBuild project; then each job runs
+# in its own ephemeral CodeBuild container. The trailing `job-*` label keeps
+# every job's runner request distinct. Fork pull requests stay on GitHub-hosted
+# runners: the CodeBuild service role can read the repository PAT, and fork
+# code must never run where it can. See infra/github-runner/README.md.
 jobs:
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-quality', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+      # CodeBuild's image defaults to Node 18. Bun runs the Next, Playwright and
+      # Storybook CLIs under whatever `node` is on PATH, and all three need 20+.
+      - uses: actions/setup-node@v4
+        if: vars.AWS_CODEBUILD_PROJECT != ''
+        with:
+          node-version: 24
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
@@ -28,7 +40,7 @@ jobs:
       # resolves them through its own Vite build, not tsc's project graph.
       - run: bun run build-storybook
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-tests', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -38,6 +50,12 @@ jobs:
       TZ: Asia/Manila
     steps:
       - uses: actions/checkout@v4
+      # CodeBuild's image defaults to Node 18. Bun runs the Next, Playwright and
+      # Storybook CLIs under whatever `node` is on PATH, and all three need 20+.
+      - uses: actions/setup-node@v4
+        if: vars.AWS_CODEBUILD_PROJECT != ''
+        with:
+          node-version: 24
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: .bun-version
@@ -48,15 +66,31 @@ jobs:
           bun scripts/coverage-report.mjs > coverage/report.md
           cat coverage/report.md >> "$GITHUB_STEP_SUMMARY"
       - name: Comment coverage on pull request
-        # Fork pull requests get a read-only token, so skip rather than fail the job.
+        # Fork pull requests get a read-only token, so skip rather than fail the
+        # job. github-script instead of the gh CLI: GitHub-hosted images ship
+        # gh, the CodeBuild image does not.
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh pr comment "${{ github.event.pull_request.number }}" \
-            --body-file coverage/report.md --edit-last --create-if-none
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs')
+            const marker = '<!-- coverage-report -->'
+            const body = `${marker}\n${fs.readFileSync('coverage/report.md', 'utf8')}`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            })
+            const existing = comments.find(
+              (comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker),
+            )
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body })
+            }
       # Needs neither Docker nor a database, so it runs ahead of the slow steps
       # and a broken component fails the job in seconds rather than minutes. It
       # stays below the coverage comment, which must land before anything else
