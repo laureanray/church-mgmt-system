@@ -106,6 +106,16 @@ is what turns a failed server-action round-trip into a visibly red field. It
 derives its ids from `htmlFor`, deliberately not `useId`, so it stays renderable
 from a Server Component; pass `htmlFor` on every field.
 
+### Member names
+
+`Members/MemberForm` uses First Name, Middle Name (Optional), and Last Name,
+with native name autocomplete and required first/last names. The three fields
+share one row on wider layouts and stack on narrow screens. Each accepts
+compound names. Stored parts compose the display name used by the directory
+and QR views. Legacy names remain intact and are shown for reference when staff
+enter their parts on the next edit; no automatic splitting is attempted.
+Stories cover new, edit, legacy, validation, and pending submission states.
+
 ### Date entry
 
 Use `DatePicker` from `components/form/date-picker.tsx` inside `Field` for

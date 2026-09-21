@@ -31,13 +31,21 @@ for (const role of ['admin', 'leader']) {
   test(`${role} can create a member through the server action`, async ({ page }) => {
     await signIn(page, role);
     await page.goto('/members/new');
-    const name = `E2E ${role} ${crypto.randomUUID()}`;
-    await page.getByLabel('Full Name').fill(name);
+    const lastName = crypto.randomUUID();
+    const name = `E2E ${role} ${lastName}`;
+    await page.getByRole('textbox', { name: 'First Name', exact: true }).fill(`E2E ${role}`);
+    await page.getByRole('textbox', { name: 'Last Name', exact: true }).fill(lastName);
     await page.getByRole('button', { name: 'Create member', exact: true }).click();
     await expect(page).toHaveURL(/\/members\/(?!new$)[^/]+$/);
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
+    await page.goto(`${page.url()}/edit`);
+    await expect(page.getByRole('textbox', { name: 'First Name', exact: true })).toHaveValue(`E2E ${role}`);
+    await expect(page.getByRole('textbox', { name: 'Last Name', exact: true })).toHaveValue(lastName);
+    await page.getByLabel('Middle Name (Optional)').fill('Reyes');
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
+    await expect(page.getByRole('heading', { name: `E2E ${role} Reyes ${lastName}`, exact: true })).toBeVisible();
   });
 }
 

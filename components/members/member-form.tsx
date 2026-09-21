@@ -77,21 +77,26 @@ export function MemberForm({
           <CardTitle className="text-base">Personal Information</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Full Name"
-            htmlFor="fullName"
-            required
-            error={errors.fullName}
-            className="sm:col-span-2"
-          >
-            <Input
-              id="fullName"
-              name="fullName"
-              defaultValue={member?.fullName ?? ""}
-              placeholder="Juan Dela Cruz"
-              required
-            />
-          </Field>
+          {member && !member.firstName && !member.lastName ? (
+            <p className="text-sm text-muted-foreground sm:col-span-2">
+              Current name: <span className="font-medium text-foreground">{member.fullName}</span>.
+              {" "}Please enter the first, middle (if any), and last names before saving.
+            </p>
+          ) : null}
+          <div className="grid gap-4 sm:col-span-2 sm:grid-cols-3">
+            <Field label="First Name" htmlFor="firstName" required error={errors.firstName}>
+              <Input id="firstName" name="firstName" autoComplete="given-name"
+                defaultValue={member?.firstName ?? ""} placeholder="Juan Miguel" maxLength={200} required />
+            </Field>
+            <Field label="Middle Name (Optional)" htmlFor="middleName" error={errors.middleName}>
+              <Input id="middleName" name="middleName" autoComplete="additional-name"
+                defaultValue={member?.middleName ?? ""} placeholder="Reyes" maxLength={200} />
+            </Field>
+            <Field label="Last Name" htmlFor="lastName" required error={errors.lastName}>
+              <Input id="lastName" name="lastName" autoComplete="family-name"
+                defaultValue={member?.lastName ?? ""} placeholder="Dela Cruz" maxLength={200} required />
+            </Field>
+          </div>
 
           <Field label="Gender" htmlFor="gender" error={errors.gender}>
             <FormSelect
