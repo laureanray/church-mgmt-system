@@ -106,6 +106,22 @@ is what turns a failed server-action round-trip into a visibly red field. It
 derives its ids from `htmlFor`, deliberately not `useId`, so it stays renderable
 from a Server Component; pass `htmlFor` on every field.
 
+### Date entry
+
+Use `DatePicker` from `components/form/date-picker.tsx` inside `Field` for
+editable date-only values. It accepts `id`, `name`, an ISO `defaultValue`,
+`required`, and `disabled`, and forwards the field’s error/description contract.
+The visible input explicitly uses `DD/MM/YYYY`; a hidden input submits the
+existing `YYYY-MM-DD` server-action value. Clearing submits an empty string.
+Impossible dates are rejected rather than silently rolled into another month.
+
+The shared `Calendar` wraps React DayPicker for day-grid keyboard navigation
+inside a Base UI popover. Month/year selectors support birthdays without
+paging through decades. Today and Clear are explicit actions; Escape returns
+focus to the editable field. Both components have isolated Storybook examples,
+including validation and a native FormData/reset demonstration. Datetime fields
+continue to use their existing datetime control.
+
 ## Patterns
 
 | Component | Replaces |
