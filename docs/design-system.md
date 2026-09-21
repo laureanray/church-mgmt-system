@@ -29,10 +29,22 @@ scanners lose the contrast they decode from.
 
 ### The palette
 
-Neutral greys throughout, with one brand hue: a deep indigo at
-`oklch(0.47 0.142 264)`. Light mode fills with it and labels in white; dark mode
-lifts it to `oklch(0.72 0.132 264)` and flips the label dark, because the
-light-mode value is too dark to fill a button on a near-black surface.
+The **Register** direction uses IBM Plex Sans for body text and headings,
+neutral surfaces, a 2px base corner radius, and a restrained burgundy accent.
+Light mode uses `oklch(0.40 0.10 15)` with light labels; dark mode lifts the
+accent to `oklch(0.77 0.09 15)` with dark labels. Sidebar actions and focus
+rings use the same brand colors. Chart hues remain categorical.
+
+`lib/fonts.ts` is shared by the app layout and Storybook. Storybook places the
+font variables on `<html>` so portalled menus and dialogs use the same face.
+Use `font-sans` / `font-heading`, semantic color utilities, and the radius
+scale; small controls use `rounded-md` rather than reading a generated
+Tailwind alias at runtime. Circular avatars and switch thumbs stay circular.
+
+Prefer thin rules, compact rows, and plain section headings. Avoid adding
+extra tinted cards or decorative icon containers just to fill space. Earlier
+visual studies remain under Foundations / Design Directions for comparison;
+the ordinary component stories show the selected theme.
 
 Status colours are `--success`, `--warning`, `--info` and `--destructive`. Each
 is used as `text-x` over a `bg-x/10` tint — the Badge variants of the same name

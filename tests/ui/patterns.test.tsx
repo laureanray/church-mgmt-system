@@ -77,7 +77,7 @@ describe("StatCard", () => {
   test("accents exactly one card in the dashboard row", () => {
     const { container } = render(<DashboardRow />);
 
-    expect(container.querySelectorAll(".bg-primary\\/10")).toHaveLength(1);
+    expect(container.querySelectorAll(".text-primary")).toHaveLength(1);
   });
 });
 

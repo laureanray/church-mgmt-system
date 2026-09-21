@@ -30,10 +30,10 @@ export function InfoTile({
       <CardContent className="flex items-center gap-3">
         <div
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-md",
+            "flex shrink-0 items-center justify-center",
             accent
-              ? "bg-primary/10 text-primary"
-              : "bg-muted text-muted-foreground",
+              ? "text-primary"
+              : "text-muted-foreground",
           )}
         >
           <Icon className="size-4" aria-hidden />

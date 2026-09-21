@@ -23,13 +23,13 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Fallbacks, not decoration: `--font-geist-*` is published by next/font at
+  /* Fallbacks, not decoration: `--font-body` and `--font-geist-mono` is published by next/font at
      runtime, so any context that renders a component without the app shell
      — Storybook, a test, a print window — would otherwise land on the
      browser's default serif. */
-  --font-sans: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
+  --font-sans: var(--font-body, ui-sans-serif, system-ui, sans-serif);
   --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, monospace);
-  --font-heading: var(--font-geist-sans, ui-sans-serif, system-ui, sans-serif);
+  --font-heading: var(--font-body, ui-sans-serif, system-ui, sans-serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -79,9 +79,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
 
-  /* IRM indigo. Dark enough to carry white text on a filled button and to sit
-     under the neutral greys without competing with them. */
-  --primary: oklch(0.47 0.142 264);
+  /* Register burgundy: reserve the brand accent for actions and emphasis. */
+  --primary: oklch(0.40 0.10 15);
   --primary-foreground: oklch(0.985 0 0);
 
   --secondary: oklch(0.97 0 0);
@@ -100,7 +99,7 @@
 
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.47 0.142 264);
+  --ring: oklch(0.40 0.10 15);
 
   /* Categorical, not sequential: these identify cell-group tiers, so the hues
      are spread and the lightness held roughly constant. */
@@ -110,16 +109,16 @@
   --chart-4: oklch(0.62 0.16 12);
   --chart-5: oklch(0.6 0.13 205);
 
-  --radius: 0.625rem;
+  --radius: 0.125rem;
 
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.47 0.142 264);
+  --sidebar-primary: oklch(0.40 0.10 15);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.47 0.142 264);
+  --sidebar-ring: oklch(0.40 0.10 15);
 }
 
 .dark {
@@ -130,10 +129,9 @@
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
 
-  /* The light-mode indigo is too dark to fill a button on a near-black
-     surface, so dark mode lifts it and flips the label to dark. */
-  --primary: oklch(0.72 0.132 264);
-  --primary-foreground: oklch(0.19 0.03 264);
+  /* Lift the brand accent and use dark labels on filled actions. */
+  --primary: oklch(0.77 0.09 15);
+  --primary-foreground: oklch(0.19 0.015 15);
 
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
@@ -149,7 +147,7 @@
 
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.72 0.132 264);
+  --ring: oklch(0.77 0.09 15);
 
   --chart-1: oklch(0.72 0.132 264);
   --chart-2: oklch(0.74 0.13 162);
@@ -159,12 +157,12 @@
 
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.132 264);
-  --sidebar-primary-foreground: oklch(0.19 0.03 264);
+  --sidebar-primary: oklch(0.77 0.09 15);
+  --sidebar-primary-foreground: oklch(0.19 0.015 15);
   --sidebar-accent: oklch(0.269 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.72 0.132 264);
+  --sidebar-ring: oklch(0.77 0.09 15);
 }
 
 @layer base {
@@ -178,3 +176,62 @@
     @apply font-sans;
   }
 }
+
+/* Candidate palettes, consumed only by the Storybook direction study. */
+:root {
+  --explore-forest: oklch(0.40 0.075 155);
+  --explore-paper: oklch(0.975 0.012 85);
+  --explore-paper-card: oklch(0.995 0.005 85);
+  --explore-paper-ink: oklch(0.25 0.025 155);
+  --explore-paper-muted: oklch(0.935 0.016 85);
+  --explore-paper-secondary: oklch(0.46 0.02 85);
+  --explore-paper-border: oklch(0.85 0.02 85);
+  --explore-teal: oklch(0.43 0.075 210);
+  --explore-cool: oklch(0.975 0.008 210);
+  --explore-cool-card: oklch(1 0 0);
+  --explore-cool-ink: oklch(0.25 0.025 210);
+  --explore-cool-muted: oklch(0.935 0.016 210);
+  --explore-cool-secondary: oklch(0.46 0.025 210);
+  --explore-cool-border: oklch(0.86 0.02 210);
+  --explore-on-brand: oklch(0.99 0 0);
+}
+.dark {
+  --explore-forest: oklch(0.78 0.09 155);
+  --explore-paper: oklch(0.19 0.015 85);
+  --explore-paper-card: oklch(0.235 0.015 85);
+  --explore-paper-ink: oklch(0.95 0.012 85);
+  --explore-paper-muted: oklch(0.28 0.018 85);
+  --explore-paper-secondary: oklch(0.75 0.02 85);
+  --explore-paper-border: oklch(0.36 0.02 85);
+  --explore-teal: oklch(0.78 0.085 210);
+  --explore-cool: oklch(0.19 0.02 210);
+  --explore-cool-card: oklch(0.235 0.022 210);
+  --explore-cool-ink: oklch(0.95 0.012 210);
+  --explore-cool-muted: oklch(0.28 0.025 210);
+  --explore-cool-secondary: oklch(0.75 0.025 210);
+  --explore-cool-border: oklch(0.36 0.025 210);
+  --explore-on-brand: oklch(0.19 0.015 180);
+}
+
+@theme inline {
+  --color-explore-forest: var(--explore-forest);
+  --color-explore-paper: var(--explore-paper);
+  --color-explore-paper-card: var(--explore-paper-card);
+  --color-explore-paper-ink: var(--explore-paper-ink);
+  --color-explore-paper-muted: var(--explore-paper-muted);
+  --color-explore-paper-secondary: var(--explore-paper-secondary);
+  --color-explore-paper-border: var(--explore-paper-border);
+  --color-explore-teal: var(--explore-teal);
+  --color-explore-cool: var(--explore-cool);
+  --color-explore-cool-card: var(--explore-cool-card);
+  --color-explore-cool-ink: var(--explore-cool-ink);
+  --color-explore-cool-muted: var(--explore-cool-muted);
+  --color-explore-cool-secondary: var(--explore-cool-secondary);
+  --color-explore-cool-border: var(--explore-cool-border);
+  --color-explore-on-brand: var(--explore-on-brand);
+}
+
+/* Register direction: one restrained accent, neutral working surfaces. */
+:root { --explore-register: oklch(0.40 0.10 15); }
+.dark { --explore-register: oklch(0.77 0.09 15); }
+@theme inline { --color-explore-register: var(--explore-register); }
