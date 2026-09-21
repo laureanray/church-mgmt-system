@@ -1,14 +1,15 @@
-name: AWS runner smoke
+name: Runner smoke
 
 on:
   pull_request:
     paths:
       - infra/github-runner/**
+      - infra/shared-ci/**
       - .github/workflows/aws-runner-smoke.yaml
   workflow_dispatch:
     inputs:
       project:
-        description: Deployed CodeBuild project name
+        description: CodeBuild fallback project (unused when EC2 routing is enabled)
         required: true
         default: church-mgmt-ci
         type: string
@@ -18,8 +19,8 @@ permissions:
 
 jobs:
   smoke:
-    if: github.event_name == 'workflow_dispatch' || (vars.AWS_CODEBUILD_SMOKE_PROJECT != '' && github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: codebuild-${{ inputs.project || vars.AWS_CODEBUILD_SMOKE_PROJECT }}-${{ github.run_id }}-${{ github.run_attempt }}
+    if: github.event_name == 'workflow_dispatch' || ((vars.AWS_EC2_RUNNER_ENABLED == 'true' || vars.AWS_CODEBUILD_SMOKE_PROJECT != '') && github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ${{ vars.AWS_EC2_RUNNER_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('ec2-shared-ci-{0}-{1}-{2}-smoke', github.repository_id, github.run_id, github.run_attempt) || format('codebuild-{0}-{1}-{2}', inputs.project || vars.AWS_CODEBUILD_SMOKE_PROJECT, github.run_id, github.run_attempt) }}
     timeout-minutes: 15
     env:
       TZ: Asia/Manila

@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 # Jobs run on GitHub-hosted runners until the repository variable
@@ -16,7 +17,7 @@ permissions:
 # code must never run where it can. See infra/github-runner/README.md.
 jobs:
   quality:
-    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-quality', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.AWS_EC2_RUNNER_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('ec2-shared-ci-{0}-{1}-{2}-quality', github.repository_id, github.run_id, github.run_attempt) || vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-quality', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
@@ -35,12 +36,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: python3 -m unittest discover -s infra/shared-ci -p 'test_*.py'
       - run: bun run test:irm
       # A story that fails to compile is invisible to typecheck — Storybook
       # resolves them through its own Vite build, not tsc's project graph.
       - run: bun run build-storybook
   tests:
-    runs-on: ${{ vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-tests', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
+    runs-on: ${{ vars.AWS_EC2_RUNNER_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('ec2-shared-ci-{0}-{1}-{2}-tests', github.repository_id, github.run_id, github.run_attempt) || vars.AWS_CODEBUILD_PROJECT != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('codebuild-{0}-{1}-{2} job-tests', vars.AWS_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
