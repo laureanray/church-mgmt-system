@@ -35,7 +35,7 @@ export function DatePicker({ id, name, defaultValue, disabled, required, classNa
   const formatId = `${id}-format`;
 
   React.useEffect(() => {
-    input.current?.setCustomValidity(invalidText ? "Enter a valid date as DD/MM/YYYY." : "");
+    input.current?.setCustomValidity(invalidText ? "Enter a valid date as MM/DD/YYYY." : "");
   }, [invalidText]);
   React.useEffect(() => {
     const form = input.current?.form;
@@ -56,7 +56,7 @@ export function DatePicker({ id, name, defaultValue, disabled, required, classNa
       <Popover.Root open={open} onOpenChange={setOpen}>
         <div className="relative">
           <Input ref={input} id={id} value={text} disabled={disabled} required={required}
-            placeholder="DD/MM/YYYY" autoComplete="off" className="pr-10"
+            placeholder="MM/DD/YYYY" autoComplete="off" className="pr-10"
             aria-describedby={[describedBy, formatId, touched && invalidText ? errorId : ""].filter(Boolean).join(" ")}
             aria-invalid={invalid || (touched && invalidText) || undefined}
             onChange={(event) => setText(event.target.value)} onBlur={() => setTouched(true)} />
@@ -82,8 +82,8 @@ export function DatePicker({ id, name, defaultValue, disabled, required, classNa
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
-      <span id={formatId} className="sr-only">Day, month, year. DD/MM/YYYY.</span>
-      {touched && invalidText ? <p id={errorId} role="alert" className="text-xs font-medium text-destructive">Enter a valid date as DD/MM/YYYY.</p> : null}
+      <span id={formatId} className="sr-only">Month, day, year. MM/DD/YYYY.</span>
+      {touched && invalidText ? <p id={errorId} role="alert" className="text-xs font-medium text-destructive">Enter a valid date as MM/DD/YYYY.</p> : null}
     </div>
   );
 }

@@ -121,7 +121,7 @@ Stories cover new, edit, legacy, validation, and pending submission states.
 Use `DatePicker` from `components/form/date-picker.tsx` inside `Field` for
 editable date-only values. It accepts `id`, `name`, an ISO `defaultValue`,
 `required`, and `disabled`, and forwards the field’s error/description contract.
-The visible input explicitly uses `DD/MM/YYYY`; a hidden input submits the
+The visible input explicitly uses `MM/DD/YYYY`; a hidden input submits the
 existing `YYYY-MM-DD` server-action value. Clearing submits an empty string.
 Impossible dates are rejected rather than silently rolled into another month.
 

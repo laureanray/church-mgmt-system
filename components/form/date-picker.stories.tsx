@@ -35,7 +35,7 @@ export const Open: Story = {
 export const InvalidEntry: Story = {
   play: async ({ canvasElement }) => {
     const input = within(canvasElement).getByRole("textbox");
-    await userEvent.type(input, "31/02/2026");
+    await userEvent.type(input, "02/31/2026");
     await userEvent.tab();
   },
 };
