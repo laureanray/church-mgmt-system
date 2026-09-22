@@ -16,12 +16,12 @@ export function dateToIso(date: Date): string {
 export function dateInputText(iso: string): string {
   if (!dateFromIso(iso)) return "";
   const [year, month, day] = iso.split("-");
-  return `${day}/${month}/${year}`;
+  return `${month}/${day}/${year}`;
 }
 
 export function dateInputIso(text: string): string | undefined {
   const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(text.trim());
   if (!match) return;
-  const iso = `${match[3]}-${match[2].padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  const iso = `${match[3]}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
   return dateFromIso(iso) ? iso : undefined;
 }
