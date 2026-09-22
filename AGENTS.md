@@ -299,6 +299,23 @@ start edits in the original checkout, on `main`, or on another task's branch.
 Read-only assessment may run in the existing checkout before creating a
 worktree, but the worktree must exist before the first file mutation.
 
+### Required pull request handoff
+
+Every task that changes repository files must end with a pull request against
+`main`. This includes code, tests, documentation, configuration, dependencies,
+generated files, and changes to this `AGENTS.md`. After reviewing the diff and
+running relevant checks, commit the intended files, push the task branch, and
+open a ready-for-review PR before reporting the task complete. Keep follow-up
+fixes for that task on the same branch and PR. Link each PR to the current Codex
+thread when that capability is available, and include its URL in the handoff.
+
+The PR is also the handoff for background Codex Code Review. Check the PR for
+a running or completed Codex review. If none appears and the repository has
+Codex Code Review enabled, request one with `@codex review` and verify that the
+request was registered. Report any push, PR, or review-trigger blocker clearly;
+do not describe an unreviewed PR as already under Codex review. Leave merging
+to the user unless they explicitly request it.
+
 ### Worktree lifecycle
 
 The `irm` manager lives in `tools/irm/`; see its README for installation and
