@@ -1,7 +1,7 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { connectTestDatabase, migrateTestDatabase, resetTestDatabase } from "../support/database";
 import { testAdminClient, testEmail, TEST_PASSWORD } from "../support/auth";
-import { users, members, cellGroups } from "../../db/schema";
+import { users, members, cellGroups, roles } from "../../db/schema";
 
 const ROLES = ['admin', 'leader', 'usher'] as const;
 
@@ -11,6 +11,7 @@ export default async function setup() {
   const admin = testAdminClient();
   try {
     await resetTestDatabase(client);
+    await db.delete(roles).where(eq(roles.isSystem, false));
 
     // Supabase Auth owns credentials, so each staff account is created in
     // GoTrue first and its id becomes the profile's primary key — the same
@@ -32,7 +33,7 @@ export default async function setup() {
       }
 
       await db.insert(users).values({
-        id: data.user.id, name: `Test ${role}`, email, role,
+        id: data.user.id, name: `Test ${role}`, email, roleId: role,
       });
     }
 

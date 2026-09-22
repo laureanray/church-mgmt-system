@@ -6,6 +6,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -18,7 +19,53 @@ import {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Users — staff who log in (admin / leader / usher)
+// Roles and permissions — application authorization
+// ---------------------------------------------------------------------------
+
+export const roles = pgTable("roles", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  // Built-in roles keep stable ids for migration and cannot be deleted. The
+  // Admin role is additionally protected from permission changes in actions.
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const permissions = pgTable("permissions", {
+  key: text("key").primaryKey(),
+  module: text("module").notNull(),
+  action: text("action").notNull(),
+  label: text("label").notNull(),
+  description: text("description").notNull(),
+  sortOrder: integer("sort_order").notNull(),
+});
+
+export const rolePermissions = pgTable(
+  "role_permissions",
+  {
+    roleId: text("role_id")
+      .notNull()
+      .references(() => roles.id, { onDelete: "cascade" }),
+    permissionKey: text("permission_key")
+      .notNull()
+      .references(() => permissions.key, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.roleId, table.permissionKey] }),
+    index("role_permissions_permission_key_idx").on(table.permissionKey),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// Users — staff who log in and receive access through one role
 // ---------------------------------------------------------------------------
 
 export const users = pgTable("users", {
@@ -31,9 +78,10 @@ export const users = pgTable("users", {
   // searched without a round trip to the Auth admin API. Supabase remains the
   // source of truth; app/(app)/users/actions.ts writes both together.
   email: text("email").notNull().unique(),
-  role: text("role", { enum: ["admin", "leader", "usher"] })
+  roleId: text("role_id")
     .notNull()
-    .default("usher"),
+    .default("usher")
+    .references(() => roles.id, { onDelete: "restrict" }),
   // True when an admin has issued a temporary password; forces a reset at login.
   // Supabase Auth has no equivalent, so the flag stays app-side.
   mustChangePassword: boolean("must_change_password")
@@ -45,7 +93,7 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
-});
+}, (table) => [index("users_role_id_idx").on(table.roleId)]);
 
 // ---------------------------------------------------------------------------
 // Members — the church congregation. Each has a unique QR token.
@@ -276,6 +324,36 @@ export const appSettings = pgTable("app_settings", {
 // Relations
 // ---------------------------------------------------------------------------
 
+export const rolesRelations = relations(roles, ({ many }) => ({
+  users: many(users),
+  rolePermissions: many(rolePermissions),
+}));
+
+export const permissionsRelations = relations(permissions, ({ many }) => ({
+  rolePermissions: many(rolePermissions),
+}));
+
+export const rolePermissionsRelations = relations(
+  rolePermissions,
+  ({ one }) => ({
+    role: one(roles, {
+      fields: [rolePermissions.roleId],
+      references: [roles.id],
+    }),
+    permission: one(permissions, {
+      fields: [rolePermissions.permissionKey],
+      references: [permissions.key],
+    }),
+  }),
+);
+
+export const usersRelations = relations(users, ({ one }) => ({
+  role: one(roles, {
+    fields: [users.roleId],
+    references: [roles.id],
+  }),
+}));
+
 export const membersRelations = relations(members, ({ one, many }) => ({
   attendance: many(attendance),
   cellGroup: one(cellGroups, {
@@ -339,6 +417,8 @@ export const attendanceRelations = relations(attendance, ({ one }) => ({
 // ---------------------------------------------------------------------------
 
 export type User = typeof users.$inferSelect;
+export type Role = typeof roles.$inferSelect;
+export type Permission = typeof permissions.$inferSelect;
 export type Member = typeof members.$inferSelect;
 export type Service = typeof services.$inferSelect;
 export type ServiceSchedule = typeof serviceSchedules.$inferSelect;

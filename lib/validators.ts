@@ -4,8 +4,8 @@ import {
   GENDERS,
   MARITAL_STATUSES,
   SERVICE_TYPES,
-  USER_ROLES,
 } from "./constants";
+import { PERMISSION_KEYS } from "./permissions";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -101,11 +101,20 @@ const emailField = z.preprocess(
 export const createUserSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   email: emailField,
-  role: z.enum(USER_ROLES),
+  roleId: z.string().trim().min(1, "Role is required"),
 });
 
 // Editing an existing user (same fields; password handled separately).
 export const editUserSchema = createUserSchema;
+
+export const roleSchema = z.object({
+  name: z.string().trim().min(1, "Role name is required").max(100),
+  description: optionalText,
+  permissions: z
+    .array(z.enum(PERMISSION_KEYS))
+    .default([])
+    .transform((values) => [...new Set(values)]),
+});
 
 // A user setting their own new password.
 export const changePasswordSchema = z

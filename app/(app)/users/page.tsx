@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import { Pencil, UserCog } from "lucide-react";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
-import { USER_ROLES, USER_ROLE_LABELS } from "@/lib/constants";
+import { roles, users } from "@/db/schema";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import {
   allowedValues,
   overRunPage,
@@ -18,6 +17,7 @@ import {
 import { initials } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreateUserDialog } from "@/components/users/create-user-dialog";
+import { createUser } from "./actions";
 import { DeleteUserButton } from "@/components/users/delete-user-button";
 import { ResetPasswordButton } from "@/components/users/reset-password-button";
 import { DataTable } from "@/components/patterns/data-table";
@@ -27,12 +27,19 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 
-type StaffRow = typeof users.$inferSelect;
+type StaffRow = {
+  id: string;
+  name: string;
+  email: string;
+  roleId: string;
+  roleName: string;
+  mustChangePassword: boolean;
+};
 
 const SORT_COLUMNS = {
   name: users.name,
   email: users.email,
-  role: users.role,
+  role: roles.name,
   status: users.mustChangePassword,
 } as const;
 
@@ -41,7 +48,11 @@ export default async function UsersPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
-  const currentUser = await requireRole(["admin"]);
+  const currentUser = await requirePermission("users.view");
+  const roleOptions = await db
+    .select({ value: roles.id, label: roles.name })
+    .from(roles)
+    .orderBy(asc(roles.name));
 
   const ctx = tableContext("/users", await searchParams, {
     sortKeys: Object.keys(SORT_COLUMNS),
@@ -50,7 +61,10 @@ export default async function UsersPage({
   });
   const { state } = ctx;
 
-  const roles = allowedValues(state.filters.role, USER_ROLES);
+  const selectedRoles = allowedValues(
+    state.filters.role,
+    roleOptions.map(({ value }) => value),
+  );
   const where = and(
     state.query
       ? or(
@@ -58,7 +72,7 @@ export default async function UsersPage({
           ilike(users.email, `%${state.query}%`),
         )
       : undefined,
-    roles.length ? inArray(users.role, roles) : undefined,
+    selectedRoles.length ? inArray(users.roleId, selectedRoles) : undefined,
   );
 
   const sortColumn = SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS];
@@ -66,8 +80,16 @@ export default async function UsersPage({
 
   const [rows, [{ matching }]] = await Promise.all([
     db
-      .select()
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        roleId: users.roleId,
+        roleName: roles.name,
+        mustChangePassword: users.mustChangePassword,
+      })
       .from(users)
+      .innerJoin(roles, eq(users.roleId, roles.id))
       .where(where)
       .orderBy(direction(sortColumn), asc(users.id))
       .limit(state.perPage)
@@ -121,8 +143,8 @@ export default async function UsersPage({
       header: "Role",
       sortKey: "role",
       cell: (u) => (
-        <Badge variant={u.role === "admin" ? "default" : "secondary"}>
-          {USER_ROLE_LABELS[u.role]}
+        <Badge variant={u.roleId === "admin" ? "default" : "secondary"}>
+          {u.roleName}
         </Badge>
       ),
     },
@@ -147,21 +169,25 @@ export default async function UsersPage({
       width: "w-28",
       cell: (u) => (
         <div className="flex items-center justify-end gap-0.5">
-          <Link
-            href={`/users/${u.id}/edit`}
-            className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
-            aria-label={`Edit ${u.name}`}
-          >
-            <Pencil className="size-4" />
-          </Link>
-          <ResetPasswordButton id={u.id} name={u.name} />
-          {u.id === currentUser.id ? null : (
+          {hasPermission(currentUser, "users.update") ? (
+            <Link
+              href={`/users/${u.id}/edit`}
+              className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+              aria-label={`Edit ${u.name}`}
+            >
+              <Pencil className="size-4" />
+            </Link>
+          ) : null}
+          {hasPermission(currentUser, "users.reset_password") ? (
+            <ResetPasswordButton id={u.id} name={u.name} />
+          ) : null}
+          {u.id !== currentUser.id && hasPermission(currentUser, "users.delete") ? (
             <DeleteUserButton
               id={u.id}
               name={u.name}
               currentUserId={currentUser.id}
             />
-          )}
+          ) : null}
         </div>
       ),
     },
@@ -173,7 +199,9 @@ export default async function UsersPage({
         title="Staff Users"
         description="People who can log in to manage members and record attendance."
       >
-        <CreateUserDialog />
+        {hasPermission(currentUser, "users.create") ? (
+          <CreateUserDialog roles={roleOptions} action={createUser} />
+        ) : null}
       </PageHeader>
 
       <DataTable
@@ -191,10 +219,7 @@ export default async function UsersPage({
           {
             id: "role",
             label: "Role",
-            options: USER_ROLES.map((value) => ({
-              value,
-              label: USER_ROLE_LABELS[value],
-            })),
+            options: roleOptions,
           },
         ]}
         empty={{

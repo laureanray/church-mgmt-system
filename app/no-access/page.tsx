@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/card";
 
 /**
- * Terminal page for an account that exists in Supabase Auth but has no profile
- * row, so it has no role.
+ * Terminal page for an account without a staff profile or without the
+ * permission required by the route it tried to open.
  *
  * It must NOT call requireUser(): that is what sends people here, and proxy.ts
  * lets authenticated users through, so calling it would loop. Signing out is
@@ -34,12 +34,12 @@ export default function NoAccessPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              This account has no staff profile
+              This account does not have access
             </CardTitle>
             <CardDescription>
-              You signed in successfully, but the account is not set up as staff
-              yet, so it has no role. Ask an administrator to add you under
-              Staff Users, then sign in again.
+              You signed in successfully, but your staff role does not allow
+              this page, or your account has not been set up as staff yet. Ask
+              an administrator to review your role under Staff Users.
             </CardDescription>
           </CardHeader>
           <CardContent>

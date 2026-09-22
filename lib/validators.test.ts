@@ -1,5 +1,30 @@
 import { describe, expect, it } from "bun:test";
-import { cellGroupSchema, promoteSchema } from "./validators";
+import { cellGroupSchema, promoteSchema, roleSchema } from "./validators";
+
+describe("roleSchema", () => {
+  it("accepts catalog permissions and removes duplicates", () => {
+    expect(
+      roleSchema.parse({
+        name: "Coordinator",
+        description: "",
+        permissions: ["members.view", "members.view", "members.update"],
+      }),
+    ).toEqual({
+      name: "Coordinator",
+      description: null,
+      permissions: ["members.view", "members.update"],
+    });
+  });
+
+  it("rejects permission keys that are not in the deployed catalog", () => {
+    expect(
+      roleSchema.safeParse({
+        name: "Coordinator",
+        permissions: ["members.publish"],
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe("cellGroupSchema", () => {
   it("requires a name", () => {

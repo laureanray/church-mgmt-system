@@ -10,8 +10,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 # IRM Ministries — church management
 
 A members directory where every member carries a QR code; scanning that code
-records attendance against a service. Staff sign in with their **email** (roles:
-`admin`, `leader`, `usher`). Filipino church context — expect Taglish domain
+records attendance against a service. Staff sign in with their **email** and
+receive module permissions through a database-backed role. Filipino church context — expect Taglish domain
 terms in the schema and `en-PH` formatting throughout.
 
 Stack: Next.js 16 App Router (route protection lives in `proxy.ts`, the
@@ -151,7 +151,7 @@ nothing imports them. Every form follows one shape — `service-form.tsx` plus
 
 1. A `"use server"` action in the route's `actions.ts`, typed
    `(prev: XFormState, formData: FormData) => Promise<XFormState>`.
-2. The action calls `requireRole([...])` first, then parses `FormData` with a
+2. The action calls `requirePermission("module.action")` first, then parses `FormData` with a
    zod schema from `lib/validators.ts`, returning
    `{ errors: fieldErrors(parsed.error), message }` when parsing fails.
 3. On success: mutate, `revalidatePath()` each affected route, then `redirect()`.
@@ -166,10 +166,10 @@ columns stay nullable rather than filling with `""`.
 **Supabase Auth** is the identity provider; staff sign in with **email** and
 password. Supabase owns credentials — this codebase never hashes a password.
 
-- `lib/auth-helpers.ts` exports `requireUser()` and `requireRole([...])`, both
-  of which redirect. Call one at the top of **every** page and **every** server
-  action: `proxy.ts` only checks that a session exists, so role enforcement is
-  per-route. `requireUser()` is wrapped in React `cache()`, so calling it from
+- `lib/auth-helpers.ts` exports `requireUser()` and `requirePermission(key)`, both
+  of which redirect. Call one at the top of **every** page and
+  `requirePermission` at the top of **every** server action: `proxy.ts` only checks
+  that a session exists, so permission enforcement is per-route. `requireUser()` is wrapped in React `cache()`, so calling it from
   the layout *and* the page *and* an action costs one check per request — call
   it freely rather than threading the user through props.
 - Tokens are verified by `verifiedUserId()` in `lib/supabase/verify.ts`, not by
@@ -184,13 +184,15 @@ password. Supabase owns credentials — this codebase never hashes a password.
   project moves to asymmetric signing keys. Never swap either of these for a
   bare `getSession()`, which does not verify at all.
 - The `users` table is a **profile**, not a credential store. Its `id` *is* the
-  `auth.users` UUID, and `requireUser()` joins the two — Supabase for identity,
-  this table for `role`. A signed-in user with no profile row is rejected,
-  because role is what every downstream check depends on.
+  `auth.users` UUID, and `requireUser()` joins it to `roles` and
+  `role_permissions` — Supabase for identity, these tables for authorization. A
+  signed-in user with no profile row or valid role is rejected. See
+  `docs/authorization.md` before adding a module or permission.
 - Three Supabase clients, and picking the wrong one is a security bug:
   `lib/supabase/server.ts` (session-bound, for pages and actions),
   `lib/supabase/client.ts` (browser), and `lib/supabase/admin.ts` (service
-  role — bypasses everything, so only after `requireRole(["admin"])`). The
+  role — bypasses everything, so only after the relevant `users.*` permission).
+  The
   verifier in `lib/supabase/verify.ts` is a fourth, but it is anonymous and
   read-only — it holds no session and can reach no data.
 - Creating or deleting staff writes to **both** Supabase Auth and the profile

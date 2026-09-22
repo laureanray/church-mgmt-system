@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { updateSchedule } from "../../actions";
 import { db } from "@/db";
 import { serviceSchedules } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { ScheduleForm } from "@/components/services/schedule-form";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -14,7 +14,7 @@ export default async function EditSchedulePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.update");
   const { id } = await params;
 
   const schedule = await db.query.serviceSchedules.findFirst({

@@ -1,14 +1,5 @@
 // Shared label maps and option lists for enums, used across forms and tables.
 
-export const USER_ROLES = ["admin", "leader", "usher"] as const;
-export type UserRole = (typeof USER_ROLES)[number];
-
-export const USER_ROLE_LABELS: Record<UserRole, string> = {
-  admin: "Admin",
-  leader: "Leader",
-  usher: "Usher",
-};
-
 export const GENDERS = ["male", "female"] as const;
 export type Gender = (typeof GENDERS)[number];
 

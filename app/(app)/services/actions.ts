@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { services } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { fieldErrors, serviceSchema } from "@/lib/validators";
 
 export type ServiceFormState =
@@ -27,7 +27,7 @@ export async function createService(
   _prev: ServiceFormState,
   formData: FormData,
 ): Promise<ServiceFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.create");
 
   const parsed = readServiceForm(formData);
   if (!parsed.success) {
@@ -52,7 +52,7 @@ export async function updateService(
   _prev: ServiceFormState,
   formData: FormData,
 ): Promise<ServiceFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.update");
 
   const parsed = readServiceForm(formData);
   if (!parsed.success) {
@@ -74,7 +74,7 @@ export async function updateService(
 }
 
 export async function deleteService(id: string) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.delete");
   await db.delete(services).where(eq(services.id, id));
   revalidatePath("/services");
   redirect("/services");

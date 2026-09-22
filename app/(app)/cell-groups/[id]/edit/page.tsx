@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { updateCellGroup } from "../../actions";
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { CellGroupForm } from "@/components/cell-groups/cell-group-form";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -14,7 +14,7 @@ export default async function EditCellGroupPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.update");
   const { id } = await params;
 
   const cellGroup = await db.query.cellGroups.findFirst({

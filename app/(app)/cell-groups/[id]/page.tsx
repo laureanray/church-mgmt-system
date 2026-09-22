@@ -5,7 +5,7 @@ import { Pencil, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { formatMeeting } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { BackLink } from "@/components/patterns/back-link";
@@ -26,7 +26,7 @@ export default async function CellGroupDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireUser();
+  const user = await requirePermission("cell_groups.view");
   const { id } = await params;
 
   const cellGroup = await db.query.cellGroups.findFirst({
@@ -41,7 +41,8 @@ export default async function CellGroupDetailPage({
     .where(eq(members.cellGroupId, id))
     .orderBy(asc(members.fullName));
 
-  const manage = canManage(user.role);
+  const canUpdate = hasPermission(user, "cell_groups.update");
+  const canDelete = hasPermission(user, "cell_groups.delete");
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -55,16 +56,20 @@ export default async function CellGroupDetailPage({
           cellGroup.meetingLocation,
         )}
       >
-        {manage ? (
+        {canUpdate || canDelete ? (
           <>
-            <Link
-              href={`/cell-groups/${cellGroup.id}/edit`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              <Pencil className="size-4" />
-              Edit
-            </Link>
-            <DeleteCellGroupButton id={cellGroup.id} name={cellGroup.name} />
+            {canUpdate ? (
+              <Link
+                href={`/cell-groups/${cellGroup.id}/edit`}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              >
+                <Pencil className="size-4" />
+                Edit
+              </Link>
+            ) : null}
+            {canDelete ? (
+              <DeleteCellGroupButton id={cellGroup.id} name={cellGroup.name} />
+            ) : null}
           </>
         ) : null}
       </PageHeader>

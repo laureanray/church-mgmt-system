@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { serviceSchedules } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import {
   deleteFutureEmptyOccurrences,
   generateForSchedule,
@@ -32,7 +32,7 @@ export async function createSchedule(
   _prev: ScheduleFormState,
   formData: FormData,
 ): Promise<ScheduleFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.create");
 
   const parsed = readScheduleForm(formData);
   if (!parsed.success) {
@@ -60,7 +60,7 @@ export async function updateSchedule(
   _prev: ScheduleFormState,
   formData: FormData,
 ): Promise<ScheduleFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.update");
 
   const parsed = readScheduleForm(formData);
   if (!parsed.success) {
@@ -88,7 +88,7 @@ export async function updateSchedule(
 }
 
 export async function toggleScheduleActive(id: string, active: boolean) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.delete");
 
   const [schedule] = await db
     .update(serviceSchedules)
@@ -108,7 +108,7 @@ export async function toggleScheduleActive(id: string, active: boolean) {
 }
 
 export async function deleteSchedule(id: string) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.update");
   // FK is ON DELETE SET NULL — past occurrences become standalone services and
   // keep their attendance history.
   await db.delete(serviceSchedules).where(eq(serviceSchedules.id, id));

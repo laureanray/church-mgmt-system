@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { roles, users } from "@/db/schema";
+import { requirePermission } from "@/lib/auth-helpers";
 import { generateTempPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
@@ -25,12 +25,12 @@ export async function createUser(
   _prev: CreateUserState,
   formData: FormData,
 ): Promise<CreateUserState> {
-  await requireRole(["admin"]);
+  await requirePermission("users.create");
 
   const parsed = createUserSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
-    role: formData.get("role"),
+    roleId: formData.get("roleId"),
   });
   if (!parsed.success) {
     return {
@@ -39,7 +39,14 @@ export async function createUser(
     };
   }
 
-  const { name, email, role } = parsed.data;
+  const { name, email, roleId } = parsed.data;
+
+  const assignedRole = await db.query.roles.findFirst({
+    where: eq(roles.id, roleId),
+  });
+  if (!assignedRole) {
+    return { errors: { roleId: "Select an available role." } };
+  }
 
   const taken = await db.query.users.findFirst({
     where: eq(users.email, email),
@@ -72,7 +79,7 @@ export async function createUser(
       id: data.user.id,
       name,
       email,
-      role,
+      roleId,
       mustChangePassword: true,
     });
   } catch (err) {
@@ -95,12 +102,12 @@ export async function updateUser(
   _prev: EditUserState,
   formData: FormData,
 ): Promise<EditUserState> {
-  await requireRole(["admin"]);
+  const currentUser = await requirePermission("users.update");
 
   const parsed = editUserSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
-    role: formData.get("role"),
+    roleId: formData.get("roleId"),
   });
   if (!parsed.success) {
     return {
@@ -109,7 +116,14 @@ export async function updateUser(
     };
   }
 
-  const { name, email, role } = parsed.data;
+  const { name, email, roleId } = parsed.data;
+
+  const assignedRole = await db.query.roles.findFirst({
+    where: eq(roles.id, roleId),
+  });
+  if (!assignedRole) {
+    return { errors: { roleId: "Select an available role." } };
+  }
 
   const clash = await db.query.users.findFirst({
     where: and(eq(users.email, email), ne(users.id, id)),
@@ -120,8 +134,15 @@ export async function updateUser(
 
   const existing = await db.query.users.findFirst({
     where: eq(users.id, id),
-    columns: { email: true },
+    columns: { email: true, roleId: true },
   });
+
+  if (existing && id === currentUser.id && existing.roleId !== roleId) {
+    return {
+      errors: { roleId: "You cannot change your own role." },
+      message: "Ask another authorized staff member to change your role.",
+    };
+  }
 
   // Email is the login identity, so a change has to reach Supabase too, or the
   // staff member would keep signing in with the old address.
@@ -138,7 +159,7 @@ export async function updateUser(
 
   await db
     .update(users)
-    .set({ name, email, role, updatedAt: new Date() })
+    .set({ name, email, roleId, updatedAt: new Date() })
     .where(eq(users.id, id));
 
   revalidatePath("/users");
@@ -153,7 +174,7 @@ export async function resetUserPassword(
   id: string,
   _prev: ResetPasswordState,
 ): Promise<ResetPasswordState> {
-  await requireRole(["admin"]);
+  await requirePermission("users.reset_password");
 
   const tempPassword = generateTempPassword();
   const admin = createAdminClient();
@@ -176,7 +197,7 @@ export async function resetUserPassword(
 }
 
 export async function deleteUser(currentUserId: string, id: string) {
-  await requireRole(["admin"]);
+  await requirePermission("users.delete");
   if (id === currentUserId) {
     // Guard against locking yourself out.
     return;

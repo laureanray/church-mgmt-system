@@ -3,13 +3,13 @@ import { asc } from "drizzle-orm";
 import { createCellGroup } from "../actions";
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { CellGroupForm } from "@/components/cell-groups/cell-group-form";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewCellGroupPage() {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.create");
 
   const [memberRows, cellRows] = await Promise.all([
     db

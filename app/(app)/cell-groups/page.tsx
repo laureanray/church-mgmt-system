@@ -4,7 +4,7 @@ import { Network, Plus } from "lucide-react";
 
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { buildCellGraph } from "@/lib/cell-graph";
 import { cn } from "@/lib/utils";
 import { CellGroupsView } from "@/components/cell-groups/cell-groups-view";
@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/patterns/page-header";
 import { buttonVariants } from "@/components/ui/button";
 
 export default async function CellGroupsPage() {
-  const user = await requireUser();
+  const user = await requirePermission("cell_groups.view");
 
   const [people, cells] = await Promise.all([
     db
@@ -48,7 +48,8 @@ export default async function CellGroupsPage() {
     .filter((p) => !p.cellGroupId)
     .map((p) => ({ id: p.id, name: p.name }));
   const cellOptions = cells.map((c) => ({ value: c.id, label: c.name }));
-  const manage = canManage(user.role);
+  const canCreate = hasPermission(user, "cell_groups.create");
+  const canUpdate = hasPermission(user, "cell_groups.update");
 
   return (
     <>
@@ -58,7 +59,7 @@ export default async function CellGroupsPage() {
           cells.length === 1 ? "" : "s"
         } · ${graph.unassignedCount} not yet assigned`}
       >
-        {manage ? (
+        {canCreate ? (
           <Link href="/cell-groups/new" className={cn(buttonVariants())}>
             <Plus className="size-4" />
             New Cell Group
@@ -79,7 +80,7 @@ export default async function CellGroupsPage() {
           cells={cells}
           unassigned={unassigned}
           cellOptions={cellOptions}
-          canManage={manage}
+          canManage={canUpdate}
         />
       )}
     </>

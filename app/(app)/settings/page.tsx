@@ -1,6 +1,6 @@
 import { CheckCircle2, ExternalLink, Sheet } from "lucide-react";
 
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { getSettings, saveSheetsConfig } from "@/lib/sheets";
 import { CodeBlock } from "@/components/integrations/code-block";
 import { SheetsSettingsForm } from "@/components/integrations/sheets-settings-form";
@@ -63,7 +63,7 @@ function doPost(e) {
 }
 
 export default async function SettingsPage() {
-  await requireRole(["admin"]);
+  await requirePermission("settings.view");
 
   // Ensure a stable secret exists so the snippet and form always match.
   let settings = await getSettings();

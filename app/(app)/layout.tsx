@@ -25,7 +25,12 @@ export default async function AppLayout({
   return (
     <SidebarProvider>
       <AppSidebar
-        user={{ name: user.name, email: user.email, role: user.role }}
+        user={{
+          name: user.name,
+          email: user.email,
+          roleName: user.role.name,
+          permissions: user.permissions,
+        }}
       />
       <SidebarInset>
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">

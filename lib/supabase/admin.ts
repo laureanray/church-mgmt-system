@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * Service-role client for managing staff accounts: creating users, resetting
  * passwords, deleting. It bypasses every access check, so call it only after
- * `requireRole(["admin"])` and never from a client component.
+ * an appropriate `users.*` permission and never from a client component.
  */
 export function createAdminClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

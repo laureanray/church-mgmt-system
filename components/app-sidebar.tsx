@@ -11,11 +11,12 @@ import {
   Network,
   Settings,
   UserCog,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
 import { NavUser } from "@/components/nav-user";
-import type { UserRole } from "@/lib/constants";
+import type { PermissionKey } from "@/lib/permissions";
 import {
   Sidebar,
   SidebarContent,
@@ -32,38 +33,49 @@ type NavItem = {
   title: string;
   href: string;
   icon: LucideIcon;
-  roles?: UserRole[]; // omit = everyone
+  permission: PermissionKey;
 };
 
 const NAV_ITEMS: NavItem[] = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Scan Attendance", href: "/scan", icon: QrCode },
-  { title: "Members", href: "/members", icon: Users },
-  { title: "Cell Groups", href: "/cell-groups", icon: Network },
-  { title: "Services", href: "/services", icon: CalendarDays },
+  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
+  { title: "Scan Attendance", href: "/scan", icon: QrCode, permission: "attendance.view" },
+  { title: "Members", href: "/members", icon: Users, permission: "members.view" },
+  { title: "Cell Groups", href: "/cell-groups", icon: Network, permission: "cell_groups.view" },
+  { title: "Services", href: "/services", icon: CalendarDays, permission: "services.view" },
   {
     title: "Staff Users",
     href: "/users",
     icon: UserCog,
-    roles: ["admin"],
+    permission: "users.view",
+  },
+  {
+    title: "Roles & Permissions",
+    href: "/roles",
+    icon: ShieldCheck,
+    permission: "roles.view",
   },
   {
     title: "Settings",
     href: "/settings",
     icon: Settings,
-    roles: ["admin"],
+    permission: "settings.view",
   },
 ];
 
 export function AppSidebar({
   user,
 }: {
-  user: { name: string; email: string; role: UserRole };
+  user: {
+    name: string;
+    email: string;
+    roleName: string;
+    permissions: PermissionKey[];
+  };
 }) {
   const pathname = usePathname();
 
-  const items = NAV_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(user.role),
+  const items = NAV_ITEMS.filter((item) =>
+    user.permissions.includes(item.permission),
   );
 
   return (

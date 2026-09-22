@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { updateMember } from "../../actions";
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { MemberForm } from "@/components/members/member-form";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -14,7 +14,7 @@ export default async function EditMemberPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("members.update");
   const { id } = await params;
 
   const member = await db.query.members.findFirst({

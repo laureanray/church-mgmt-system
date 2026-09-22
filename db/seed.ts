@@ -56,7 +56,7 @@ async function main() {
       id: data.user.id,
       name: "Church Admin",
       email: adminEmail,
-      role: "admin",
+      roleId: "admin",
       mustChangePassword: false,
     });
 

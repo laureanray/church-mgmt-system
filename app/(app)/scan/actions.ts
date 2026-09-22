@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import { attendance, members } from "@/db/schema";
-import { requireUser } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { extractToken } from "@/lib/qr";
 
 export type ScanResult =
@@ -22,7 +22,7 @@ export async function recordAttendance(
   serviceId: string,
   scannedText: string,
 ): Promise<ScanResult> {
-  const user = await requireUser();
+  const user = await requirePermission("attendance.record");
 
   if (!serviceId) {
     return { status: "error", message: "No service selected." };

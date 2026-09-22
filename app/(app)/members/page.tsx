@@ -5,7 +5,7 @@ import { Plus, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { members } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import {
   GENDERS,
   GENDER_LABELS,
@@ -47,8 +47,8 @@ export default async function MembersPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
-  const user = await requireUser();
-  const manage = canManage(user.role);
+  const user = await requirePermission("members.view");
+  const manage = hasPermission(user, "members.create");
 
   const ctx = tableContext("/members", await searchParams, {
     sortKeys: Object.keys(SORT_COLUMNS),

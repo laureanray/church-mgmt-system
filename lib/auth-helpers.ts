@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import type { UserRole } from "@/lib/constants";
+import { rolePermissions, roles, users } from "@/db/schema";
+import type { PermissionKey } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import { verifiedUserId } from "@/lib/supabase/verify";
 
@@ -15,7 +15,8 @@ export type SessionUser = {
   id: string;
   name: string;
   email: string;
-  role: UserRole;
+  role: { id: string; name: string };
+  permissions: PermissionKey[];
   mustChangePassword: boolean;
 };
 
@@ -39,9 +40,19 @@ export const requireUser = cache(async function requireUser(): Promise<SessionUs
     redirect("/login");
   }
 
-  const profile = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+  const [profile] = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      mustChangePassword: users.mustChangePassword,
+      roleId: roles.id,
+      roleName: roles.name,
+    })
+    .from(users)
+    .innerJoin(roles, eq(users.roleId, roles.id))
+    .where(eq(users.id, userId))
+    .limit(1);
 
   // Authenticated in Supabase but with no profile row — an account created
   // outside the admin screens. Refuse rather than guess a role, since role is
@@ -54,28 +65,45 @@ export const requireUser = cache(async function requireUser(): Promise<SessionUs
     redirect("/no-access");
   }
 
+  const assignedPermissions = await db
+    .select({ key: rolePermissions.permissionKey })
+    .from(rolePermissions)
+    .where(eq(rolePermissions.roleId, profile.roleId));
+
   return {
     id: profile.id,
     name: profile.name,
     email: profile.email,
-    role: profile.role,
+    role: { id: profile.roleId, name: profile.roleName },
+    permissions: assignedPermissions.map(({ key }) => key as PermissionKey),
     mustChangePassword: profile.mustChangePassword,
   };
 });
 
 /**
- * Ensures the signed-in user has one of the allowed roles.
- * Redirects to /dashboard (which everyone can see) if not authorized.
+ * Ensures the signed-in user has the requested permission. Every page and
+ * action performs its own check; hiding a UI control is not authorization.
  */
-export async function requireRole(roles: UserRole[]): Promise<SessionUser> {
+export async function requirePermission(
+  permission: PermissionKey,
+): Promise<SessionUser> {
   const user = await requireUser();
-  if (!roles.includes(user.role)) {
-    redirect("/dashboard");
+  if (!hasPermission(user, permission)) {
+    redirect("/no-access");
   }
   return user;
 }
 
-/** True if the given role is permitted to manage members/services. */
-export function canManage(role: UserRole) {
-  return role === "admin" || role === "leader";
+export function hasPermission(
+  user: Pick<SessionUser, "permissions">,
+  permission: PermissionKey,
+) {
+  return user.permissions.includes(permission);
+}
+
+export function hasAnyPermission(
+  user: Pick<SessionUser, "permissions">,
+  permissions: readonly PermissionKey[],
+) {
+  return permissions.some((permission) => hasPermission(user, permission));
 }
