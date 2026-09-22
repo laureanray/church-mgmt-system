@@ -258,6 +258,12 @@ the custom variant is `&:is(.dark *)`, which matches descendants of `.dark` and
 never the element carrying it. **Check every new story in both themes**; that is
 the cheapest way to catch a colour that only works in one.
 
+The application uses the same class-based contract through `next-themes`. It
+starts from the device preference, stores an explicit light or dark choice in
+the browser, and applies the class before paint. The header's `ThemeToggle`
+changes that preference; keep theme-aware components on semantic tokens so the
+switch remains a single root-class change rather than component-local logic.
+
 Storybook builds with Vite while the app builds with Turbopack, so
 `.storybook/main.ts` wires Tailwind up a second time through
 `@tailwindcss/vite`. Same `app/globals.css`, same tokens — only the bundler
