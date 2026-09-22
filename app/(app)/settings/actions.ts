@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import {
   buildAllRows,
   buildRowsForService,
@@ -20,7 +20,7 @@ export async function saveSheetsSettings(
   _prev: SaveSettingsState,
   formData: FormData,
 ): Promise<SaveSettingsState> {
-  await requireRole(["admin"]);
+  await requirePermission("settings.update");
 
   const url = String(formData.get("webhookUrl") ?? "").trim() || null;
   const secret = String(formData.get("webhookSecret") ?? "").trim() || null;
@@ -38,12 +38,12 @@ export async function saveSheetsSettings(
 }
 
 export async function testConnection(): Promise<SyncResult> {
-  await requireRole(["admin"]);
+  await requirePermission("settings.update");
   return pingSheets();
 }
 
 export async function syncAllAttendance(): Promise<SyncResult> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.sync");
   const rows = await buildAllRows();
   return pushRows(rows);
 }
@@ -51,7 +51,7 @@ export async function syncAllAttendance(): Promise<SyncResult> {
 export async function syncServiceAttendance(
   serviceId: string,
 ): Promise<SyncResult> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.sync");
   const rows = await buildRowsForService(serviceId);
   return pushRows(rows);
 }

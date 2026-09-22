@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { members } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { fieldErrors, memberSchema } from "@/lib/validators";
 
 export type MemberFormState =
@@ -52,7 +52,7 @@ export async function createMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("members.create");
 
   const parsed = readMemberForm(formData);
   if (!parsed.success) {
@@ -77,7 +77,7 @@ export async function updateMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("members.update");
 
   const parsed = readMemberForm(formData);
   if (!parsed.success) {
@@ -106,7 +106,7 @@ export async function updateMember(
 }
 
 export async function deleteMember(id: string) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("members.delete");
   const [deleted] = await db
     .delete(members)
     .where(eq(members.id, id))

@@ -146,6 +146,12 @@ continue to use their existing datetime control.
 | `SearchField` | The list-page search box |
 | `DataTable` | Every table in the app: sorting, paging, search, facets, columns |
 
+Domain-specific editors follow the same layers. `PermissionMatrix` groups the
+authorization catalog by module and uses native named checkboxes so the role
+form submits ordinary `FormData`; `RoleForm` composes it with the shared Field,
+Card, Input, Textarea, and Button primitives. Their stories cover new, edited,
+empty, and protected states without requiring a database.
+
 ### DataTable
 
 `components/patterns/data-table/` is the only thing that renders a `<table>`

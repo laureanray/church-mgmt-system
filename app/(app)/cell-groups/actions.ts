@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { cellGroups, members } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { wouldCreateCycle } from "@/lib/cell-graph";
 import {
   assignSchema,
@@ -36,7 +36,7 @@ export async function createCellGroup(
   _prev: CellGroupFormState,
   formData: FormData,
 ): Promise<CellGroupFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.create");
 
   const parsed = readForm(formData);
   if (!parsed.success) {
@@ -69,7 +69,7 @@ export async function updateCellGroup(
   _prev: CellGroupFormState,
   formData: FormData,
 ): Promise<CellGroupFormState> {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.update");
 
   const parsed = readForm(formData);
   if (!parsed.success) {
@@ -117,7 +117,7 @@ export async function updateCellGroup(
 }
 
 export async function deleteCellGroup(id: string) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.delete");
   // Postgres would fire the ON DELETE SET NULL cascades on its own, but doing
   // it explicitly also bumps updatedAt on the rows we touch — members become
   // unassigned, child cells become roots. Harmless alongside the cascade.
@@ -136,7 +136,7 @@ export async function deleteCellGroup(id: string) {
 }
 
 export async function assignMemberToCellGroup(formData: FormData) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.update");
   const parsed = assignSchema.safeParse({
     memberId: formData.get("memberId"),
     cellGroupId: formData.get("cellGroupId"),
@@ -153,7 +153,7 @@ export async function assignMemberToCellGroup(formData: FormData) {
 }
 
 export async function promoteMemberToLeader(formData: FormData) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("cell_groups.update");
 
   const parsed = promoteSchema.safeParse({
     memberId: formData.get("memberId"),

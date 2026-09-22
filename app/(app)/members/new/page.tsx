@@ -3,13 +3,13 @@ import { asc } from "drizzle-orm";
 import { createMember } from "../actions";
 import { db } from "@/db";
 import { cellGroups } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { MemberForm } from "@/components/members/member-form";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewMemberPage() {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("members.create");
 
   const cellRows = await db
     .select({ id: cellGroups.id, name: cellGroups.name })

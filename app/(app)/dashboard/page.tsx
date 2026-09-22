@@ -11,7 +11,7 @@ import {
 
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { tableContext } from "@/lib/data-table";
 import { formatDateTime } from "@/lib/format";
@@ -39,7 +39,7 @@ type RecentServiceRow = {
 };
 
 export default async function DashboardPage() {
-  const user = await requireUser();
+  const user = await requirePermission("dashboard.view");
   // This async Server Component reads the clock after request-bound authentication.
   // eslint-disable-next-line react-hooks/purity
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -70,7 +70,7 @@ export default async function DashboardPage() {
         .limit(5),
     ]);
 
-  const manage = canManage(user.role);
+  const manage = hasPermission(user, "members.create");
 
   // A fixed five-row summary: no state to read, but the same table so the
   // dashboard's rows look and behave like every other list in the app.

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { ChevronsUpDown, KeyRound, LogOut } from "lucide-react";
 
 import { signOutAction } from "@/lib/auth-actions";
-import { USER_ROLE_LABELS, type UserRole } from "@/lib/constants";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -35,7 +34,7 @@ function initials(name: string) {
 export function NavUser({
   user,
 }: {
-  user: { name: string; email: string; role: UserRole };
+  user: { name: string; email: string; roleName: string };
 }) {
   const { isMobile } = useSidebar();
 
@@ -59,7 +58,7 @@ export function NavUser({
             <div className="grid flex-1 text-left text-sm leading-tight">
               <span className="truncate font-medium">{user.name}</span>
               <span className="truncate text-xs text-muted-foreground">
-                {USER_ROLE_LABELS[user.role]}
+                {user.roleName}
               </span>
             </div>
             <ChevronsUpDown className="ml-auto size-4" />

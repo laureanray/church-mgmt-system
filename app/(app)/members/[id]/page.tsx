@@ -6,7 +6,7 @@ import { CalendarCheck, Pencil } from "lucide-react";
 import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
 import { db } from "@/db";
 import { attendance, cellGroups, members, services } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { GENDER_LABELS, MARITAL_STATUS_LABELS } from "@/lib/constants";
 import {
   overRunPage,
@@ -56,7 +56,7 @@ export default async function MemberDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<RawSearchParams>;
 }) {
-  const user = await requireUser();
+  const user = await requirePermission("members.view");
   const { id } = await params;
 
   const member = await db.query.members.findFirst({
@@ -135,9 +135,11 @@ export default async function MemberDetailPage({
     },
   ];
 
-  const manage = canManage(user.role);
+  const canUpdate = hasPermission(user, "members.update");
+  const canDelete = hasPermission(user, "members.delete");
+  const canCreateCellGroup = hasPermission(user, "cell_groups.create");
 
-  const allCells = manage
+  const allCells = canUpdate || canCreateCellGroup
     ? await db
         .select({
           id: cellGroups.id,
@@ -183,16 +185,20 @@ export default async function MemberDetailPage({
           </div>
         </div>
 
-        {manage ? (
+        {canUpdate || canDelete ? (
           <div className="flex items-center gap-2">
-            <Link
-              href={`/members/${member.id}/edit`}
-              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-            >
-              <Pencil className="size-4" />
-              Edit
-            </Link>
-            <DeleteMemberButton id={member.id} name={member.fullName} />
+            {canUpdate ? (
+              <Link
+                href={`/members/${member.id}/edit`}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+              >
+                <Pencil className="size-4" />
+                Edit
+              </Link>
+            ) : null}
+            {canDelete ? (
+              <DeleteMemberButton id={member.id} name={member.fullName} />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -275,7 +281,7 @@ export default async function MemberDetailPage({
             </CardContent>
           </Card>
 
-          {manage && ledCell ? (
+          {canCreateCellGroup && ledCell ? (
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle className="text-base">Cell Leader</CardTitle>
@@ -295,7 +301,7 @@ export default async function MemberDetailPage({
             </Card>
           ) : null}
 
-          {manage && !ledCell ? (
+          {canCreateCellGroup && !ledCell ? (
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle className="text-base">Promote to Leader</CardTitle>

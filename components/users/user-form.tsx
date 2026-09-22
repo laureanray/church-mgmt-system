@@ -10,14 +10,8 @@ import { FormSelect } from "@/components/form/form-select";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { USER_ROLES, USER_ROLE_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { User } from "@/db/schema";
-
-const ROLE_OPTIONS = USER_ROLES.map((v) => ({
-  value: v,
-  label: USER_ROLE_LABELS[v],
-}));
 
 type UserAction = (
   state: EditUserState,
@@ -27,9 +21,11 @@ type UserAction = (
 export function UserForm({
   action,
   user,
+  roles,
 }: {
   action: UserAction;
   user: User;
+  roles: { value: string; label: string }[];
 }) {
   const [state, formAction, pending] = useActionState<EditUserState, FormData>(
     action,
@@ -74,16 +70,15 @@ export function UserForm({
             />
           </Field>
 
-          <Field label="Role" htmlFor="role" required error={errors.role}>
+          <Field label="Role" htmlFor="roleId" required error={errors.roleId}>
             <FormSelect
-              id="role"
-              name="role"
-              options={ROLE_OPTIONS}
-              defaultValue={user.role}
+              id="roleId"
+              name="roleId"
+              options={roles}
+              defaultValue={user.roleId}
               required
             />
           </Field>
-
         </CardContent>
       </Card>
 

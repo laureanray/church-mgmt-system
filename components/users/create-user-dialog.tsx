@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { Loader2, UserPlus } from "lucide-react";
 
-import { createUser, type CreateUserState } from "@/app/(app)/users/actions";
+import type { CreateUserState } from "@/app/(app)/users/actions";
 import { Field } from "@/components/form/field";
 import { FormSelect } from "@/components/form/form-select";
 import { TempPasswordReveal } from "@/components/users/temp-password-reveal";
@@ -19,20 +19,22 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { USER_ROLES, USER_ROLE_LABELS } from "@/lib/constants";
-
-const ROLE_OPTIONS = USER_ROLES.map((v) => ({
-  value: v,
-  label: USER_ROLE_LABELS[v],
-}));
-
-export function CreateUserDialog() {
+export function CreateUserDialog({
+  roles,
+  action,
+}: {
+  roles: { value: string; label: string }[];
+  action: (
+    state: CreateUserState,
+    formData: FormData,
+  ) => Promise<CreateUserState>;
+}) {
   const [open, setOpen] = useState(false);
   const [formKey, setFormKey] = useState(0);
   const [state, formAction, pending] = useActionState<
     CreateUserState,
     FormData
-  >(createUser, undefined);
+  >(action, undefined);
   const errors = state?.errors ?? {};
   const created = Boolean(state?.ok && state?.tempPassword);
 
@@ -113,15 +115,15 @@ export function CreateUserDialog() {
               </Field>
               <Field
                 label="Role"
-                htmlFor="user-role"
+                htmlFor="user-roleId"
                 required
-                error={errors.role}
+                error={errors.roleId}
               >
                 <FormSelect
-                  id="user-role"
-                  name="role"
-                  options={ROLE_OPTIONS}
-                  defaultValue="usher"
+                  id="user-roleId"
+                  name="roleId"
+                  options={roles}
+                  defaultValue={roles.find((role) => role.value === "usher")?.value}
                   placeholder="Select role"
                   required
                 />

@@ -53,14 +53,39 @@ for (const role of ['leader', 'usher']) {
   test(`${role} cannot open staff administration`, async ({ page }) => {
     await signIn(page, role);
     await page.goto('/users');
-    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page).toHaveURL(/\/no-access$/);
+    await expect(page.getByRole('heading', { name: 'No access yet' })).toBeVisible();
   });
 }
 
 test('usher cannot open member creation', async ({ page }) => {
   await signIn(page, 'usher');
   await page.goto('/members/new');
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/no-access$/);
+  await expect(page.getByRole('heading', { name: 'No access yet' })).toBeVisible();
+});
+
+test('admin can create a custom role with module permissions', async ({ page }) => {
+  await signIn(page, 'admin');
+  await page.goto('/roles');
+  await expect(page.getByRole('heading', { name: 'Roles & Permissions' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: /^Admin Built in/ })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Create role' }).click();
+  const name = `E2E Coordinator ${Date.now()}`;
+  await page.getByLabel('Role Name').fill(name);
+  await page.getByLabel('Description').fill('Created by the permission-management E2E test.');
+  await page.getByLabel('View dashboard').check();
+  await page.getByLabel('View members').check();
+  await page.getByRole('button', { name: 'Save role' }).click();
+
+  await expect(page).toHaveURL(/\/roles$/);
+  await expect(
+    page.getByRole('cell', {
+      name: `${name} Created by the permission-management E2E test.`,
+      exact: true,
+    }),
+  ).toBeVisible();
 });
 
 

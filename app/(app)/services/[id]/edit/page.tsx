@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { updateService } from "../../actions";
 import { db } from "@/db";
 import { services } from "@/db/schema";
-import { requireRole } from "@/lib/auth-helpers";
+import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { ServiceForm } from "@/components/services/service-form";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -14,7 +14,7 @@ export default async function EditServicePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requireRole(["admin", "leader"]);
+  await requirePermission("services.update");
   const { id } = await params;
 
   const service = await db.query.services.findFirst({

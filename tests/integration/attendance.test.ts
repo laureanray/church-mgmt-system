@@ -6,9 +6,9 @@ const database = connectTestDatabase();
 // bun's mock.module is not hoisted the way vi.mock is, so every mock has to be
 // registered before the module under test is imported — hence the dynamic
 // import below.
-const requireUser = mock();
+const requirePermission = mock();
 await mock.module("@/db", () => ({ db: database.db }));
-await mock.module("@/lib/auth-helpers", () => ({ requireUser }));
+await mock.module("@/lib/auth-helpers", () => ({ requirePermission }));
 await mock.module("next/cache", () => ({ revalidatePath: mock() }));
 const { recordAttendance } = await import("../../app/(app)/scan/actions");
 
@@ -19,8 +19,9 @@ beforeEach(async () => {
   await database.db.insert(users).values({ id: 'usher', email: 'usher@example.test', name: 'Usher' });
   await database.db.insert(members).values({ id: 'member', fullName: 'Ana Santos', qrToken: 'ana-token' });
   await database.db.insert(services).values({ id: 'service', name: 'Sunday', scheduledAt: new Date() });
-  requireUser.mockResolvedValue({
-    id: 'usher', name: 'Usher', role: 'usher', email: 'usher@example.test',
+  requirePermission.mockResolvedValue({
+    id: 'usher', name: 'Usher', role: { id: 'usher', name: 'Usher' },
+    permissions: ['attendance.record'], email: 'usher@example.test',
     mustChangePassword: false,
   });
 });
@@ -48,7 +49,7 @@ it("rejects missing services, empty codes and unknown members without writing at
 });
 
 it("requires authentication before recording attendance", async () => {
-  requireUser.mockRejectedValueOnce(new Error('unauthenticated'));
+  requirePermission.mockRejectedValueOnce(new Error('unauthenticated'));
   await expect(recordAttendance('service', 'ana-token')).rejects.toThrow('unauthenticated');
   expect(await database.db.select().from(attendance)).toHaveLength(0);
 });

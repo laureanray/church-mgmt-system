@@ -12,7 +12,7 @@ import {
 
 import { db } from "@/db";
 import { attendance, serviceSchedules, services } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import {
   DAYS_OF_WEEK,
   SERVICE_TYPES,
@@ -66,8 +66,10 @@ export default async function ServicesPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
-  const user = await requireUser();
-  const manage = canManage(user.role);
+  const user = await requirePermission("services.view");
+  const canCreate = hasPermission(user, "services.create");
+  const canUpdate = hasPermission(user, "services.update");
+  const canDelete = hasPermission(user, "services.delete");
 
   // Keep upcoming occurrences populated for all active schedules.
   try {
@@ -220,7 +222,7 @@ export default async function ServicesPage({
         title="Services"
         description="Recurring schedules and individual services you track attendance for."
       >
-        {manage ? (
+        {canCreate ? (
           <>
             <Link
               href="/services/schedules/new"
@@ -238,7 +240,7 @@ export default async function ServicesPage({
       </PageHeader>
 
       {/* Recurring schedules ------------------------------------------------ */}
-      {schedules.length > 0 || manage ? (
+      {schedules.length > 0 || canCreate ? (
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -252,7 +254,7 @@ export default async function ServicesPage({
                 variant="inline"
                 title="No recurring schedules yet."
                 action={
-                  manage ? (
+                  canCreate ? (
                     <Link
                       href="/services/schedules/new"
                       className={cn(buttonVariants({ size: "sm" }))}
@@ -291,23 +293,29 @@ export default async function ServicesPage({
                       {s.upcoming} upcoming
                     </span>
 
-                    {manage ? (
+                    {canUpdate || canDelete ? (
                       <div className="flex items-center gap-1">
-                        <ScheduleActiveToggle
-                          id={s.id}
-                          active={s.active}
-                          name={s.name}
-                        />
-                        <Link
-                          href={`/services/schedules/${s.id}/edit`}
-                          className={cn(
-                            buttonVariants({ variant: "ghost", size: "icon-sm" }),
-                          )}
-                          aria-label={`Edit ${s.name}`}
-                        >
-                          <Pencil className="size-4" />
-                        </Link>
-                        <DeleteScheduleButton id={s.id} name={s.name} />
+                        {canUpdate ? (
+                          <>
+                            <ScheduleActiveToggle
+                              id={s.id}
+                              active={s.active}
+                              name={s.name}
+                            />
+                            <Link
+                              href={`/services/schedules/${s.id}/edit`}
+                              className={cn(
+                                buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                              )}
+                              aria-label={`Edit ${s.name}`}
+                            >
+                              <Pencil className="size-4" />
+                            </Link>
+                          </>
+                        ) : null}
+                        {canDelete ? (
+                          <DeleteScheduleButton id={s.id} name={s.name} />
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

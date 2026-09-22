@@ -5,7 +5,7 @@ import { CalendarDays, MapPin, Pencil, QrCode, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
-import { canManage, requireUser } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { SERVICE_TYPE_LABELS } from "@/lib/constants";
 import {
   overRunPage,
@@ -53,7 +53,7 @@ export default async function ServiceDetailPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<RawSearchParams>;
 }) {
-  const user = await requireUser();
+  const user = await requirePermission("services.view");
   const { id } = await params;
 
   const service = await db.query.services.findFirst({
@@ -76,7 +76,10 @@ export default async function ServiceDetailPage({
   );
   const direction = state.direction === "asc" ? asc : desc;
 
-  const manage = canManage(user.role);
+  const canUpdate = hasPermission(user, "services.update");
+  const canDelete = hasPermission(user, "services.delete");
+  const canScan = hasPermission(user, "attendance.view");
+  const canSync = hasPermission(user, "services.sync");
   const [attendees, [{ matching }], total, sheetsOn] = await Promise.all([
     db
       .select({
@@ -103,7 +106,7 @@ export default async function ServiceDetailPage({
     // search — it is the service's attendance, and narrowing the list below
     // must not appear to change it.
     db.$count(attendance, scanned),
-    manage ? getSheetsConfig().then(Boolean) : Promise.resolve(false),
+    canSync ? getSheetsConfig().then(Boolean) : Promise.resolve(false),
   ]);
 
   const clamped = overRunPage(state, matching);
@@ -147,16 +150,17 @@ export default async function ServiceDetailPage({
       <BackLink href="/services" label="Back to services" />
 
       <PageHeader title={service.name}>
-        <Link
-          href={`/scan?service=${service.id}`}
-          className={cn(buttonVariants())}
-        >
-          <QrCode className="size-4" />
-          Scan attendance
-        </Link>
+        {canScan ? (
+          <Link
+            href={`/scan?service=${service.id}`}
+            className={cn(buttonVariants())}
+          >
+            <QrCode className="size-4" />
+            Scan attendance
+          </Link>
+        ) : null}
         {sheetsOn ? <SyncServiceButton serviceId={service.id} /> : null}
-        {manage ? (
-          <>
+        {canUpdate ? (
             <Link
               href={`/services/${service.id}/edit`}
               className={cn(buttonVariants({ variant: "outline" }))}
@@ -164,8 +168,9 @@ export default async function ServiceDetailPage({
               <Pencil className="size-4" />
               Edit
             </Link>
+        ) : null}
+        {canDelete ? (
             <DeleteServiceButton id={service.id} name={service.name} />
-          </>
         ) : null}
       </PageHeader>
 
