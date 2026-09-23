@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   GENDERS,
   MARITAL_STATUSES,
+  MEMBER_STATUSES,
   SERVICE_TYPES,
 } from "./constants";
 import { PERMISSION_KEYS } from "./permissions";
@@ -49,6 +50,11 @@ export const memberSchema = z.object({
   ),
   gender: z.preprocess(emptyToNull, z.enum(GENDERS).nullable()),
   maritalStatus: z.preprocess(emptyToNull, z.enum(MARITAL_STATUSES).nullable()),
+  // A form that omits the field keeps the column default rather than failing.
+  status: z.preprocess(
+    (v) => emptyToNull(v) ?? undefined,
+    z.enum(MEMBER_STATUSES, "Choose a valid status").default("active"),
+  ),
   spouseName: optionalText,
   weddingAnniversary: optionalDate,
   contactNumber: optionalText,

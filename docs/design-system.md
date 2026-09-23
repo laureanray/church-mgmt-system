@@ -116,6 +116,20 @@ and QR views. Legacy names remain intact and are shown for reference when staff
 enter their parts on the next edit; no automatic splitting is attempted.
 Stories cover new, edit, legacy, validation, and pending submission states.
 
+### Member status
+
+A member's lifecycle — `active`, `visitor`, `inactive`, `transferred`,
+`deceased` — is chosen on `MemberForm` and shown by `MemberStatusBadge`
+(`components/members/member-status-badge.tsx`) beside the name in the members
+table and on the member page. Active is the norm and renders **no** badge; a
+badge on every row would bury the ones that matter. Visitor is `info`, inactive
+`warning`, and the two record-only statuses are quiet (`secondary`, `outline`).
+
+When check-in records someone lapsed, `ReactivateMemberDialog`
+(`components/scan/`) asks "Mark as active again?" *after* the check-in has
+stood — the usher at the door is never blocked on a records question. It is
+offered only to staff who can edit members.
+
 ### Date entry
 
 Use `DatePicker` from `components/form/date-picker.tsx` inside `Field` for
@@ -203,6 +217,28 @@ Four rules are load-bearing rather than stylistic:
 - **Redirect an over-run page** with `overRunPage`, so a bookmark to page 9 of a
   list that has since shrunk lands on the last page that has rows — and says so
   in the URL, rather than showing an empty table.
+
+A facet can open on a **default selection** — the members directory shows
+active members and visitors until the URL says otherwise:
+
+```tsx
+tableContext("/members", params, {
+  filterKeys: ["status"],
+  filterDefaults: { status: ["active", "visitor"] },
+});
+```
+
+`state.filters.status` then holds the default whenever the URL is silent, so
+the page's `WHERE` needs no special case. The default is left out of every link
+the table builds, sitting on it does not count as narrowing (no Reset), and the
+facet's own reset reads "Reset", not "Clear". Because an empty URL now means the
+default, "everything" is spelled `?status=all` (`ALL_FILTER_VALUE`); give the
+facet an `allLabel` such as "Show all" to offer it in the menu. Pass the facet's
+known values as `filterValues` too: an unknown value is then dropped before the
+default applies, so a stale or mistyped `?status=married` lands on the default
+view rather than on a selection `allowedValues` empties into "everything". When the default
+can hide every row, pass an `empty` state that links to the full list rather
+than inviting a first record — see *Patterns/DataTable → DefaultedFacet*.
 
 Two controls are menus rather than links: the facet filter and the column
 picker. Both are multi-select, and a real `menuitemcheckbox` announces "checked"

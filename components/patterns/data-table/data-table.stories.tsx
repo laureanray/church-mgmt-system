@@ -22,20 +22,21 @@ type Member = {
   id: string;
   fullName: string;
   gender: "male" | "female";
-  status: "single" | "married" | "widowed";
+  marital: "single" | "married" | "widowed";
+  status: "active" | "visitor" | "inactive";
   since: number;
   contact: string | null;
 };
 
 const MEMBERS: Member[] = [
-  { id: "1", fullName: "Ana Reyes", gender: "female", status: "married", since: 2014, contact: "+63 917 555 0134" },
-  { id: "2", fullName: "Ben Cruz", gender: "male", status: "single", since: 2019, contact: "+63 918 555 0177" },
-  { id: "3", fullName: "Carla Dizon", gender: "female", status: "widowed", since: 2008, contact: null },
-  { id: "4", fullName: "Dennis Santos", gender: "male", status: "married", since: 2021, contact: "+63 927 555 0102" },
-  { id: "5", fullName: "Elena Villanueva", gender: "female", status: "single", since: 2016, contact: "+63 906 555 0155" },
+  { id: "1", fullName: "Ana Reyes", gender: "female", marital: "married", status: "active", since: 2014, contact: "+63 917 555 0134" },
+  { id: "2", fullName: "Ben Cruz", gender: "male", marital: "single", status: "visitor", since: 2019, contact: "+63 918 555 0177" },
+  { id: "3", fullName: "Carla Dizon", gender: "female", marital: "widowed", status: "active", since: 2008, contact: null },
+  { id: "4", fullName: "Dennis Santos", gender: "male", marital: "married", status: "inactive", since: 2021, contact: "+63 927 555 0102" },
+  { id: "5", fullName: "Elena Villanueva", gender: "female", marital: "single", status: "active", since: 2016, contact: "+63 906 555 0155" },
 ];
 
-const STATUS_LABELS = {
+const MARITAL_LABELS = {
   single: "Single",
   married: "Married",
   widowed: "Widowed",
@@ -58,12 +59,12 @@ const COLUMNS: DataTableColumn<Member>[] = [
     cell: (m) => (m.gender === "male" ? "Male" : "Female"),
   },
   {
-    id: "status",
+    id: "marital",
     header: "Marital Status",
     label: "Marital status",
-    sortKey: "status",
+    sortKey: "marital",
     hideBelow: "md",
-    cell: (m) => <Badge variant="secondary">{STATUS_LABELS[m.status]}</Badge>,
+    cell: (m) => <Badge variant="secondary">{MARITAL_LABELS[m.marital]}</Badge>,
   },
   {
     id: "since",
@@ -95,13 +96,29 @@ const FACETS = [
 ];
 
 /**
+ * A facet with a default: the table opens on active and visiting members, and
+ * "Show all" lifts the filter. Mirrors the status facet on `/members`.
+ */
+const STATUS_FACET = {
+  id: "status",
+  label: "Status",
+  allLabel: "Show all",
+  options: [
+    { value: "active", label: "Active" },
+    { value: "visitor", label: "Visitor" },
+    { value: "inactive", label: "Inactive" },
+  ],
+};
+
+/**
  * Stories build the context in `render` rather than in `args`: it carries the
  * route's `searchParams`, and args have to stay JSON-serializable.
  */
 function ctxFor(params: RawSearchParams = {}) {
   return tableContext("/members", params, {
-    sortKeys: ["name", "gender", "status", "since"],
-    filterKeys: ["gender"],
+    sortKeys: ["name", "gender", "marital", "since"],
+    filterKeys: ["gender", "status"],
+    filterDefaults: { status: ["active", "visitor"] },
     defaultSort: "name",
   });
 }
@@ -110,11 +127,13 @@ function MembersTable({
   params = {},
   rows = MEMBERS,
   total = 248,
+  withStatus = false,
   ...rest
 }: {
   params?: RawSearchParams;
   rows?: Member[];
   total?: number;
+  withStatus?: boolean;
 } & Partial<React.ComponentProps<typeof DataTable<Member>>>) {
   return (
     <div className="p-6">
@@ -129,7 +148,7 @@ function MembersTable({
           placeholder: "Search by name…",
           label: "Search members by name",
         }}
-        facets={FACETS}
+        facets={withStatus ? [...FACETS, STATUS_FACET] : FACETS}
         empty={{
           icon: Users,
           title: "No members yet",
@@ -234,4 +253,45 @@ export const InsideCard: Story = {
 /** `density="compact"` tightens the rows where a long list is the point. */
 export const Compact: Story = {
   render: () => <MembersTable density="compact" />,
+};
+
+/**
+ * A facet with a default selection. With nothing in the URL the Status facet
+ * already holds Active and Visitor — ticked, and counted on the trigger — yet
+ * no Reset appears, because this is the table's own view rather than a
+ * narrowing. The default is left out of every link the table builds.
+ */
+export const DefaultedFacet: Story = {
+  render: () => (
+    <MembersTable
+      withStatus
+      rows={MEMBERS.filter((m) => m.status !== "inactive")}
+      total={4}
+    />
+  ),
+};
+
+/**
+ * "Show all" lifts a defaulted facet, spelled `?status=all` because an empty
+ * URL already means the default. The trigger says All, and unticking it goes
+ * back to the default.
+ */
+export const DefaultedFacetShowingAll: Story = {
+  render: () => <MembersTable withStatus params={{ status: "all" }} total={5} />,
+};
+
+/**
+ * A defaulted facet moved to a value the default hides. Its menu offers
+ * "Reset status" — not "Clear", which would promise every row — and the
+ * toolbar's Reset returns to the default view.
+ */
+export const DefaultedFacetNarrowed: Story = {
+  render: () => (
+    <MembersTable
+      withStatus
+      params={{ status: "inactive" }}
+      rows={MEMBERS.filter((m) => m.status === "inactive")}
+      total={1}
+    />
+  ),
 };

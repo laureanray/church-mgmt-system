@@ -46,7 +46,9 @@ export default async function DashboardPage() {
 
   const [membersCount, servicesCount, attendanceCount, weekCheckins, recent] =
     await Promise.all([
-      db.$count(members),
+      // Visitors, lapsed and departed members are on record but not in the
+      // congregation this tile describes.
+      db.$count(members, eq(members.status, "active")),
       db.$count(services),
       db.$count(attendance),
       db.$count(attendance, gte(attendance.checkedInAt, weekAgo)),
@@ -121,7 +123,7 @@ export default async function DashboardPage() {
       </PageHeader>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Members" value={membersCount} icon={Users} />
+        <StatCard label="Active Members" value={membersCount} icon={Users} />
         <StatCard label="Services" value={servicesCount} icon={CalendarDays} />
         <StatCard
           label="Total Check-ins"

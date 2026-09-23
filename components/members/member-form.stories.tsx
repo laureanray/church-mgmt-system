@@ -22,7 +22,7 @@ const member: Member = {
   id: "sample-member", qrToken: "sample-token", fullName: "Juan Miguel Reyes Dela Cruz",
   firstName: "Juan Miguel", middleName: "Reyes", lastName: "Dela Cruz",
   birthdate: null, spiritualBirthday: null, memberSinceYear: null,
-  gender: null, maritalStatus: null, spouseName: null, weddingAnniversary: null,
+  gender: null, maritalStatus: null, status: "active", spouseName: null, weddingAnniversary: null,
   contactNumber: null, homeAddress: null, motherName: null, fatherName: null,
   educationalLevel: null, occupation: null, cellGroupId: null, userId: null,
   createdAt: new Date("2026-01-01T00:00:00Z"), updatedAt: new Date("2026-01-01T00:00:00Z"),
@@ -46,4 +46,14 @@ export const NameErrors: Story = {
 /** A delayed local action demonstrates the disabled saving button. */
 export const Saving: Story = {
   render: () => <div className="mx-auto max-w-4xl p-6"><MemberForm member={member} cellOptions={[]} action={async () => { await new Promise((resolve) => setTimeout(resolve, 2000)); return { message: "Preview complete — no member was saved." }; }} /></div>,
+};
+
+/** A lapsed member keeps their status until staff change it here. */
+export const InactiveMember: Story = {
+  render: () => <div className="mx-auto max-w-4xl p-6"><MemberForm member={{ ...member, status: "inactive" }} cellOptions={[]} action={async () => ({ message: "Preview only — no member was saved." })} /></div>,
+};
+
+/** A rejected status is reported on the select, like every other field. */
+export const StatusError: Story = {
+  render: () => <div className="mx-auto max-w-4xl p-6"><MemberForm member={member} cellOptions={[]} action={async () => ({ errors: { status: "Choose a valid status" }, message: "Please fix the highlighted fields." })} /></div>,
 };

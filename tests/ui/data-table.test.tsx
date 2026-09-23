@@ -16,6 +16,9 @@ const {
   LastPage,
   InsideCard,
   Compact,
+  DefaultedFacet,
+  DefaultedFacetShowingAll,
+  DefaultedFacetNarrowed,
 } = composeStories(stories);
 
 function headers() {
@@ -380,5 +383,96 @@ describe("DataTable menus", () => {
     expect(
       screen.getByRole("link", { name: "100 rows per page" }),
     ).toHaveAttribute("href", "/members?per=100");
+  });
+});
+
+describe("DataTable facet with a default", () => {
+  test("opens on the default selection without calling it a narrowing", async () => {
+    const user = userEvent.setup();
+    render(<DefaultedFacet />);
+
+    // No Reset: the default view is the table's own, not something to undo.
+    expect(screen.queryByRole("link", { name: "Reset" })).toBeNull();
+    const trigger = screen.getByRole("button", { name: /status/i });
+    expect(within(trigger).getByText("2")).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(
+      await screen.findByRole("menuitemcheckbox", { name: "Active" }),
+    ).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemcheckbox", { name: "Visitor" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("menuitemcheckbox", { name: "Inactive" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("menuitemcheckbox", { name: "Show all" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.queryByRole("menuitem", { name: /reset status/i })).toBeNull();
+  });
+
+  test("leaves the default out of the links the table builds", () => {
+    render(<DefaultedFacet />);
+
+    expect(screen.getByRole("link", { name: /^Name/ })).toHaveAttribute(
+      "href",
+      "/members?sort=name&dir=desc",
+    );
+  });
+
+  test("ticking a hidden value adds it to what is already shown", async () => {
+    const user = userEvent.setup();
+    render(<DefaultedFacet />);
+
+    await user.click(screen.getByRole("button", { name: /status/i }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Inactive" }));
+
+    expect(routerCalls.push).toEqual([
+      "/members?status=active&status=visitor&status=inactive",
+    ]);
+  });
+
+  test("Show all lifts the filter with an explicit all", async () => {
+    const user = userEvent.setup();
+    render(<DefaultedFacet />);
+
+    await user.click(screen.getByRole("button", { name: /status/i }));
+    await user.click(await screen.findByRole("menuitemcheckbox", { name: "Show all" }));
+
+    expect(routerCalls.push).toEqual(["/members?status=all"]);
+  });
+
+  test("showing all says so, and unticking it returns to the default", async () => {
+    const user = userEvent.setup();
+    render(<DefaultedFacetShowingAll />);
+
+    const trigger = screen.getByRole("button", { name: /status/i });
+    expect(within(trigger).getByText("All")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Reset" })).toHaveAttribute(
+      "href",
+      "/members",
+    );
+
+    await user.click(trigger);
+    const all = await screen.findByRole("menuitemcheckbox", { name: "Show all" });
+    expect(all).toHaveAttribute("aria-checked", "true");
+    await user.click(all);
+
+    expect(routerCalls.push).toEqual(["/members"]);
+  });
+
+  test("a narrowed default facet offers a reset, not a clear", async () => {
+    const user = userEvent.setup();
+    render(<DefaultedFacetNarrowed />);
+
+    await user.click(screen.getByRole("button", { name: /status/i }));
+    await user.click(await screen.findByRole("menuitem", { name: "Reset status" }));
+
+    expect(routerCalls.push).toEqual(["/members"]);
+    expect(screen.queryByRole("menuitem", { name: /clear status/i })).toBeNull();
   });
 });

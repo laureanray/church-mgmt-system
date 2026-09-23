@@ -115,8 +115,47 @@ async function main() {
         educationalLevel: "High School Graduate",
         occupation: "Driver",
       },
+      // One of each non-active status, so the directory's default view and its
+      // Status facet have something to hide and show.
+      {
+        qrToken: nanoid(16),
+        fullName: "Liza Mendoza",
+        firstName: "Liza",
+        lastName: "Mendoza",
+        gender: "female",
+        status: "visitor",
+        contactNumber: "0921-444-0101",
+      },
+      {
+        qrToken: nanoid(16),
+        fullName: "Carlo Bautista",
+        firstName: "Carlo",
+        lastName: "Bautista",
+        memberSinceYear: 2016,
+        gender: "male",
+        status: "inactive",
+      },
+      {
+        qrToken: nanoid(16),
+        fullName: "Grace Villanueva",
+        firstName: "Grace",
+        lastName: "Villanueva",
+        memberSinceYear: 2012,
+        gender: "female",
+        status: "transferred",
+      },
+      {
+        qrToken: nanoid(16),
+        fullName: "Ernesto Garcia",
+        firstName: "Ernesto",
+        lastName: "Garcia",
+        birthdate: "1940-03-02",
+        memberSinceYear: 1998,
+        gender: "male",
+        status: "deceased",
+      },
     ]);
-    console.log("  ✓ 3 sample members created");
+    console.log("  ✓ 7 sample members created");
   } else {
     console.log(`  • Members already present (${existingMembers}), skipping`);
   }

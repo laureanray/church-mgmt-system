@@ -41,6 +41,13 @@ const KEYS = {
 
 type StateKey = keyof typeof KEYS;
 
+/**
+ * The facet value that means "no filter" for a facet with defaults. Without a
+ * default an empty selection already means everything, but a defaulted facet
+ * reads an empty URL as its default, so showing everything needs a spelling.
+ */
+export const ALL_FILTER_VALUE = "all";
+
 export type TableStateOptions = {
   /**
    * Namespace for every parameter, so two tables can share one route without
@@ -55,6 +62,19 @@ export type TableStateOptions = {
   sortKeys?: readonly string[];
   /** Facet parameter names, unprefixed. Each is parsed as a repeated value. */
   filterKeys?: readonly string[];
+  /**
+   * The selection a facet starts with when the URL names none — the members
+   * directory opening on active and visiting members only. A reader reaches
+   * everything with `?facet=all` (`ALL_FILTER_VALUE`).
+   */
+  filterDefaults?: Record<string, readonly string[]>;
+  /**
+   * The values a facet accepts. Anything else in the URL is dropped before the
+   * default is considered, so `?status=married` — an old bookmark, or a typo —
+   * falls back to the default view instead of reading as a selection that then
+   * filters to nothing and silently lifts the filter altogether.
+   */
+  filterValues?: Record<string, readonly string[]>;
   defaultSort?: string | null;
   defaultDirection?: SortDirection;
   defaultPerPage?: number;
@@ -68,7 +88,11 @@ export type TableState = {
   /** 1-based, as it appears in the URL. Use `tableOffset` for SQL. */
   page: number;
   perPage: number;
-  /** Every configured facet, present even when nothing is selected. */
+  /**
+   * Every configured facet's effective selection, present even when nothing is
+   * selected. A facet the URL does not mention holds its default here; an
+   * empty array always means "no filter".
+   */
   filters: Record<string, string[]>;
   /**
    * `null` means the URL said nothing, so the columns' own `defaultHidden`
@@ -80,6 +104,7 @@ export type TableState = {
     sort: string | null;
     direction: SortDirection;
     perPage: number;
+    filters: Record<string, string[]>;
   };
 };
 
@@ -156,8 +181,20 @@ export function tableContext(
       : defaultDirection;
 
   const filters: Record<string, string[]> = {};
+  const defaultFilters: Record<string, string[]> = {};
   for (const filterKey of options.filterKeys ?? []) {
-    filters[filterKey] = listValues(params, key(filterKey));
+    const fallback = [...(options.filterDefaults?.[filterKey] ?? [])];
+    const accepted = options.filterValues?.[filterKey];
+    const values = listValues(params, key(filterKey)).filter(
+      (value) =>
+        !accepted || value === ALL_FILTER_VALUE || accepted.includes(value),
+    );
+    defaultFilters[filterKey] = fallback;
+    filters[filterKey] = values.includes(ALL_FILTER_VALUE)
+      ? []
+      : values.length
+        ? values
+        : fallback;
   }
 
   const requestedPerPage = positiveInt(firstValue(params, key("perPage")));
@@ -180,9 +217,25 @@ export function tableContext(
         sort: defaultSort,
         direction: defaultDirection,
         perPage: defaultPerPage,
+        filters: defaultFilters,
       },
     },
   };
+}
+
+function sameSelection(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value) => b.includes(value));
+}
+
+/** True when a facet's selection is not the one the table opens with. */
+export function filterDiffersFromDefault(
+  state: TableState,
+  name: string,
+): boolean {
+  return !sameSelection(
+    state.filters[name] ?? [],
+    state.defaults.filters[name] ?? [],
+  );
 }
 
 function clampPerPage(value: number): number {
@@ -255,6 +308,14 @@ export function tableHref(
     search.set(key("perPage"), String(next.perPage));
   }
   for (const [name, values] of Object.entries(next.filters)) {
+    // A default selection is left out so the canonical URL stays short, which
+    // in turn means an emptied defaulted facet must say "all" explicitly.
+    const fallback = state.defaults.filters[name] ?? [];
+    if (sameSelection(values, fallback)) continue;
+    if (values.length === 0) {
+      search.append(key(name), ALL_FILTER_VALUE);
+      continue;
+    }
     for (const value of values) search.append(key(name), value);
   }
   if (next.hidden !== null) search.set(key("hidden"), next.hidden.join(","));
@@ -321,18 +382,30 @@ export function toggleFilterValue(
     : [...current, value];
 }
 
-/** Patch that clears the search and every facet, leaving sort and columns alone. */
+/**
+ * Patch that clears the search and returns every facet to its default,
+ * leaving sort and columns alone.
+ */
 export function clearNarrowingPatch(state: TableState): TableStatePatch {
   const filters: Record<string, string[]> = {};
-  for (const name of Object.keys(state.filters)) filters[name] = [];
+  for (const name of Object.keys(state.filters)) {
+    filters[name] = [...(state.defaults.filters[name] ?? [])];
+  }
   return { query: null, filters };
 }
 
+/** True when any facet has been moved off its default selection. */
 export function hasActiveFilters(state: TableState): boolean {
-  return Object.values(state.filters).some((values) => values.length > 0);
+  return Object.keys(state.filters).some((name) =>
+    filterDiffersFromDefault(state, name),
+  );
 }
 
-/** True when the visible rows are a subset — what distinguishes "no matches" from "none yet". */
+/**
+ * True when the reader has narrowed the rows — what distinguishes "no matches"
+ * from "none yet". A facet sitting on its default is the table's own view, not
+ * a narrowing, so it counts as neither.
+ */
 export function isNarrowed(state: TableState): boolean {
   return state.query !== "" || hasActiveFilters(state);
 }

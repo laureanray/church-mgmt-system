@@ -12,8 +12,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { reactivateMember } from "@/app/(app)/members/actions";
 import { recordAttendance, type ScanResult } from "@/app/(app)/scan/actions";
+import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { EmptyState } from "@/components/patterns/empty-state";
+import {
+  ReactivateMemberDialog,
+  type LapsedCheckIn,
+} from "@/components/scan/reactivate-member-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { isLapsed, type MemberStatus } from "@/lib/constants";
 import { formatDateTime, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -57,8 +64,12 @@ type ServiceOption = {
 
 type Feed = {
   key: number;
+  /** Absent for a code that matched nobody. */
+  memberId?: string;
   name: string;
   status: ScanResult["status"];
+  /** The member's own status, so a visitor or lapsed member stands out. */
+  memberStatus?: MemberStatus;
   at: Date;
 };
 
@@ -91,15 +102,19 @@ const STATUS_META: Record<
 export function ScannerPanel({
   services,
   initialServiceId,
+  canReactivate = false,
 }: {
   services: ServiceOption[];
   initialServiceId?: string;
+  /** Whether this user may edit members, and so answer the reactivate prompt. */
+  canReactivate?: boolean;
 }) {
   const [serviceId, setServiceId] = useState(initialServiceId ?? "");
   const [feed, setFeed] = useState<Feed[]>([]);
   const [checkedInCount, setCheckedInCount] = useState(0);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
+  const [lapsed, setLapsed] = useState<LapsedCheckIn | null>(null);
 
   const busyRef = useRef(false);
   const lastRef = useRef<{ token: string; t: number }>({ token: "", t: 0 });
@@ -107,12 +122,18 @@ export function ScannerPanel({
 
   const selectedService = services.find((s) => s.id === serviceId);
 
-  function pushFeed(name: string, status: ScanResult["status"]) {
+  function pushFeed(
+    name: string,
+    status: ScanResult["status"],
+    member?: { id: string; status: MemberStatus },
+  ) {
     keyRef.current += 1;
     const entry: Feed = {
       key: keyRef.current,
+      memberId: member?.id,
       name,
       status,
+      memberStatus: member?.status,
       at: new Date(),
     };
     setFeed((prev) => [entry, ...prev].slice(0, 30));
@@ -122,12 +143,18 @@ export function ScannerPanel({
     switch (res.status) {
       case "ok":
         toast.success(`${res.memberName} checked in`);
-        pushFeed(res.memberName, "ok");
+        pushFeed(res.memberName, "ok", {
+          id: res.memberId,
+          status: res.memberStatus,
+        });
         setCheckedInCount((c) => c + 1);
         break;
       case "duplicate":
         toast.warning(`${res.memberName} was already checked in`);
-        pushFeed(res.memberName, "duplicate");
+        pushFeed(res.memberName, "duplicate", {
+          id: res.memberId,
+          status: res.memberStatus,
+        });
         break;
       case "not_found":
         toast.error("Unrecognized code — no matching member");
@@ -136,6 +163,20 @@ export function ScannerPanel({
       case "error":
         toast.error(res.message);
         break;
+    }
+
+    // Asked on a repeat scan too: the first prompt may have been dismissed
+    // by accident, and the member is still lapsed.
+    if (
+      canReactivate &&
+      (res.status === "ok" || res.status === "duplicate") &&
+      isLapsed(res.memberStatus)
+    ) {
+      setLapsed({
+        memberId: res.memberId,
+        memberName: res.memberName,
+        status: res.memberStatus,
+      });
     }
   }
 
@@ -331,6 +372,9 @@ export function ScannerPanel({
                     <span className="flex-1 truncate font-medium">
                       {f.name}
                     </span>
+                    {f.memberStatus ? (
+                      <MemberStatusBadge status={f.memberStatus} />
+                    ) : null}
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {formatTime(f.at)}
                     </span>
@@ -341,6 +385,21 @@ export function ScannerPanel({
           )}
         </CardContent>
       </Card>
+
+      <ReactivateMemberDialog
+        checkIn={lapsed}
+        reactivate={reactivateMember}
+        onReactivated={(memberId) =>
+          setFeed((prev) =>
+            prev.map((entry) =>
+              entry.memberId === memberId
+                ? { ...entry, memberStatus: "active" }
+                : entry,
+            ),
+          )
+        }
+        onClose={() => setLapsed(null)}
+      />
     </div>
   );
 }

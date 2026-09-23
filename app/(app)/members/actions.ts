@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { members } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
+import { LAPSED_STATUSES } from "@/lib/constants";
 import { fieldErrors, memberSchema } from "@/lib/validators";
 
 export type MemberFormState =
@@ -24,6 +25,7 @@ function readMemberForm(formData: FormData) {
     memberSinceYear: formData.get("memberSinceYear"),
     gender: formData.get("gender"),
     maritalStatus: formData.get("maritalStatus"),
+    status: formData.get("status"),
     spouseName: formData.get("spouseName"),
     weddingAnniversary: formData.get("weddingAnniversary"),
     contactNumber: formData.get("contactNumber"),
@@ -68,6 +70,8 @@ export async function createMember(
     .returning({ id: members.id });
 
   revalidatePath("/members");
+  // The dashboard's Active Members tile counts on status.
+  revalidatePath("/dashboard");
   revalidateCellGroups(parsed.data.cellGroupId);
   redirect(`/members/${row.id}`);
 }
@@ -100,6 +104,8 @@ export async function updateMember(
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
+  // The dashboard's Active Members tile counts on status.
+  revalidatePath("/dashboard");
   // `previous` may differ from the new value when the member was moved.
   revalidateCellGroups(previous?.cellGroupId, updated?.cellGroupId);
   redirect(`/members/${id}`);
@@ -112,6 +118,41 @@ export async function deleteMember(id: string) {
     .where(eq(members.id, id))
     .returning({ cellGroupId: members.cellGroupId });
   revalidatePath("/members");
+  // The dashboard's Active Members tile counts on status.
+  revalidatePath("/dashboard");
   revalidateCellGroups(deleted?.cellGroupId);
   redirect("/members");
+}
+
+export type ReactivateResult =
+  | { status: "ok" }
+  | { status: "error"; message: string };
+
+/**
+ * Mark a lapsed member active again — what check-in offers when someone who
+ * had stopped attending walks back in. Only a lapsed status is replaced, so a
+ * stale prompt cannot flip a member someone has since edited.
+ */
+export async function reactivateMember(
+  memberId: string,
+): Promise<ReactivateResult> {
+  await requirePermission("members.update");
+
+  const [updated] = await db
+    .update(members)
+    .set({ status: "active", updatedAt: new Date() })
+    .where(and(eq(members.id, memberId), inArray(members.status, LAPSED_STATUSES)))
+    .returning({ id: members.id });
+
+  if (!updated) {
+    return {
+      status: "error",
+      message: "This member’s status has already changed.",
+    };
+  }
+
+  revalidatePath("/members");
+  revalidatePath(`/members/${memberId}`);
+  revalidatePath("/dashboard");
+  return { status: "ok" };
 }
