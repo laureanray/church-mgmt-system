@@ -29,6 +29,11 @@ async function signIn(page: Page, role = 'admin') {
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
+/** A row of the check-in feed — toasts are list items too, so exclude them. */
+function feedRow(page: Page, name: string) {
+  return page.locator('li:not([data-sonner-toast])', { hasText: name });
+}
+
 function names(page: Page) {
   return page.locator('tbody tr td:first-child a');
 }
@@ -127,6 +132,14 @@ test.describe('member status', () => {
     await expect(page.getByText('Showing 1–2 of 2 rows')).toBeVisible();
   });
 
+  test('an unknown status keeps the default view', async ({ page }) => {
+    await signIn(page);
+    // What an old marital-status bookmark looks like after the key was renamed.
+    await page.goto(`/members?${search}&status=married`);
+
+    await expect(names(page)).toHaveText([`${PREFIX} Active`, `${PREFIX} Visitor`]);
+  });
+
   test('marital status filters under its own key', async ({ page }) => {
     await signIn(page);
     await page.goto(`/members?${search}`);
@@ -172,6 +185,10 @@ test.describe('member status', () => {
 
     await expect(dialog).toBeHidden();
     await expect.poll(() => statusOf('e2e-status-inactive')).toBe('active');
+    // The feed row stops calling them inactive once they are not.
+    const row = feedRow(page, `${PREFIX} Inactive`);
+    await expect(row).toBeVisible();
+    await expect(row.getByText('Inactive', { exact: true })).toHaveCount(0);
   });
 
   test('declining the prompt keeps the check-in and the status', async ({ page }) => {
@@ -187,7 +204,7 @@ test.describe('member status', () => {
     await expect(dialog).toBeHidden();
     // The live feed still marks who came in.
     await expect(
-      page.locator('li', { hasText: `${PREFIX} Transferred` }).getByText('Transferred', { exact: true }),
+      feedRow(page, `${PREFIX} Transferred`).getByText('Transferred', { exact: true }),
     ).toBeVisible();
     expect(await statusOf('e2e-status-transferred')).toBe('transferred');
   });
@@ -200,7 +217,7 @@ test.describe('member status', () => {
     await page.getByRole('button', { name: 'Check in', exact: true }).click();
 
     await expect(
-      page.locator('li', { hasText: `${PREFIX} Inactive` }).getByText('Inactive', { exact: true }),
+      feedRow(page, `${PREFIX} Inactive`).getByText('Inactive', { exact: true }),
     ).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'Mark as active again?' })).toHaveCount(0);
   });

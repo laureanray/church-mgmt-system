@@ -233,7 +233,10 @@ the page's `WHERE` needs no special case. The default is left out of every link
 the table builds, sitting on it does not count as narrowing (no Reset), and the
 facet's own reset reads "Reset", not "Clear". Because an empty URL now means the
 default, "everything" is spelled `?status=all` (`ALL_FILTER_VALUE`); give the
-facet an `allLabel` such as "Show all" to offer it in the menu. When the default
+facet an `allLabel` such as "Show all" to offer it in the menu. Pass the facet's
+known values as `filterValues` too: an unknown value is then dropped before the
+default applies, so a stale or mistyped `?status=married` lands on the default
+view rather than on a selection `allowedValues` empties into "everything". When the default
 can hide every row, pass an `empty` state that links to the full list rather
 than inviting a first record — see *Patterns/DataTable → DefaultedFacet*.
 

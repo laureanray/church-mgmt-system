@@ -68,6 +68,13 @@ export type TableStateOptions = {
    * everything with `?facet=all` (`ALL_FILTER_VALUE`).
    */
   filterDefaults?: Record<string, readonly string[]>;
+  /**
+   * The values a facet accepts. Anything else in the URL is dropped before the
+   * default is considered, so `?status=married` — an old bookmark, or a typo —
+   * falls back to the default view instead of reading as a selection that then
+   * filters to nothing and silently lifts the filter altogether.
+   */
+  filterValues?: Record<string, readonly string[]>;
   defaultSort?: string | null;
   defaultDirection?: SortDirection;
   defaultPerPage?: number;
@@ -177,7 +184,11 @@ export function tableContext(
   const defaultFilters: Record<string, string[]> = {};
   for (const filterKey of options.filterKeys ?? []) {
     const fallback = [...(options.filterDefaults?.[filterKey] ?? [])];
-    const values = listValues(params, key(filterKey));
+    const accepted = options.filterValues?.[filterKey];
+    const values = listValues(params, key(filterKey)).filter(
+      (value) =>
+        !accepted || value === ALL_FILTER_VALUE || accepted.includes(value),
+    );
     defaultFilters[filterKey] = fallback;
     filters[filterKey] = values.includes(ALL_FILTER_VALUE)
       ? []

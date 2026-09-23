@@ -66,6 +66,42 @@ describe("ReactivateMemberDialog", () => {
     expect(reactivate).toHaveBeenCalledWith("sample-member");
   });
 
+  test("reports a successful reactivation so the caller can update its view", async () => {
+    const user = userEvent.setup();
+    const onReactivated = mock();
+    render(
+      <ReactivateMemberDialog
+        checkIn={CHECK_IN}
+        reactivate={async () => ({ status: "ok" })}
+        onReactivated={onReactivated}
+        onClose={mock()}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Mark as active" }));
+
+    await waitFor(() => expect(onReactivated).toHaveBeenCalledWith("sample-member"));
+  });
+
+  test("a refused update is not reported as a reactivation", async () => {
+    const user = userEvent.setup();
+    const onReactivated = mock();
+    const onClose = mock();
+    render(
+      <ReactivateMemberDialog
+        checkIn={CHECK_IN}
+        reactivate={async () => ({ status: "error", message: "Already changed." })}
+        onReactivated={onReactivated}
+        onClose={onClose}
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Mark as active" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onReactivated).not.toHaveBeenCalled();
+  });
+
   test("declining leaves the member alone", async () => {
     const user = userEvent.setup();
     const reactivate = mock(async () => ({ status: "ok" as const }));

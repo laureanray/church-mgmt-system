@@ -12,7 +12,9 @@ await mock.module("@/db", () => ({ db: database.db }));
 await mock.module("@/lib/auth-helpers", () => ({ requirePermission }));
 await mock.module("next/cache", () => ({ revalidatePath }));
 await mock.module("next/navigation", () => ({ redirect: mock() }));
-const { reactivateMember } = await import("../../app/(app)/members/actions");
+const { reactivateMember, updateMember } = await import(
+  "../../app/(app)/members/actions"
+);
 const { recordAttendance } = await import("../../app/(app)/scan/actions");
 
 beforeEach(async () => {
@@ -120,4 +122,23 @@ it("refuses to reactivate without permission to edit members", async () => {
     .from(members)
     .where(eq(members.id, "ben"));
   expect(row.status).toBe("inactive");
+});
+
+it("saves a status edit and refreshes the dashboard that counts it", async () => {
+  await database.db
+    .insert(members)
+    .values({ id: "ana", fullName: "Ana Santos", firstName: "Ana", lastName: "Santos", qrToken: "ana-token" });
+  const form = new FormData();
+  form.set("firstName", "Ana");
+  form.set("lastName", "Santos");
+  form.set("status", "transferred");
+
+  await updateMember("ana", undefined, form);
+
+  const [row] = await database.db
+    .select({ status: members.status })
+    .from(members)
+    .where(eq(members.id, "ana"));
+  expect(row.status).toBe("transferred");
+  expect(revalidatePath).toHaveBeenCalledWith("/dashboard");
 });

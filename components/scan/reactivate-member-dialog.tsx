@@ -32,11 +32,17 @@ export type LapsedCheckIn = {
 export function ReactivateMemberDialog({
   checkIn,
   reactivate,
+  onReactivated,
   onClose,
 }: {
   /** `null` keeps the dialog closed. */
   checkIn: LapsedCheckIn | null;
   reactivate: (memberId: string) => Promise<ReactivateResult>;
+  /**
+   * Called once the member really is active, so whatever showed their old
+   * status — the check-in feed — stops contradicting the toast.
+   */
+  onReactivated?: (memberId: string) => void;
   onClose: () => void;
 }) {
   const [pending, startTransition] = useTransition();
@@ -47,6 +53,7 @@ export function ReactivateMemberDialog({
       try {
         const result = await reactivate(checkIn.memberId);
         if (result.status === "ok") {
+          onReactivated?.(checkIn.memberId);
           toast.success(`${checkIn.memberName} is active again`);
         } else {
           toast.error(result.message);

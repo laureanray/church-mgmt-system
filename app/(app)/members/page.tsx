@@ -60,6 +60,13 @@ export default async function MembersPage({
     // People who have left or passed on stay on record but out of the way;
     // `?status=all` or a status of their own brings them back.
     filterDefaults: { status: DEFAULT_DIRECTORY_STATUSES },
+    // Before this facet existed `?status=` meant marital status, so an old
+    // `?status=married` bookmark must land on the default view, not on everyone.
+    filterValues: {
+      gender: GENDERS,
+      marital: MARITAL_STATUSES,
+      status: MEMBER_STATUSES,
+    },
     defaultSort: "name",
   });
   const { state } = ctx;

@@ -395,6 +395,24 @@ describe("facet defaults", () => {
     expect(tableHref(table, clearNarrowingPatch(table.state))).toBe("/members");
   });
 
+  test("an unknown value falls back to the default, not to everything", () => {
+    const table = (params: RawSearchParams) =>
+      ctx(params, {
+        filterDefaults: { status: ["active", "visitor"] },
+        filterValues: { status: ["active", "visitor", "inactive"] },
+      });
+    expect(table({ status: "married" }).state.filters.status).toEqual([
+      "active",
+      "visitor",
+    ]);
+    expect(isNarrowed(table({ status: "married" }).state)).toBe(false);
+    // Known values survive alongside unknown ones, and all still means all.
+    expect(
+      table({ status: ["married", "inactive"] }).state.filters.status,
+    ).toEqual(["inactive"]);
+    expect(table({ status: "all" }).state.filters.status).toEqual([]);
+  });
+
   test("the all value is spelled once", () => {
     expect(ALL_FILTER_VALUE).toBe("all");
   });

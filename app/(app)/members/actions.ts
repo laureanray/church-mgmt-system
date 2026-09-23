@@ -70,6 +70,8 @@ export async function createMember(
     .returning({ id: members.id });
 
   revalidatePath("/members");
+  // The dashboard's Active Members tile counts on status.
+  revalidatePath("/dashboard");
   revalidateCellGroups(parsed.data.cellGroupId);
   redirect(`/members/${row.id}`);
 }
@@ -102,6 +104,8 @@ export async function updateMember(
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
+  // The dashboard's Active Members tile counts on status.
+  revalidatePath("/dashboard");
   // `previous` may differ from the new value when the member was moved.
   revalidateCellGroups(previous?.cellGroupId, updated?.cellGroupId);
   redirect(`/members/${id}`);
@@ -114,6 +118,8 @@ export async function deleteMember(id: string) {
     .where(eq(members.id, id))
     .returning({ cellGroupId: members.cellGroupId });
   revalidatePath("/members");
+  // The dashboard's Active Members tile counts on status.
+  revalidatePath("/dashboard");
   revalidateCellGroups(deleted?.cellGroupId);
   redirect("/members");
 }

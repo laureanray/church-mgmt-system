@@ -64,6 +64,8 @@ type ServiceOption = {
 
 type Feed = {
   key: number;
+  /** Absent for a code that matched nobody. */
+  memberId?: string;
   name: string;
   status: ScanResult["status"];
   /** The member's own status, so a visitor or lapsed member stands out. */
@@ -123,14 +125,15 @@ export function ScannerPanel({
   function pushFeed(
     name: string,
     status: ScanResult["status"],
-    memberStatus?: MemberStatus,
+    member?: { id: string; status: MemberStatus },
   ) {
     keyRef.current += 1;
     const entry: Feed = {
       key: keyRef.current,
+      memberId: member?.id,
       name,
       status,
-      memberStatus,
+      memberStatus: member?.status,
       at: new Date(),
     };
     setFeed((prev) => [entry, ...prev].slice(0, 30));
@@ -140,12 +143,18 @@ export function ScannerPanel({
     switch (res.status) {
       case "ok":
         toast.success(`${res.memberName} checked in`);
-        pushFeed(res.memberName, "ok", res.memberStatus);
+        pushFeed(res.memberName, "ok", {
+          id: res.memberId,
+          status: res.memberStatus,
+        });
         setCheckedInCount((c) => c + 1);
         break;
       case "duplicate":
         toast.warning(`${res.memberName} was already checked in`);
-        pushFeed(res.memberName, "duplicate", res.memberStatus);
+        pushFeed(res.memberName, "duplicate", {
+          id: res.memberId,
+          status: res.memberStatus,
+        });
         break;
       case "not_found":
         toast.error("Unrecognized code — no matching member");
@@ -380,6 +389,15 @@ export function ScannerPanel({
       <ReactivateMemberDialog
         checkIn={lapsed}
         reactivate={reactivateMember}
+        onReactivated={(memberId) =>
+          setFeed((prev) =>
+            prev.map((entry) =>
+              entry.memberId === memberId
+                ? { ...entry, memberStatus: "active" }
+                : entry,
+            ),
+          )
+        }
         onClose={() => setLapsed(null)}
       />
     </div>
