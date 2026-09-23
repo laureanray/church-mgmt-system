@@ -7,10 +7,13 @@ import { db } from "@/db";
 import { members } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import {
+  DEFAULT_DIRECTORY_STATUSES,
   GENDERS,
   GENDER_LABELS,
   MARITAL_STATUSES,
   MARITAL_STATUS_LABELS,
+  MEMBER_STATUSES,
+  MEMBER_STATUS_LABELS,
 } from "@/lib/constants";
 import {
   allowedValues,
@@ -24,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { PageHeader } from "@/components/patterns/page-header";
+import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -52,17 +56,22 @@ export default async function MembersPage({
 
   const ctx = tableContext("/members", await searchParams, {
     sortKeys: Object.keys(SORT_COLUMNS),
-    filterKeys: ["gender", "status"],
+    filterKeys: ["gender", "marital", "status"],
+    // People who have left or passed on stay on record but out of the way;
+    // `?status=all` or a status of their own brings them back.
+    filterDefaults: { status: DEFAULT_DIRECTORY_STATUSES },
     defaultSort: "name",
   });
   const { state } = ctx;
 
   const gender = allowedValues(state.filters.gender, GENDERS);
-  const status = allowedValues(state.filters.status, MARITAL_STATUSES);
+  const marital = allowedValues(state.filters.marital, MARITAL_STATUSES);
+  const status = allowedValues(state.filters.status, MEMBER_STATUSES);
   const where = and(
     state.query ? ilike(members.fullName, `%${state.query}%`) : undefined,
     gender.length ? inArray(members.gender, gender) : undefined,
-    status.length ? inArray(members.maritalStatus, status) : undefined,
+    marital.length ? inArray(members.maritalStatus, marital) : undefined,
+    status.length ? inArray(members.status, status) : undefined,
   );
 
   const sortColumn = SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS];
@@ -102,9 +111,12 @@ export default async function MembersPage({
       hideable: false,
       cellClassName: "font-medium",
       cell: (m) => (
-        <Link href={`/members/${m.id}`} className="block hover:underline">
-          {m.fullName}
-        </Link>
+        <span className="flex items-center gap-2">
+          <Link href={`/members/${m.id}`} className="hover:underline">
+            {m.fullName}
+          </Link>
+          <MemberStatusBadge status={m.status} />
+        </span>
       ),
     },
     {
@@ -178,21 +190,47 @@ export default async function MembersPage({
             })),
           },
           {
-            id: "status",
+            id: "marital",
             label: "Marital status",
             options: MARITAL_STATUSES.map((value) => ({
               value,
               label: MARITAL_STATUS_LABELS[value],
             })),
           },
+          {
+            id: "status",
+            label: "Status",
+            allLabel: "Show all",
+            options: MEMBER_STATUSES.map((value) => ({
+              value,
+              label: MEMBER_STATUS_LABELS[value],
+            })),
+          },
         ]}
-        empty={{
-          icon: Users,
-          title: "No members yet",
-          description:
-            "Add your first member to generate their attendance QR code.",
-          action: manage ? addMember : null,
-        }}
+        empty={
+          total === 0
+            ? {
+                icon: Users,
+                title: "No members yet",
+                description:
+                  "Add your first member to generate their attendance QR code.",
+                action: manage ? addMember : null,
+              }
+            : {
+                // The directory has people, but the default view hides all of
+                // them — so this is no invitation to add a first member.
+                icon: Users,
+                title: "No active members or visitors",
+                description: (
+                  <Link
+                    href={tableHref(ctx, { filters: { status: [] } })}
+                    className="underline underline-offset-4"
+                  >
+                    Show all {total} member{total === 1 ? "" : "s"}
+                  </Link>
+                ),
+              }
+        }
         emptyFiltered={{
           icon: Users,
           title: "No members match your search",

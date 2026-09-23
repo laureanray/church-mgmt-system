@@ -23,6 +23,8 @@ import {
   GENDER_LABELS,
   MARITAL_STATUSES,
   MARITAL_STATUS_LABELS,
+  MEMBER_STATUSES,
+  MEMBER_STATUS_LABELS,
   SPOUSE_RELEVANT_STATUSES,
   type MaritalStatus,
 } from "@/lib/constants";
@@ -32,6 +34,10 @@ const GENDER_OPTIONS = GENDERS.map((v) => ({ value: v, label: GENDER_LABELS[v] }
 const MARITAL_OPTIONS = MARITAL_STATUSES.map((v) => ({
   value: v,
   label: MARITAL_STATUS_LABELS[v],
+}));
+const STATUS_OPTIONS = MEMBER_STATUSES.map((v) => ({
+  value: v,
+  label: MEMBER_STATUS_LABELS[v],
 }));
 
 type MemberAction = (
@@ -122,6 +128,20 @@ export function MemberForm({
               options={MARITAL_OPTIONS}
               defaultValue={member?.maritalStatus}
               onValueChange={(v) => setMaritalStatus(v as MaritalStatus)}
+            />
+          </Field>
+
+          <Field
+            label="Status"
+            htmlFor="status"
+            hint="Inactive, transferred and deceased members are hidden from the directory by default"
+            error={errors.status}
+          >
+            <FormSelect
+              id="status"
+              name="status"
+              options={STATUS_OPTIONS}
+              defaultValue={member?.status ?? "active"}
             />
           </Field>
 

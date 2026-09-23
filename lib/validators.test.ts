@@ -128,3 +128,29 @@ describe("member names", () => {
     }
   });
 });
+
+import { MEMBER_STATUSES } from "./constants";
+
+describe("member status", () => {
+  it("accepts every lifecycle status", () => {
+    for (const status of MEMBER_STATUSES) {
+      expect(memberSchema.parse({ ...memberInput, status }).status).toBe(status);
+    }
+  });
+
+  it("defaults a missing or blank status to active", () => {
+    for (const status of [undefined, null, "", "  "]) {
+      expect(memberSchema.parse({ ...memberInput, status }).status).toBe("active");
+    }
+  });
+
+  it("rejects a status outside the enum and reports it on the field", () => {
+    for (const status of ["archived", "Active", "married"]) {
+      const result = memberSchema.safeParse({ ...memberInput, status });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(fieldErrors(result.error)).toEqual({ status: "Choose a valid status" });
+      }
+    }
+  });
+});

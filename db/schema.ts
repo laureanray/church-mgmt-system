@@ -121,6 +121,14 @@ export const members = pgTable(
     maritalStatus: text("marital_status", {
       enum: ["single", "married", "widowed", "separated", "divorced"],
     }),
+    // Lifecycle, not marital status. Counts, reports and celebrations read this
+    // to leave out people who have moved away or passed on; see
+    // MEMBER_STATUSES in lib/constants.ts for what each value means.
+    status: text("status", {
+      enum: ["active", "visitor", "inactive", "transferred", "deceased"],
+    })
+      .notNull()
+      .default("active"),
     spouseName: text("spouse_name"),
     weddingAnniversary: date("wedding_anniversary"),
     contactNumber: text("contact_number"),
@@ -156,6 +164,8 @@ export const members = pgTable(
     // Read by the cell-group pages; also what makes deleting a cell group (which
     // nulls this column) an indexed update rather than a scan.
     index("members_cell_group_id_idx").on(t.cellGroupId),
+    // The directory's default view and the dashboard count both filter on it.
+    index("members_status_idx").on(t.status),
   ],
 );
 

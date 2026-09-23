@@ -6,11 +6,20 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { attendance, members } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
+import type { MemberStatus } from "@/lib/constants";
 import { extractToken } from "@/lib/qr";
 
+type CheckedIn = {
+  memberId: string;
+  memberName: string;
+  /** Lets the check-in screen mark a lapsed member and offer to reactivate them. */
+  memberStatus: MemberStatus;
+  at: string;
+};
+
 export type ScanResult =
-  | { status: "ok"; memberId: string; memberName: string; at: string }
-  | { status: "duplicate"; memberId: string; memberName: string; at: string }
+  | ({ status: "ok" } & CheckedIn)
+  | ({ status: "duplicate" } & CheckedIn)
   | { status: "not_found"; token: string }
   | { status: "error"; message: string };
 
@@ -57,6 +66,7 @@ export async function recordAttendance(
       status: "duplicate",
       memberId: member.id,
       memberName: member.fullName,
+      memberStatus: member.status,
       at: (existing?.checkedInAt ?? new Date()).toISOString(),
     };
   }
@@ -68,6 +78,7 @@ export async function recordAttendance(
     status: "ok",
     memberId: member.id,
     memberName: member.fullName,
+    memberStatus: member.status,
     at: inserted[0].checkedInAt.toISOString(),
   };
 }

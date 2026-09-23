@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  ALL_FILTER_VALUE,
   DEFAULT_PER_PAGE,
   allowedValues,
   clearNarrowingPatch,
+  filterDiffersFromDefault,
   overRunPage,
   MAX_PER_PAGE,
   hasActiveFilters,
@@ -324,5 +326,76 @@ describe("clearNarrowingPatch", () => {
     expect(tableHref(narrowed, clearNarrowingPatch(narrowed.state))).toBe(
       "/members?sort=year&dir=desc",
     );
+  });
+});
+
+describe("facet defaults", () => {
+  const withDefault = (params: RawSearchParams = {}) =>
+    ctx(params, { filterDefaults: { status: ["active", "visitor"] } });
+
+  test("an unmentioned facet holds its default selection", () => {
+    const { state } = withDefault();
+    expect(state.filters.status).toEqual(["active", "visitor"]);
+    expect(state.filters.gender).toEqual([]);
+    expect(state.defaults.filters.status).toEqual(["active", "visitor"]);
+  });
+
+  test("a value in the URL replaces the default rather than adding to it", () => {
+    expect(withDefault({ status: "inactive" }).state.filters.status).toEqual([
+      "inactive",
+    ]);
+  });
+
+  test("the all value lifts the filter, even alongside other values", () => {
+    expect(withDefault({ status: "all" }).state.filters.status).toEqual([]);
+    expect(
+      withDefault({ status: ["inactive", "all"] }).state.filters.status,
+    ).toEqual([]);
+  });
+
+  test("leaves a default selection out of the URL, in any order", () => {
+    const table = withDefault({ q: "santos" });
+    expect(tableHref(table, { sort: "year" })).toBe(
+      "/members?q=santos&sort=year&dir=asc",
+    );
+    expect(
+      tableHref(table, { filters: { status: ["visitor", "active"] } }),
+    ).toBe("/members?q=santos");
+  });
+
+  test("spells an emptied defaulted facet as all, and a plain one as nothing", () => {
+    const table = withDefault();
+    expect(tableHref(table, { filters: { status: [] } })).toBe(
+      "/members?status=all",
+    );
+    expect(tableHref(table, { filters: { gender: [] } })).toBe("/members");
+  });
+
+  test("toggling from the default builds on what is shown", () => {
+    const table = withDefault();
+    const next = toggleFilterValue(table.state.filters.status, "inactive");
+    expect(tableHref(table, { filters: { status: next } })).toBe(
+      "/members?status=active&status=visitor&status=inactive",
+    );
+  });
+
+  test("the default view is not a narrowing, but moving off it is", () => {
+    expect(isNarrowed(withDefault().state)).toBe(false);
+    expect(hasActiveFilters(withDefault().state)).toBe(false);
+    expect(isNarrowed(withDefault({ status: "all" }).state)).toBe(true);
+    expect(isNarrowed(withDefault({ status: "inactive" }).state)).toBe(true);
+    expect(filterDiffersFromDefault(withDefault().state, "status")).toBe(false);
+    expect(
+      filterDiffersFromDefault(withDefault({ status: "all" }).state, "status"),
+    ).toBe(true);
+  });
+
+  test("clearing returns a defaulted facet to its default, not to all", () => {
+    const table = withDefault({ q: "santos", status: "all", gender: "male" });
+    expect(tableHref(table, clearNarrowingPatch(table.state))).toBe("/members");
+  });
+
+  test("the all value is spelled once", () => {
+    expect(ALL_FILTER_VALUE).toBe("all");
   });
 });

@@ -2,7 +2,7 @@ import { asc, desc, eq, gte, lt } from "drizzle-orm";
 
 import { db } from "@/db";
 import { services } from "@/db/schema";
-import { requirePermission } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { topUpAllSchedules } from "@/lib/occurrences";
 import { selectScanServices } from "@/lib/scan-selection";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -16,7 +16,7 @@ export default async function ScanPage({
 }: {
   searchParams: Promise<{ service?: string }>;
 }) {
-  await requirePermission("attendance.view");
+  const user = await requirePermission("attendance.view");
   const { service: serviceParam } = await searchParams;
 
   // Make sure recurring occurrences (incl. today's) exist before scanning.
@@ -75,7 +75,11 @@ export default async function ScanPage({
         title="Scan Attendance"
         description="Point the camera at a member's QR code to record their attendance."
       />
-      <ScannerPanel services={rows} initialServiceId={initialServiceId} />
+      <ScannerPanel
+        services={rows}
+        initialServiceId={initialServiceId}
+        canReactivate={hasPermission(user, "members.update")}
+      />
     </>
   );
 }

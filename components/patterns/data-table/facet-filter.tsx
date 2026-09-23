@@ -28,6 +28,12 @@ export type FacetOption = {
   selected: boolean;
 };
 
+/** Where the menu's trailing reset item leads, and what it is called. */
+export type FacetReset = {
+  label: string;
+  href: string;
+};
+
 /**
  * A multi-select facet.
  *
@@ -35,15 +41,23 @@ export type FacetOption = {
  * A facet is multi-select, and a real `menuitemcheckbox` announces "checked" to
  * a screen reader where a link dressed up with a tick does not — so the menu
  * earns its keep here in a way it would not for, say, the page size.
+ *
+ * A facet with a default selection can also offer `all`, a checkbox that lifts
+ * the filter entirely; without it a reader cannot reach the rows the default
+ * leaves out except by ticking every other value one at a time.
  */
 export function DataTableFacetFilter({
   label,
   options,
-  clearHref,
+  all,
+  reset,
 }: {
   label: string;
   options: FacetOption[];
-  clearHref: string;
+  /** The "show everything" choice, for a facet whose default hides rows. */
+  all?: Omit<FacetOption, "value">;
+  /** Omit when the facet is already on its default. */
+  reset?: FacetReset | null;
 }) {
   const router = useRouter();
   const selected = options.filter((option) => option.selected);
@@ -55,7 +69,9 @@ export function DataTableFacetFilter({
       <DropdownMenuTrigger render={<Button variant="outline" />}>
         <ListFilter aria-hidden />
         {label}
-        {selected.length > 0 ? (
+        {all?.selected ? (
+          <Badge variant="brand">All</Badge>
+        ) : selected.length > 0 ? (
           <Badge variant="brand" aria-label={`${selected.length} selected`}>
             {selected.length}
           </Badge>
@@ -74,11 +90,22 @@ export function DataTableFacetFilter({
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuGroup>
-        {selected.length > 0 ? (
+        {all ? (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => go(clearHref)}>
-              Clear {label.toLowerCase()}
+            <DropdownMenuCheckboxItem
+              checked={all.selected}
+              onCheckedChange={() => go(all.href)}
+            >
+              {all.label}
+            </DropdownMenuCheckboxItem>
+          </>
+        ) : null}
+        {reset ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => go(reset.href)}>
+              {reset.label}
             </DropdownMenuItem>
           </>
         ) : null}

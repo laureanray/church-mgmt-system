@@ -25,6 +25,55 @@ export const MARITAL_STATUS_LABELS: Record<MaritalStatus, string> = {
   divorced: "Divorced",
 };
 
+/**
+ * Where a member stands with the church. `active` and `visitor` are people who
+ * attend; `inactive` have stopped but may return; `transferred` and `deceased`
+ * are kept for the record only.
+ */
+export const MEMBER_STATUSES = [
+  "active",
+  "visitor",
+  "inactive",
+  "transferred",
+  "deceased",
+] as const;
+export type MemberStatus = (typeof MEMBER_STATUSES)[number];
+
+export const MEMBER_STATUS_LABELS: Record<MemberStatus, string> = {
+  active: "Active",
+  visitor: "Visitor",
+  inactive: "Inactive",
+  transferred: "Transferred",
+  deceased: "Deceased",
+};
+
+/** What the members directory shows when the URL names no status. */
+export const DEFAULT_DIRECTORY_STATUSES: MemberStatus[] = ["active", "visitor"];
+
+/**
+ * Statuses that still belong in celebrations and absentee reports. Someone who
+ * has transferred or passed on should never be greeted or chased up.
+ */
+export const PASTORAL_STATUSES: MemberStatus[] = [
+  "active",
+  "visitor",
+  "inactive",
+];
+
+/**
+ * Checking in someone with one of these statuses means they are back, so the
+ * check-in offers to mark them active again. A visitor attending is expected.
+ */
+export const LAPSED_STATUSES: MemberStatus[] = [
+  "inactive",
+  "transferred",
+  "deceased",
+];
+
+export function isLapsed(status: MemberStatus): boolean {
+  return LAPSED_STATUSES.includes(status);
+}
+
 export const SERVICE_TYPES = [
   "sunday_service",
   "midweek_service",

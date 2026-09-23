@@ -26,6 +26,7 @@ import { FormSelect } from "@/components/form/form-select";
 import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
 import { MemberQr } from "@/components/members/member-qr";
+import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -171,6 +172,7 @@ export default async function MemberDetailPage({
               {member.fullName}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <MemberStatusBadge status={member.status} />
               {member.gender ? <span>{GENDER_LABELS[member.gender]}</span> : null}
               {member.maritalStatus ? (
                 <Badge variant="secondary">

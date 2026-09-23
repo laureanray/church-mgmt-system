@@ -3,6 +3,7 @@ import { Search, X } from "lucide-react";
 
 import {
   clearNarrowingPatch,
+  filterDiffersFromDefault,
   isNarrowed,
   paramName,
   preservedParams,
@@ -22,6 +23,12 @@ export type DataTableFacetConfig = {
   id: string;
   label: string;
   options: { value: string; label: string }[];
+  /**
+   * Label for a checkbox that lifts the filter entirely — "Show all". Only
+   * meaningful on a facet with a default (`filterDefaults` in `tableContext`),
+   * since an empty selection already shows everything on one without.
+   */
+  allLabel?: string;
 };
 
 export type DataTableSearchConfig = {
@@ -110,11 +117,38 @@ export function DataTableToolbar<TRow>({
 
       {facets.map((facet) => {
         const selected = state.filters[facet.id] ?? [];
+        const fallback = state.defaults.filters[facet.id] ?? [];
+        const showsAll = selected.length === 0;
+        const defaultHref = tableHref(ctx, {
+          filters: { [facet.id]: fallback },
+        });
         return (
           <DataTableFacetFilter
             key={facet.id}
             label={facet.label}
-            clearHref={tableHref(ctx, { filters: { [facet.id]: [] } })}
+            reset={
+              filterDiffersFromDefault(state, facet.id) && !(facet.allLabel && showsAll)
+                ? {
+                    // Back to a default selection is a reset; back to nothing
+                    // is a clear. Saying "clear" for the first would promise
+                    // every row and deliver the default's subset.
+                    label: `${fallback.length ? "Reset" : "Clear"} ${facet.label.toLowerCase()}`,
+                    href: defaultHref,
+                  }
+                : null
+            }
+            all={
+              facet.allLabel
+                ? {
+                    label: facet.allLabel,
+                    selected: showsAll,
+                    // Unticking "all" returns to the default selection.
+                    href: showsAll
+                      ? defaultHref
+                      : tableHref(ctx, { filters: { [facet.id]: [] } }),
+                  }
+                : undefined
+            }
             options={facet.options.map((option) => ({
               ...option,
               selected: selected.includes(option.value),
