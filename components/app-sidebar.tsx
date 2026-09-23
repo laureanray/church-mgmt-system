@@ -13,11 +13,15 @@ import {
   Settings,
   UserCog,
   ShieldCheck,
+  HandHeart,
+  Music,
+  ListMusic,
   type LucideIcon,
 } from "lucide-react";
 
 import { NavUser } from "@/components/nav-user";
 import { IntentLink } from "@/components/patterns/intent-link";
+import { activeNavHref, visibleNavSections } from "@/lib/navigation";
 import type { PermissionKey } from "@/lib/permissions";
 import {
   Sidebar,
@@ -31,39 +35,22 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-type NavItem = {
-  title: string;
-  href: string;
-  icon: LucideIcon;
-  permission: PermissionKey;
+// Icons stay here rather than in lib/navigation.ts, which is shared with the
+// server and has no business importing components.
+const NAV_ICONS: Record<string, LucideIcon> = {
+  "/dashboard": LayoutDashboard,
+  "/scan": QrCode,
+  "/members": Users,
+  "/celebrations": Cake,
+  "/cell-groups": Network,
+  "/services": CalendarDays,
+  "/ministries": HandHeart,
+  "/lam": Music,
+  "/lam/songs": ListMusic,
+  "/users": UserCog,
+  "/roles": ShieldCheck,
+  "/settings": Settings,
 };
-
-const NAV_ITEMS: NavItem[] = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
-  { title: "Scan Attendance", href: "/scan", icon: QrCode, permission: "attendance.view" },
-  { title: "Members", href: "/members", icon: Users, permission: "members.view" },
-  { title: "Celebrations", href: "/celebrations", icon: Cake, permission: "members.view" },
-  { title: "Cell Groups", href: "/cell-groups", icon: Network, permission: "cell_groups.view" },
-  { title: "Services", href: "/services", icon: CalendarDays, permission: "services.view" },
-  {
-    title: "Staff Users",
-    href: "/users",
-    icon: UserCog,
-    permission: "users.view",
-  },
-  {
-    title: "Roles & Permissions",
-    href: "/roles",
-    icon: ShieldCheck,
-    permission: "roles.view",
-  },
-  {
-    title: "Settings",
-    href: "/settings",
-    icon: Settings,
-    permission: "settings.view",
-  },
-];
 
 export function AppSidebar({
   user,
@@ -73,12 +60,16 @@ export function AppSidebar({
     email: string;
     roleName: string;
     permissions: PermissionKey[];
+    /** How many active ministries the user serves in. */
+    ministryCount: number;
   };
 }) {
   const pathname = usePathname();
 
-  const items = NAV_ITEMS.filter((item) =>
-    user.permissions.includes(item.permission),
+  const sections = visibleNavSections(user);
+  const active = activeNavHref(
+    pathname,
+    sections.flatMap((section) => section.items.map((item) => item.href)),
   );
 
   return (
@@ -102,28 +93,28 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
-          <SidebarMenu>
-            {items.map((item) => {
-              const active =
-                pathname === item.href ||
-                pathname.startsWith(item.href + "/");
-              return (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    render={<IntentLink href={item.href} />}
-                    isActive={active}
-                    tooltip={item.title}
-                  >
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
+        {sections.map((section) => (
+          <SidebarGroup key={section.label}>
+            <SidebarGroupLabel>{section.label}</SidebarGroupLabel>
+            <SidebarMenu>
+              {section.items.map((item) => {
+                const Icon = NAV_ICONS[item.href] ?? LayoutDashboard;
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      render={<IntentLink href={item.href} />}
+                      isActive={item.href === active}
+                      tooltip={item.title}
+                    >
+                      <Icon />
+                      <span>{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter>

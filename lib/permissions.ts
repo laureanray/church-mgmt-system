@@ -32,6 +32,16 @@ export const APP_MODULES = [
     description: "Services, schedules, and attendance summaries.",
   },
   {
+    key: "ministries",
+    label: "Ministries",
+    description: "Ministries, their rosters, and the access they grant.",
+  },
+  {
+    key: "lam",
+    label: "LAM",
+    description: "Liturgy, Arts, and Music: the song library and service line-ups.",
+  },
+  {
     key: "users",
     label: "Staff Users",
     description: "Staff accounts and credentials.",
@@ -72,6 +82,15 @@ export const PERMISSIONS = [
   permission("services.update", "services", "Edit services", "Change services and recurring schedules."),
   permission("services.delete", "services", "Delete services", "Permanently remove services and schedules."),
   permission("services.sync", "services", "Sync attendance", "Send attendance records to the configured integration."),
+  permission("ministries.view", "ministries", "View ministries", "Browse every ministry and its roster."),
+  permission("ministries.create", "ministries", "Create ministries", "Add ministries."),
+  permission("ministries.update", "ministries", "Edit ministries", "Change ministries, their access, rosters, and heads."),
+  permission("ministries.delete", "ministries", "Delete ministries", "Permanently remove ministries."),
+  permission("lam.view", "lam", "View LAM", "Browse the song library and service line-ups."),
+  permission("lam.songs_create", "lam", "Add songs", "Add songs to the library."),
+  permission("lam.songs_update", "lam", "Edit songs", "Change songs in the library."),
+  permission("lam.songs_delete", "lam", "Delete songs", "Remove songs no line-up uses."),
+  permission("lam.lineups_update", "lam", "Plan line-ups", "Choose a service's songs and who serves."),
   permission("users.view", "users", "View staff users", "Browse staff accounts."),
   permission("users.create", "users", "Create staff users", "Create staff login accounts."),
   permission("users.update", "users", "Edit staff users", "Change staff profiles and assigned roles."),
@@ -128,6 +147,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
     "services.update",
     "services.delete",
     "services.sync",
+    "ministries.view",
+    "lam.view",
   ],
   usher: [
     "dashboard.view",
@@ -139,11 +160,42 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
   ],
 };
 
+/**
+ * Modules a ministry may never grant. Ministry rosters are edited by ministry
+ * heads, not only by administrators, so anything that confers control over
+ * accounts, authorization, or ministries themselves would let a head escalate
+ * a member past what an administrator chose. Those stay with roles.
+ */
+export const ROLE_ONLY_MODULES = [
+  "users",
+  "roles",
+  "ministries",
+  "settings",
+] as const satisfies readonly AppModuleKey[];
+
+const roleOnlyModuleSet = new Set<string>(ROLE_ONLY_MODULES);
+
+export const MINISTRY_GRANTABLE_PERMISSIONS = PERMISSIONS.filter(
+  (item) => !roleOnlyModuleSet.has(item.module),
+);
+
+export const MINISTRY_GRANTABLE_KEYS = MINISTRY_GRANTABLE_PERMISSIONS.map(
+  (item) => item.key,
+) as [PermissionKey, ...PermissionKey[]];
+
+const ministryGrantableSet = new Set<string>(MINISTRY_GRANTABLE_KEYS);
+
+export function isMinistryGrantable(key: string): key is PermissionKey {
+  return ministryGrantableSet.has(key);
+}
+
 export function groupPermissionsByModule(
   permissions: readonly (typeof PERMISSIONS)[number][] = PERMISSIONS,
 ) {
+  // A module left with nothing to show is dropped, so a narrowed catalog — the
+  // ministry-grantable subset — does not render empty headings.
   return APP_MODULES.map((module) => ({
     ...module,
     permissions: permissions.filter((item) => item.module === module.key),
-  }));
+  })).filter((module) => module.permissions.length > 0);
 }

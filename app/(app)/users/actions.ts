@@ -5,13 +5,54 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { roles, users } from "@/db/schema";
+import { members, roles, users } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
 import { generateTempPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
+
+/**
+ * Checks a member can be linked to this login: it exists, and no other login
+ * already claims it. `members.user_id` is unique, so this is the friendly
+ * version of an error the database would raise anyway.
+ */
+async function linkableMemberError(
+  memberId: string | null,
+  userId: string | null,
+): Promise<string | null> {
+  if (!memberId) return null;
+  const member = await db.query.members.findFirst({
+    where: eq(members.id, memberId),
+    columns: { userId: true },
+  });
+  if (!member) return "That member no longer exists.";
+  if (member.userId && member.userId !== userId) {
+    return "That member is already linked to another staff login.";
+  }
+  return null;
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Points exactly one member record (or none) at this login. */
+async function linkMember(tx: Tx, userId: string, memberId: string | null) {
+  await tx
+    .update(members)
+    .set({ userId: null, updatedAt: new Date() })
+    .where(
+      memberId
+        ? and(eq(members.userId, userId), ne(members.id, memberId))
+        : eq(members.userId, userId),
+    );
+  if (memberId) {
+    await tx
+      .update(members)
+      .set({ userId, updatedAt: new Date() })
+      .where(eq(members.id, memberId));
+  }
+}
 
 export type CreateUserState =
   | {
@@ -33,6 +74,7 @@ export async function createUser(
     name: formData.get("name"),
     email: formData.get("email"),
     roleId: formData.get("roleId"),
+    memberId: formData.get("memberId"),
   });
   if (!parsed.success) {
     return {
@@ -41,7 +83,7 @@ export async function createUser(
     };
   }
 
-  const { name, email, roleId } = parsed.data;
+  const { name, email, roleId, memberId } = parsed.data;
 
   const assignedRole = await db.query.roles.findFirst({
     where: eq(roles.id, roleId),
@@ -49,6 +91,9 @@ export async function createUser(
   if (!assignedRole) {
     return { errors: { roleId: "Select an available role." } };
   }
+
+  const memberError = await linkableMemberError(memberId, null);
+  if (memberError) return { errors: { memberId: memberError } };
 
   const taken = await db.query.users.findFirst({
     where: eq(users.email, email),
@@ -96,6 +141,7 @@ export async function createUser(
         after: created,
         summary: `Created staff account for ${name} (${assignedRole.name})`,
       });
+      await linkMember(tx, data.user.id, memberId);
     });
   } catch (err) {
     // Roll the auth user back, otherwise it lingers with no profile and its
@@ -105,6 +151,7 @@ export async function createUser(
   }
 
   revalidatePath("/users");
+  if (memberId) revalidatePath(`/members/${memberId}`);
   return { ok: true, email, tempPassword };
 }
 
@@ -123,6 +170,7 @@ export async function updateUser(
     name: formData.get("name"),
     email: formData.get("email"),
     roleId: formData.get("roleId"),
+    memberId: formData.get("memberId"),
   });
   if (!parsed.success) {
     return {
@@ -131,7 +179,7 @@ export async function updateUser(
     };
   }
 
-  const { name, email, roleId } = parsed.data;
+  const { name, email, roleId, memberId } = parsed.data;
 
   const assignedRole = await db.query.roles.findFirst({
     where: eq(roles.id, roleId),
@@ -139,6 +187,9 @@ export async function updateUser(
   if (!assignedRole) {
     return { errors: { roleId: "Select an available role." } };
   }
+
+  const memberError = await linkableMemberError(memberId, id);
+  if (memberError) return { errors: { memberId: memberError } };
 
   const clash = await db.query.users.findFirst({
     where: and(eq(users.email, email), ne(users.id, id)),
@@ -158,6 +209,15 @@ export async function updateUser(
     };
   }
 
+  // Ministry access arrives through the linked member, so relinking yourself is
+  // the same self-escalation as changing your own role.
+  if (id === currentUser.id && (currentUser.memberId ?? null) !== memberId) {
+    return {
+      errors: { memberId: "You cannot change your own member record." },
+      message: "Ask another authorized staff member to link your member record.",
+    };
+  }
+
   // Email is the login identity, so a change has to reach Supabase too, or the
   // staff member would keep signing in with the old address.
   if (existing && existing.email !== email) {
@@ -171,12 +231,15 @@ export async function updateUser(
     }
   }
 
+  // The linked member carries ministry access, so relinking can change what
+  // this user may do exactly as a role change can.
   await db.transaction(async (tx) => {
     const [updated] = await tx
       .update(users)
       .set({ name, email, roleId, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning();
+    await linkMember(tx, id, memberId);
     if (!existing || !updated) return;
 
     const roleChanged = existing.roleId !== updated.roleId;
@@ -197,6 +260,7 @@ export async function updateUser(
   });
 
   revalidatePath("/users");
+  revalidatePath("/members", "layout");
   redirect("/users");
 }
 

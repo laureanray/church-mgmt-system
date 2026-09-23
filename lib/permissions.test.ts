@@ -5,7 +5,10 @@ import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
   PERMISSIONS,
+  MINISTRY_GRANTABLE_KEYS,
+  ROLE_ONLY_MODULES,
   groupPermissionsByModule,
+  isMinistryGrantable,
   isPermissionKey,
 } from "./permissions";
 
@@ -31,5 +34,28 @@ describe("permission catalog", () => {
   test("recognizes only catalog permissions", () => {
     expect(isPermissionKey("members.view")).toBe(true);
     expect(isPermissionKey("members.publish")).toBe(false);
+  });
+});
+
+describe("ministry-grantable permissions", () => {
+  test("exclude every permission from a role-only module", () => {
+    const roleOnly = new Set<string>(ROLE_ONLY_MODULES);
+    for (const permission of PERMISSIONS) {
+      expect(isMinistryGrantable(permission.key)).toBe(
+        !roleOnly.has(permission.module),
+      );
+    }
+    expect(isMinistryGrantable("users.update")).toBe(false);
+    expect(isMinistryGrantable("ministries.update")).toBe(false);
+    expect(isMinistryGrantable("lam.lineups_update")).toBe(true);
+  });
+
+  test("group without the modules they leave empty", () => {
+    const modules = groupPermissionsByModule(
+      PERMISSIONS.filter((item) => MINISTRY_GRANTABLE_KEYS.includes(item.key)),
+    ).map((module) => module.key);
+    expect(modules).not.toContain("users");
+    expect(modules).not.toContain("settings");
+    expect(modules).toContain("lam");
   });
 });

@@ -186,3 +186,49 @@ export const AUDIT_ENTITY_LABELS: Record<AuditEntity, string> = {
 
 // How long audit entries are kept before `bun run audit:prune` removes them.
 export const AUDIT_RETENTION_MONTHS = 24;
+
+// A ministry roster position. A head manages their own ministry's roster; only
+// staff with `ministries.update` appoint heads.
+export const MINISTRY_POSITIONS = ["member", "head"] as const;
+export type MinistryPosition = (typeof MINISTRY_POSITIONS)[number];
+
+export const MINISTRY_POSITION_LABELS: Record<MinistryPosition, string> = {
+  member: "Member",
+  head: "Head",
+};
+
+// The built-in LAM ministry. Its roster is who may be scheduled on a line-up,
+// so the id is stable and the ministry cannot be deleted.
+export const LAM_MINISTRY_ID = "lam";
+
+// Where someone serves on a service line-up.
+export const LINEUP_PARTS = [
+  "worship_leader",
+  "vocals",
+  "keys",
+  "acoustic_guitar",
+  "electric_guitar",
+  "bass",
+  "drums",
+  "sound",
+  "lights",
+  "projection",
+  "dance",
+  "liturgy",
+] as const;
+export type LineupPart = (typeof LINEUP_PARTS)[number];
+
+export const LINEUP_PART_LABELS: Record<LineupPart, string> = {
+  worship_leader: "Worship Leader",
+  vocals: "Vocals",
+  keys: "Keys",
+  acoustic_guitar: "Acoustic Guitar",
+  electric_guitar: "Electric Guitar",
+  bass: "Bass",
+  drums: "Drums",
+  sound: "Sound",
+  lights: "Lights",
+  projection: "Projection",
+  dance: "Dance",
+  liturgy: "Liturgy",
+};

@@ -1,18 +1,32 @@
-import { groupPermissionsByModule, type PermissionKey } from "@/lib/permissions";
+import {
+  MINISTRY_GRANTABLE_PERMISSIONS,
+  PERMISSIONS,
+  groupPermissionsByModule,
+  type PermissionKey,
+} from "@/lib/permissions";
 
-/** A grouped, native-checkbox editor for a role's permission assignments. */
+/**
+ * A grouped, native-checkbox editor for a role's or a ministry's permission
+ * assignments. `scope="ministry"` offers only what a ministry may grant — the
+ * server validator enforces the same subset, so this is presentation only.
+ */
 export function PermissionMatrix({
   selected = [],
   disabled = false,
+  scope = "role",
 }: {
   selected?: readonly PermissionKey[];
   disabled?: boolean;
+  scope?: "role" | "ministry";
 }) {
   const selectedKeys = new Set(selected);
+  const modules = groupPermissionsByModule(
+    scope === "ministry" ? MINISTRY_GRANTABLE_PERMISSIONS : PERMISSIONS,
+  );
 
   return (
     <div className="divide-y rounded-md border">
-      {groupPermissionsByModule().map((module) => (
+      {modules.map((module) => (
         <fieldset
           key={module.key}
           className="grid gap-4 p-4 md:grid-cols-[minmax(10rem,0.7fr)_minmax(0,1.3fr)]"

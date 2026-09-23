@@ -55,8 +55,12 @@ export function Field({
         })
       : children;
 
+  // Gap, not space-y: Tailwind 4's space-y puts its margin on every child but
+  // the last, and a Select appends an absolutely positioned hidden input after
+  // its trigger — so the trigger took the margin and sat 6px higher than an
+  // Input beside it. Absolutely positioned children take no part in a gap.
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("flex flex-col gap-1.5", className)}>
       <Label htmlFor={htmlFor}>
         {label}
         {/* Decorative: the asterisk is a visual convention, and reading it out

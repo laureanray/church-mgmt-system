@@ -31,6 +31,7 @@ export default async function AppLayout({
           email: user.email,
           roleName: user.role.name,
           permissions: user.permissions,
+          ministryCount: user.ministries.length,
         }}
       />
       <SidebarInset>

@@ -1,5 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { cellGroupSchema, promoteSchema, roleSchema } from "./validators";
+import {
+  cellGroupSchema,
+  createUserSchema,
+  lineupAssignmentSchema,
+  ministrySchema,
+  promoteSchema,
+  roleSchema,
+  songSchema,
+} from "./validators";
 
 describe("roleSchema", () => {
   it("accepts catalog permissions and removes duplicates", () => {
@@ -175,5 +183,120 @@ describe("member input from JSON", () => {
       memberSchema.parse({ firstName: "Ana", lastName: "Santos", memberSinceYear: 2019 })
         .memberSinceYear,
     ).toBe(2019);
+  });
+});
+
+describe("ministrySchema", () => {
+  it("accepts grantable permissions and reads the active checkbox", () => {
+    expect(
+      ministrySchema.parse({
+        name: "LAM",
+        description: "",
+        active: "on",
+        permissions: ["lam.view", "lam.view", "services.view"],
+      }),
+    ).toEqual({
+      name: "LAM",
+      description: null,
+      active: true,
+      permissions: ["lam.view", "services.view"],
+    });
+  });
+
+  it("treats an unticked active checkbox as inactive", () => {
+    // FormData.get returns null for an unticked checkbox.
+    expect(
+      ministrySchema.parse({ name: "LAM", description: null, active: null }).active,
+    ).toBe(false);
+  });
+
+  it("rejects a permission a ministry may not grant", () => {
+    for (const key of ["users.update", "roles.update", "ministries.update", "settings.update"]) {
+      expect(
+        ministrySchema.safeParse({
+        name: "LAM",
+        description: null,
+        active: "on",
+        permissions: [key],
+      }).success,
+      ).toBe(false);
+    }
+  });
+});
+
+describe("songSchema", () => {
+  // What the song form posts when only the title is filled in.
+  const blank = {
+    artist: null,
+    defaultKey: null,
+    tempo: null,
+    referenceUrl: null,
+    notes: null,
+  };
+
+  it("normalises empty optional fields to null", () => {
+    expect(
+      songSchema.parse({
+        title: " Way Maker ",
+        artist: "",
+        defaultKey: "",
+        tempo: "",
+        referenceUrl: "",
+        notes: "",
+      }),
+    ).toEqual({
+      title: "Way Maker",
+      artist: null,
+      defaultKey: null,
+      tempo: null,
+      referenceUrl: null,
+      notes: null,
+    });
+  });
+
+  it("parses tempo and accepts a web link", () => {
+    const song = songSchema.parse({
+      ...blank,
+      title: "Way Maker",
+      tempo: "68",
+      referenceUrl: "https://example.com/chords",
+    });
+    expect(song.tempo).toBe(68);
+    expect(song.referenceUrl).toBe("https://example.com/chords");
+  });
+
+  it("rejects a non-web link and an implausible tempo", () => {
+    expect(
+      songSchema.safeParse({ ...blank, title: "X", referenceUrl: "javascript:alert(1)" })
+        .success,
+    ).toBe(false);
+    expect(
+      songSchema.safeParse({ ...blank, title: "X", tempo: "1000" }).success,
+    ).toBe(false);
+    expect(songSchema.safeParse({ ...blank, title: "X" }).success).toBe(true);
+  });
+});
+
+describe("lineupAssignmentSchema", () => {
+  it("accepts only known parts", () => {
+    expect(
+      lineupAssignmentSchema.safeParse({ memberId: "m", part: "keys" }).success,
+    ).toBe(true);
+    expect(
+      lineupAssignmentSchema.safeParse({ memberId: "m", part: "kazoo" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("createUserSchema", () => {
+  it("treats an empty linked member as not linked", () => {
+    expect(
+      createUserSchema.parse({
+        name: "Joy",
+        email: "joy@example.com",
+        roleId: "usher",
+        memberId: "",
+      }).memberId,
+    ).toBeNull();
   });
 });

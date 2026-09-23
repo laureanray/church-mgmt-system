@@ -218,6 +218,11 @@ password. Supabase owns credentials — this codebase never hashes a password.
   The
   verifier in `lib/supabase/verify.ts` is a fourth, but it is anonymous and
   read-only — it holds no session and can reach no data.
+- **Ministries add permissions on top of a role.** A ministry's roster is made
+  of *members*; a rostered member whose record is linked to a login
+  (`members.user_id`) receives the ministry's grants. Ministries can never
+  grant staff, role, ministry or settings permissions, and heads manage only
+  their own roster. `docs/authorization.md` has the rules and why.
 - Creating or deleting staff writes to **both** Supabase Auth and the profile
   table; `app/(app)/users/actions.ts` rolls the auth user back if the profile
   insert fails, so neither half is left orphaned.
@@ -319,6 +324,8 @@ matter while editing:
   leaves no entry, and a failed entry undoes the change.
   `recordAudit` diffs and redacts on its own (any key matching
   secret/password/token), so pass whole rows rather than picking fields.
+- The LAM ministry is built in with the stable id `lam`: its roster is who may
+  be scheduled on a service line-up, and the line-up actions check it.
 
 ## Working here
 
