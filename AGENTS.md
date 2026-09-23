@@ -341,21 +341,31 @@ against the selected project's local Supabase only; review compatibility because
 worktrees share the database. No Supabase migration runner, reset, or history
 repair is used. `bun run test:irm` checks the manager and terminal renderer.
 
-### Delegating repetitive tasks
+### Models and delegation
 
-Use a GPT-5.6 Luna sub-agent (`gpt-5.6-luna`) for routine, bounded work such as
-staging reviewed changes, creating conventional commits, pushing task branches,
-and creating or updating pull requests. Prefer this model for repetitive
-repository chores to reduce token costs; keep implementation decisions, ambiguous
-requirements, and complex debugging with the primary agent.
+Work runs on **Opus 5.5** or **GPT-6 Sol** (`gpt-6-sol`), unless the user
+deliberately started the session on a lower model — then that model does the
+work. Every sub-agent doing search, review or implementation runs on the
+session's model; in Claude Code, set the `Agent` tool's `model` to it
+explicitly, because an agent type's own default can be lower.
 
-Delegate only actions authorized by the current request. Give the sub-agent the
-exact branch/worktree, intended files, validation results, and requested outcome.
-Commit/push/PR follow-ups stay in the task's existing worktree. The sub-agent
-must preserve unrelated work, inspect the staged diff, exclude secrets and local
-artifacts, and report the commit, branch, PR URL, and any failed checks. The
-primary agent verifies the handoff. If Luna is unavailable or the task stops
-being routine, continue with the primary agent and explain the fallback briefly.
+Routine, bounded repository chores — staging reviewed changes, conventional
+commits, pushing the task branch, opening or updating its PR — go to the
+session model's paired sub-agent to save tokens:
+
+- Opus 5.5 → **Sonnet 5** (`Agent` tool, `model: "sonnet"`).
+- GPT-6 Sol → **GPT-6 Luna** (`gpt-6-luna`).
+
+On any other session model, do the chores yourself. Implementation decisions,
+ambiguous requirements and debugging always stay with the primary agent.
+
+Delegate only what the current request authorises. The brief names the
+worktree and branch, the exact files to stage, the checks already run and their
+results, and the requested outcome. The sub-agent stages only those files,
+reads the staged diff before committing, and reports the commit SHA, branch, PR
+URL and any failed check. Confirm that report against `git log` and the PR
+before handing off. When the paired model is unavailable or the chore stops
+being routine, do it yourself and say so in one line.
 
 ### Project conventions
 
