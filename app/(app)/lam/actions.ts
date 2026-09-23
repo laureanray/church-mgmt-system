@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { LAM_MINISTRY_ID } from "@/lib/constants";
+import { isForeignKeyViolation } from "@/lib/db-errors";
 import {
   fieldErrors,
   lineupAssignmentSchema,
@@ -86,15 +87,14 @@ export async function updateSong(
 
 export async function deleteSong(id: string) {
   await requirePermission("lam.songs_delete");
-  // The foreign key restricts this anyway; checking first turns a database
-  // error into a no-op for a song someone added to a line-up meanwhile.
-  const used = await db.query.lineupSongs.findFirst({
-    where: eq(lineupSongs.songId, id),
-    columns: { id: true },
-  });
-  if (used) return;
-
-  await db.delete(songs).where(eq(songs.id, id));
+  // No check-then-delete: a song could join a line-up between the two. The
+  // restrictive foreign key is the atomic check, and a song in use is a no-op.
+  try {
+    await db.delete(songs).where(eq(songs.id, id));
+  } catch (err) {
+    if (isForeignKeyViolation(err)) return;
+    throw err;
+  }
   revalidatePath("/lam/songs");
 }
 
@@ -103,6 +103,17 @@ export async function deleteSong(id: string) {
 function revalidateLineup(serviceId: string) {
   revalidatePath("/lam");
   revalidatePath(`/lam/services/${serviceId}`);
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Serializes set-list changes for one service for the rest of the transaction. */
+async function lockService(tx: Tx, serviceId: string) {
+  await tx
+    .select({ id: services.id })
+    .from(services)
+    .where(eq(services.id, serviceId))
+    .for("update");
 }
 
 async function serviceExists(serviceId: string) {
@@ -135,6 +146,9 @@ export async function addLineupSong(
   if (!song) return { errors: { songId: "That song is no longer in the library." } };
 
   await db.transaction(async (tx) => {
+    // Locks the service row, so two planners adding at once take turns rather
+    // than both reading the same last position.
+    await lockService(tx, serviceId);
     const [{ last }] = await tx
       .select({ last: max(lineupSongs.position) })
       .from(lineupSongs)
@@ -161,6 +175,7 @@ export async function moveLineupSong(
   // Arguments bound on the client arrive as whatever the client sent.
   if (direction !== "up" && direction !== "down") return;
   await db.transaction(async (tx) => {
+    await lockService(tx, serviceId);
     const item = await tx.query.lineupSongs.findFirst({
       where: and(eq(lineupSongs.id, id), eq(lineupSongs.serviceId, serviceId)),
     });

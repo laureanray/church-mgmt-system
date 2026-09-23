@@ -77,6 +77,39 @@ it("refuses a member another login already claims", async () => {
   expect((await links()).find((row) => row.id === "mark")?.userId).toBe("mark-login");
 });
 
+it("loses the claim when another login takes the member mid-request", async () => {
+  // Another staff member links Joy to the admin's login in a transaction that
+  // has not committed yet, so updateUser's early check still sees Joy unclaimed.
+  const rival = await database.client.reserve();
+  try {
+    await rival`BEGIN`;
+    await rival`UPDATE members SET user_id = 'admin' WHERE id = 'joy'`;
+
+    const pending = updateUser("joy-login", undefined, editForm("joy")).then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+    // Give the claim time to block on the rival's row lock.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await rival`COMMIT`;
+
+    const outcome = await pending;
+    expect(outcome).toEqual({
+      value: { errors: { memberId: "That member is already linked to another staff login." } },
+    });
+  } finally {
+    // A no-op after COMMIT; after a failure it keeps the pooled connection
+    // from carrying an open transaction into the next test.
+    await rival`ROLLBACK`.catch(() => {});
+    rival.release();
+  }
+
+  // The rival's link stands, and Joy's login keeps its previous member.
+  const rows = await links();
+  expect(rows.find((row) => row.id === "joy")?.userId).toBe("admin");
+  expect(rows.find((row) => row.id === "joy-duplicate")?.userId).toBe("joy-login");
+});
+
 it("refuses to relink your own login", async () => {
   requirePermission.mockResolvedValue({
     id: "joy-login",

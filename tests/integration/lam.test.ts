@@ -126,6 +126,22 @@ describe("songs", () => {
     expect((await setlist()).map((row) => row.songId)).toEqual(["way-maker"]);
   });
 
+  it("gives concurrent additions distinct positions", async () => {
+    // Without the service lock both transactions read the same last position.
+    await Promise.all(
+      ["way-maker", "goodness", "unused", "way-maker", "goodness"].map((songId) =>
+        addLineupSong("sunday", undefined, form({ songId, songKey: "" })),
+      ),
+    );
+    const positions = (
+      await database.db
+        .select({ position: lineupSongs.position })
+        .from(lineupSongs)
+        .where(eq(lineupSongs.serviceId, "sunday"))
+    ).map((row) => row.position);
+    expect(new Set(positions).size).toBe(5);
+  });
+
   it("ignores a move for an item on another service", async () => {
     await database.db.insert(services).values({ id: "midweek", name: "Midweek", scheduledAt: new Date() });
     await addLineupSong("sunday", undefined, form({ songId: "way-maker", songKey: "" }));

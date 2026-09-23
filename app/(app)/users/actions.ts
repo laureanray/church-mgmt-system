@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -13,10 +13,13 @@ import { generateTempPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
 
+const MEMBER_ALREADY_LINKED = "That member is already linked to another staff login.";
+
 /**
  * Checks a member can be linked to this login: it exists, and no other login
- * already claims it. `members.user_id` is unique, so this is the friendly
- * version of an error the database would raise anyway.
+ * already claims it. This is the early, friendly answer for the form; the
+ * claim itself is re-checked atomically in linkMember, because two staff can
+ * pass this check for the same member at the same moment.
  */
 async function linkableMemberError(
   memberId: string | null,
@@ -29,14 +32,24 @@ async function linkableMemberError(
   });
   if (!member) return "That member no longer exists.";
   if (member.userId && member.userId !== userId) {
-    return "That member is already linked to another staff login.";
+    return MEMBER_ALREADY_LINKED;
   }
   return null;
 }
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
-/** Points exactly one member record (or none) at this login. */
+/** Thrown inside a transaction to roll it back when the claim is lost. */
+class MemberAlreadyLinked extends Error {}
+
+/**
+ * Points exactly one member record (or none) at this login.
+ *
+ * The claim only succeeds while the member is unclaimed or already this
+ * login's, and it must touch a row — so a concurrent link to the same member
+ * rolls this transaction back instead of silently taking the member over,
+ * which would move its ministry access from one login to another.
+ */
 async function linkMember(tx: Tx, userId: string, memberId: string | null) {
   await tx
     .update(members)
@@ -47,10 +60,17 @@ async function linkMember(tx: Tx, userId: string, memberId: string | null) {
         : eq(members.userId, userId),
     );
   if (memberId) {
-    await tx
+    const claimed = await tx
       .update(members)
       .set({ userId, updatedAt: new Date() })
-      .where(eq(members.id, memberId));
+      .where(
+        and(
+          eq(members.id, memberId),
+          or(isNull(members.userId), eq(members.userId, userId)),
+        ),
+      )
+      .returning({ id: members.id });
+    if (claimed.length === 0) throw new MemberAlreadyLinked();
   }
 }
 
@@ -147,6 +167,9 @@ export async function createUser(
     // Roll the auth user back, otherwise it lingers with no profile and its
     // owner can sign in but gets bounced by requireUser().
     await admin.auth.admin.deleteUser(data.user.id);
+    if (err instanceof MemberAlreadyLinked) {
+      return { errors: { memberId: MEMBER_ALREADY_LINKED } };
+    }
     throw err;
   }
 
@@ -233,31 +256,38 @@ export async function updateUser(
 
   // The linked member carries ministry access, so relinking can change what
   // this user may do exactly as a role change can.
-  await db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(users)
-      .set({ name, email, roleId, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
-    await linkMember(tx, id, memberId);
-    if (!existing || !updated) return;
+  try {
+    await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(users)
+        .set({ name, email, roleId, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      await linkMember(tx, id, memberId);
+      if (!existing || !updated) return;
 
-    const roleChanged = existing.roleId !== updated.roleId;
-    await recordAudit(tx, {
-      actorId: currentUser.id,
-      action: roleChanged ? "user.role_change" : "user.update",
-      entity: "user",
-      entityId: id,
-      before: existing,
-      after: updated,
-      summary: (fields) => {
-        const others = describeFields(fields.filter((field) => field !== "roleId"));
-        if (!roleChanged) return `Edited staff user ${name}: ${others}`;
-        const role = `Changed ${name}’s role to ${assignedRole.name}`;
-        return others ? `${role}, and edited ${others}` : role;
-      },
+      const roleChanged = existing.roleId !== updated.roleId;
+      await recordAudit(tx, {
+        actorId: currentUser.id,
+        action: roleChanged ? "user.role_change" : "user.update",
+        entity: "user",
+        entityId: id,
+        before: existing,
+        after: updated,
+        summary: (fields) => {
+          const others = describeFields(fields.filter((field) => field !== "roleId"));
+          if (!roleChanged) return `Edited staff user ${name}: ${others}`;
+          const role = `Changed ${name}’s role to ${assignedRole.name}`;
+          return others ? `${role}, and edited ${others}` : role;
+        },
+      });
     });
-  });
+  } catch (err) {
+    if (err instanceof MemberAlreadyLinked) {
+      return { errors: { memberId: MEMBER_ALREADY_LINKED } };
+    }
+    throw err;
+  }
 
   revalidatePath("/users");
   revalidatePath("/members", "layout");
