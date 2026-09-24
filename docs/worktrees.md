@@ -12,7 +12,10 @@ cd "$(irm cd)"
 irm setup
 ```
 
-New tasks start from freshly fetched main in a new branch and sibling worktree.
+New tasks start from freshly fetched main in a new branch and sibling worktree —
+or under the checkout's configured `worktree_root` (`irm init --worktree-root`).
+The remote development host keeps them in `~/worktrees/church-mgmt-system/`.
+`irm remote sync` mirrors a laptop worktree there; see the manager README.
 Continue related follow-ups in the existing task worktree. The primary checkout
 can contain local work; never reset it to get a clean task checkout.
 

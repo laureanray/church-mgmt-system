@@ -18,9 +18,11 @@ def backend_path(config_path, fallback, command=None):
                 capabilities = json.loads(manifest.read_text())
                 if command in (None, 'pull', 'updates') and 'git-sync' not in capabilities.get('features', []):
                     return fallback / 'irm.py'
+                if command == 'remote' and 'remote' not in capabilities.get('features', []):
+                    return fallback / 'irm.py'
                 if platform.system() in capabilities.get('platforms', []) and mode in capabilities.get('network_modes', []):
                     return candidate
-            elif platform.system() == 'Linux' and mode in ('lan', 'tailscale') and command not in (None, 'pull', 'updates'):
+            elif platform.system() == 'Linux' and mode in ('lan', 'tailscale') and command not in (None, 'pull', 'updates', 'remote'):
                 # Legacy backends implement these two modes on Linux only.
                 return candidate
             # Older worktrees can still run their app scripts using the installed

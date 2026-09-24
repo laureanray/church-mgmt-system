@@ -288,7 +288,9 @@ generated files, and this `AGENTS.md`.
 3. Create a task-specific branch and sibling worktree from `origin/main`:
    `irm new <task-branch> <task-slug>`. The helper fetches again,
    creates the worktree beside the primary checkout (even when invoked from
-   another worktree), and avoids tracking `origin/main` with a task branch.
+   another worktree) — or under `worktree_root` when the irm config sets one,
+   as the remote development host does — and avoids tracking `origin/main`
+   with a task branch.
    Without the manager, use `git worktree add --no-track -b <task-branch>
    <absolute-sibling-path> origin/main`.
 4. Confirm the new worktree's branch and starting commit match the intended
@@ -335,6 +337,11 @@ removal. Actual HEAD ancestry is required: a merged PR can have later unmerged
 commits, and squash/rebase merges need manual review. Branches are retained.
 Never use force removal, automatic stashing, or branch deletion to bypass a
 blocked cleanup. Lock ongoing worktrees when they should be reserved.
+
+`irm remote` drives a Linux host over SSH: its dashboard with the app's ports
+forwarded to `localhost`, and `irm remote sync` to mirror worktrees there
+(uncommitted work included). Work made on the host returns through GitHub.
+See the manager README.
 
 `irm run` never changes database schema. `irm migrate` explicitly runs Drizzle
 against the selected project's local Supabase only; review compatibility because
