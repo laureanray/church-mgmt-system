@@ -3,7 +3,13 @@ import "server-only";
 import { and, eq, gte, notInArray } from "drizzle-orm";
 
 import { db } from "@/db";
-import { attendance, serviceSchedules, services } from "@/db/schema";
+import {
+  attendance,
+  lineupAssignments,
+  lineupSongs,
+  serviceSchedules,
+  services,
+} from "@/db/schema";
 import type { ServiceSchedule } from "@/db/schema";
 
 /**
@@ -76,14 +82,22 @@ export async function generateForSchedule(
 }
 
 /**
- * Remove future occurrences of a schedule that have no attendance yet — used
- * before regenerating when a schedule's day/time changes. Past services and
- * anything already scanned into are preserved.
+ * Remove future occurrences of a schedule that nobody has used yet — used
+ * before regenerating when a schedule's day/time changes. Past services, and
+ * anything already scanned into or given a LAM line-up (songs or team), are
+ * preserved: deleting a service cascades to its line-up, so a rebuild would
+ * otherwise discard a plan without a word.
  */
 export async function deleteFutureEmptyOccurrences(scheduleId: string) {
   const attendedServiceIds = db
     .select({ id: attendance.serviceId })
     .from(attendance);
+  const servicesWithSongs = db
+    .select({ id: lineupSongs.serviceId })
+    .from(lineupSongs);
+  const servicesWithTeam = db
+    .select({ id: lineupAssignments.serviceId })
+    .from(lineupAssignments);
 
   await db
     .delete(services)
@@ -92,6 +106,8 @@ export async function deleteFutureEmptyOccurrences(scheduleId: string) {
         eq(services.scheduleId, scheduleId),
         gte(services.scheduledAt, startOfToday()),
         notInArray(services.id, attendedServiceIds),
+        notInArray(services.id, servicesWithSongs),
+        notInArray(services.id, servicesWithTeam),
       ),
     );
 }
