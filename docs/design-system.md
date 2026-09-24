@@ -150,6 +150,7 @@ continue to use their existing datetime control.
 
 | Component | Replaces |
 | --- | --- |
+| `PageContainer` | The outer frame of every page, and the only place a page width is set |
 | `PageHeader` | Title, description and actions above every page |
 | `BackLink` | The "← Back to members" ghost link, previously copied into 12 routes |
 | `EmptyState` | The dashed placeholder *and* the muted line inside a Card (`variant="inline"`) |
@@ -159,6 +160,25 @@ continue to use their existing datetime control.
 | `TableCard` | The bordered, clipped frame around a full-width table |
 | `SearchField` | The list-page search box |
 | `DataTable` | Every table in the app: sorting, paging, search, facets, columns |
+
+### Page width
+
+Every page in `app/(app)` renders through `PageContainer`, including the
+group's `loading.tsx`. It has two widths:
+
+| Width | Used by | Frame |
+| --- | --- | --- |
+| `full` (default) | Lists, the dashboard, scan, and record views such as `/services/[id]` | Fills the layout's `<main>`; its `p-4 md:p-6` is the only inset |
+| `form` | Create and edit screens, and settings | `max-w-3xl`, left-aligned |
+
+A record opened from a list keeps the list's width, so clicking a row neither
+narrows the page nor pushes the title inwards. Pages never centre themselves
+with `mx-auto` or set their own `max-w-*`: a centred column narrower than the
+list it came from moves the whole page. Forms cap their line length but keep
+the shared left edge. The role editor's permission matrix needs the room, so
+role create and edit use `full`. `tests/ui/page-width.test.ts` enforces all of
+this, and the `Patterns/PageContainer` stories show list, record and form
+stacked on one left edge.
 
 Domain-specific editors follow the same layers. `PermissionMatrix` groups the
 authorization catalog by module and uses native named checkboxes so the role

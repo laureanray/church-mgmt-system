@@ -7,6 +7,7 @@ import { roles, users } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { UserForm } from "@/components/users/user-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function EditUserPage({
@@ -28,10 +29,10 @@ export default async function EditUserPage({
   const action = updateUser.bind(null, user.id);
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <PageContainer width="form">
       <BackLink href="/users" label="Back to staff" />
       <PageHeader title="Edit Staff User" description={`Update ${user.name}.`} />
       <UserForm action={action} user={user} roles={roleOptions} />
-    </div>
+    </PageContainer>
   );
 }

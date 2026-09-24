@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { BackLink } from "@/components/patterns/back-link";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { DeleteCellGroupButton } from "@/components/cell-groups/delete-cell-group-button";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -45,7 +46,7 @@ export default async function CellGroupDetailPage({
   const canDelete = hasPermission(user, "cell_groups.delete");
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <PageContainer>
       <BackLink href="/cell-groups" label="Back to cell groups" />
 
       <PageHeader
@@ -142,6 +143,6 @@ export default async function CellGroupDetailPage({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }

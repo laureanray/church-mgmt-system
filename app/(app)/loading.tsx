@@ -1,3 +1,4 @@
+import { PageContainer } from "@/components/patterns/page-container";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -14,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export default function Loading() {
   return (
-    <div aria-busy="true" aria-label="Loading">
+    <PageContainer aria-busy="true" aria-label="Loading">
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           <Skeleton className="h-8 w-48" />
@@ -35,6 +36,6 @@ export default function Loading() {
           <Skeleton key={i} className="h-10 w-full" />
         ))}
       </div>
-    </div>
+    </PageContainer>
   );
 }

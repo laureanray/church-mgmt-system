@@ -6,6 +6,7 @@ import { cellGroups, members } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { CellGroupForm } from "@/components/cell-groups/cell-group-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewCellGroupPage() {
@@ -26,7 +27,7 @@ export default async function NewCellGroupPage() {
   const cellOptions = cellRows.map((c) => ({ value: c.id, label: c.name }));
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageContainer width="form">
       <BackLink href="/cell-groups" label="Back to cell groups" />
       <PageHeader
         title="New Cell Group"
@@ -38,6 +39,6 @@ export default async function NewCellGroupPage() {
         cellOptions={cellOptions}
         submitLabel="Create cell group"
       />
-    </div>
+    </PageContainer>
   );
 }

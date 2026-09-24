@@ -34,6 +34,7 @@ import { ScheduleActiveToggle } from "@/components/services/schedule-active-togg
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { EmptyState } from "@/components/patterns/empty-state";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -217,7 +218,7 @@ export default async function ServicesPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Services"
         description="Recurring schedules and individual services you track attendance for."
@@ -371,6 +372,6 @@ export default async function ServicesPage({
           />
         </CardContent>
       </Card>
-    </>
+    </PageContainer>
   );
 }

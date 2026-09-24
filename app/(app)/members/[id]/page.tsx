@@ -22,6 +22,7 @@ import { BackLink } from "@/components/patterns/back-link";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { DetailList, DetailRow } from "@/components/patterns/detail-list";
+import { PageContainer } from "@/components/patterns/page-container";
 import { FormSelect } from "@/components/form/form-select";
 import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
@@ -157,7 +158,7 @@ export default async function MemberDetailPage({
   const parentCells = allCells;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <PageContainer>
       <BackLink href="/members" label="Back to members" />
 
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -354,6 +355,6 @@ export default async function MemberDetailPage({
           />
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

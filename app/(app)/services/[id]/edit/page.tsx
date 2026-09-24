@@ -7,6 +7,7 @@ import { services } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { ServiceForm } from "@/components/services/service-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function EditServicePage({
@@ -25,7 +26,7 @@ export default async function EditServicePage({
   const action = updateService.bind(null, service.id);
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <PageContainer width="form">
       <BackLink href={`/services/${service.id}`} label="Back to service" />
       <PageHeader
         title="Edit Service"
@@ -36,6 +37,6 @@ export default async function EditServicePage({
         service={service}
         submitLabel="Save changes"
       />
-    </div>
+    </PageContainer>
   );
 }

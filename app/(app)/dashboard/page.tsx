@@ -18,6 +18,7 @@ import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { StatCard } from "@/components/patterns/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -111,7 +112,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title={`Welcome, ${user.name?.split(" ")[0] ?? "there"}`}
         description="Here's what's happening in your church."
@@ -192,6 +193,6 @@ export default async function DashboardPage() {
           />
         </CardContent>
       </Card>
-    </>
+    </PageContainer>
   );
 }

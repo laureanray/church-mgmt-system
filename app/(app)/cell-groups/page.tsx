@@ -9,6 +9,7 @@ import { buildCellGraph } from "@/lib/cell-graph";
 import { cn } from "@/lib/utils";
 import { CellGroupsView } from "@/components/cell-groups/cell-groups-view";
 import { EmptyState } from "@/components/patterns/empty-state";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -52,7 +53,7 @@ export default async function CellGroupsPage() {
   const canUpdate = hasPermission(user, "cell_groups.update");
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Cell Groups"
         description={`${cells.length} cell group${
@@ -83,6 +84,6 @@ export default async function CellGroupsPage() {
           canManage={canUpdate}
         />
       )}
-    </>
+    </PageContainer>
   );
 }

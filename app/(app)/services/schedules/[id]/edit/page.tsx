@@ -7,6 +7,7 @@ import { serviceSchedules } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { ScheduleForm } from "@/components/services/schedule-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function EditSchedulePage({
@@ -25,7 +26,7 @@ export default async function EditSchedulePage({
   const action = updateSchedule.bind(null, schedule.id);
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <PageContainer width="form">
       <BackLink href="/services" label="Back to services" />
       <PageHeader
         title="Edit Schedule"
@@ -36,6 +37,6 @@ export default async function EditSchedulePage({
         schedule={schedule}
         submitLabel="Save changes"
       />
-    </div>
+    </PageContainer>
   );
 }

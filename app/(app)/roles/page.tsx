@@ -14,6 +14,7 @@ import { Pencil, Plus, ShieldCheck } from "lucide-react";
 import { db } from "@/db";
 import { rolePermissions, roles, users } from "@/db/schema";
 import { DataTable, type DataTableColumn } from "@/components/patterns/data-table";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { DeleteRoleButton } from "@/components/roles/delete-role-button";
 import { deleteRole } from "./actions";
@@ -154,7 +155,7 @@ export default async function RolesPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Roles & Permissions"
         description="Define module access once, then assign a role to each staff user."
@@ -181,6 +182,6 @@ export default async function RolesPage({
         }}
         emptyFiltered={{ icon: ShieldCheck, title: "No roles match your search" }}
       />
-    </>
+    </PageContainer>
   );
 }

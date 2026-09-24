@@ -5,6 +5,7 @@ import { updateRole } from "../../actions";
 import { db } from "@/db";
 import { rolePermissions, roles } from "@/db/schema";
 import { BackLink } from "@/components/patterns/back-link";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { RoleForm } from "@/components/roles/role-form";
 import { requirePermission } from "@/lib/auth-helpers";
@@ -28,7 +29,7 @@ export default async function EditRolePage({
   if (!role) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <PageContainer>
       <BackLink href="/roles" label="Back to roles" />
       <PageHeader
         title={role.id === "admin" ? "Admin Role" : "Edit Role"}
@@ -44,6 +45,6 @@ export default async function EditRolePage({
         selectedPermissions={assigned.map(({ key }) => key as PermissionKey)}
         protectedRole={role.id === "admin"}
       />
-    </div>
+    </PageContainer>
   );
 }

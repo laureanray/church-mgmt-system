@@ -22,6 +22,7 @@ import { DeleteUserButton } from "@/components/users/delete-user-button";
 import { ResetPasswordButton } from "@/components/users/reset-password-button";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -194,7 +195,7 @@ export default async function UsersPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Staff Users"
         description="People who can log in to manage members and record attendance."
@@ -232,6 +233,6 @@ export default async function UsersPage({
           title: "No staff match your search",
         }}
       />
-    </>
+    </PageContainer>
   );
 }
