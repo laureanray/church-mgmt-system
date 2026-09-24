@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, it, mock } from "bun:test";
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import { members, users } from "../../db/schema";
@@ -15,18 +15,17 @@ await mock.module("next/navigation", () => ({
     throw new Redirect(to);
   },
 }));
-// Only reached when an email changes, which these tests never do.
+// Only reached when an email changes.
+const updateUserById = mock(async (_id: string, _attributes: object) => ({ error: null }));
 await mock.module("@/lib/supabase/admin", () => ({
-  createAdminClient: () => {
-    throw new Error("Supabase admin should not be called");
-  },
+  createAdminClient: () => ({ auth: { admin: { updateUserById } } }),
 }));
 const { updateUser } = await import("../../app/(app)/users/actions");
 
-function editForm(memberId: string) {
+function editForm(memberId: string, email = "joy@example.test") {
   const data = new FormData();
   data.set("name", "Joy");
-  data.set("email", "joy@example.test");
+  data.set("email", email);
   data.set("roleId", "usher");
   data.set("memberId", memberId);
   return data;
@@ -42,6 +41,7 @@ async function links() {
 beforeEach(async () => {
   await resetTestDatabase(database.client);
   requirePermission.mockReset();
+  updateUserById.mockClear();
   requirePermission.mockResolvedValue({ id: "admin", memberId: null, permissions: ["users.update"] });
   await database.db.insert(users).values([
     { id: "admin", email: "admin@example.test", name: "Admin", roleId: "admin" },
@@ -77,37 +77,58 @@ it("refuses a member another login already claims", async () => {
   expect((await links()).find((row) => row.id === "mark")?.userId).toBe("mark-login");
 });
 
-it("loses the claim when another login takes the member mid-request", async () => {
-  // Another staff member links Joy to the admin's login in a transaction that
-  // has not committed yet, so updateUser's early check still sees Joy unclaimed.
+// Another staff member links Joy to the admin's login in a transaction that
+// has not committed yet, so updateUser's early check still sees Joy unclaimed.
+async function editWhileRivalClaimsJoy(form: FormData) {
   const rival = await database.client.reserve();
   try {
     await rival`BEGIN`;
     await rival`UPDATE members SET user_id = 'admin' WHERE id = 'joy'`;
 
-    const pending = updateUser("joy-login", undefined, editForm("joy")).then(
+    const pending = updateUser("joy-login", undefined, form).then(
       (value) => ({ value }),
       (error) => ({ error }),
     );
     // Give the claim time to block on the rival's row lock.
     await new Promise((resolve) => setTimeout(resolve, 300));
     await rival`COMMIT`;
-
-    const outcome = await pending;
-    expect(outcome).toEqual({
-      value: { errors: { memberId: "That member is already linked to another staff login." } },
-    });
+    return await pending;
   } finally {
     // A no-op after COMMIT; after a failure it keeps the pooled connection
     // from carrying an open transaction into the next test.
     await rival`ROLLBACK`.catch(() => {});
     rival.release();
   }
+}
+
+it("loses the claim when another login takes the member mid-request", async () => {
+  expect(await editWhileRivalClaimsJoy(editForm("joy"))).toEqual({
+    value: { errors: { memberId: "That member is already linked to another staff login." } },
+  });
 
   // The rival's link stands, and Joy's login keeps its previous member.
   const rows = await links();
   expect(rows.find((row) => row.id === "joy")?.userId).toBe("admin");
   expect(rows.find((row) => row.id === "joy-duplicate")?.userId).toBe("joy-login");
+  expect(updateUserById).not.toHaveBeenCalled();
+});
+
+it("restores the login email when the claim is lost after changing it", async () => {
+  const outcome = await editWhileRivalClaimsJoy(editForm("joy", "joy.new@example.test"));
+  expect(outcome).toEqual({
+    value: { errors: { memberId: "That member is already linked to another staff login." } },
+  });
+
+  // Supabase took the new email before the claim failed, then got the old one back.
+  expect(updateUserById.mock.calls).toEqual([
+    ["joy-login", { email: "joy.new@example.test", email_confirm: true }],
+    ["joy-login", { email: "joy@example.test", email_confirm: true }],
+  ]);
+  const [profile] = await database.db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, "joy-login"));
+  expect(profile.email).toBe("joy@example.test");
 });
 
 it("refuses to relink your own login", async () => {

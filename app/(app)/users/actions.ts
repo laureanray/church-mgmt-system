@@ -243,9 +243,10 @@ export async function updateUser(
 
   // Email is the login identity, so a change has to reach Supabase too, or the
   // staff member would keep signing in with the old address.
-  if (existing && existing.email !== email) {
-    const admin = createAdminClient();
-    const { error } = await admin.auth.admin.updateUserById(id, {
+  const previousEmail =
+    existing && existing.email !== email ? existing.email : null;
+  if (previousEmail) {
+    const { error } = await createAdminClient().auth.admin.updateUserById(id, {
       email,
       email_confirm: true,
     });
@@ -283,6 +284,14 @@ export async function updateUser(
       });
     });
   } catch (err) {
+    // The profile rolled back, so put the login email back too; otherwise the
+    // staff member signs in with an address the profile does not show.
+    if (previousEmail) {
+      await createAdminClient().auth.admin.updateUserById(id, {
+        email: previousEmail,
+        email_confirm: true,
+      });
+    }
     if (err instanceof MemberAlreadyLinked) {
       return { errors: { memberId: MEMBER_ALREADY_LINKED } };
     }

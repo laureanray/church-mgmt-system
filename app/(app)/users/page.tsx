@@ -53,6 +53,7 @@ export default async function UsersPage({
 }) {
   const currentUser = await requirePermission("users.view");
   const canCreate = hasPermission(currentUser, "users.create");
+  const canOpenMembers = hasPermission(currentUser, "members.view");
   const [roleOptions, unlinkedMembers] = await Promise.all([
     db
       .select({ value: roles.id, label: roles.name })
@@ -172,9 +173,13 @@ export default async function UsersPage({
       hideBelow: "lg",
       cell: (u) =>
         u.memberId ? (
-          <Link href={`/members/${u.memberId}`} className="hover:underline">
-            {u.memberName}
-          </Link>
+          canOpenMembers ? (
+            <Link href={`/members/${u.memberId}`} className="hover:underline">
+              {u.memberName}
+            </Link>
+          ) : (
+            u.memberName
+          )
         ) : (
           <span className="text-sm text-muted-foreground">Not linked</span>
         ),
