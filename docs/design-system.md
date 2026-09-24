@@ -151,9 +151,11 @@ continue to use their existing datetime control.
 
 `/celebrations` lists birthdays, spiritual birthdays and wedding anniversaries
 for the next seven days or the current month; the dashboard shows the first five
-of the week. The date rules live in `lib/celebrations.ts`: only month and day are
+of the week. The rules live in `lib/celebrations.ts`: only month and day are
 compared, 29 February is celebrated on the 28th in a common year, the week may
 cross New Year, and "today" is the date in Manila rather than on the server.
+The calendar arithmetic beneath them — on `"YYYY-MM-DD"` strings, never local
+`Date`s — is the reusable `lib/dates.ts`.
 Wedding anniversaries appear only for a spouse-relevant marital status, and
 transferred or deceased members never appear.
 

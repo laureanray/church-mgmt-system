@@ -7,7 +7,6 @@ import {
   monthDayKeys,
   observedIn,
   parseCelebrationRange,
-  todayIn,
   type CelebrationSource,
 } from "./celebrations";
 
@@ -24,15 +23,6 @@ function member(overrides: Partial<CelebrationSource>): CelebrationSource {
     ...overrides,
   };
 }
-
-describe("todayIn", () => {
-  it("reads the date in Manila, not on the server's clock", () => {
-    // 20:00 UTC on 31 Dec is already 1 Jan in Manila.
-    const now = new Date("2026-12-31T20:00:00Z");
-    expect(todayIn("Asia/Manila", now)).toBe("2027-01-01");
-    expect(todayIn("UTC", now)).toBe("2026-12-31");
-  });
-});
 
 describe("parseCelebrationRange", () => {
   it("accepts week and month and defaults to the week", () => {

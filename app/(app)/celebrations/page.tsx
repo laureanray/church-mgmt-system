@@ -3,10 +3,10 @@ import {
   CELEBRATION_RANGE_LABELS,
   celebrationWindow,
   parseCelebrationRange,
-  todayIn,
 } from "@/lib/celebrations";
 import { celebrationsIn } from "@/lib/celebrations-query";
 import { tableContext, type RawSearchParams } from "@/lib/data-table";
+import { todayIn } from "@/lib/dates";
 import { PageHeader } from "@/components/patterns/page-header";
 import { CelebrationRangeTabs } from "@/components/celebrations/celebration-range-tabs";
 import { CelebrationsTable } from "@/components/celebrations/celebrations-table";

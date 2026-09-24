@@ -12,10 +12,11 @@ import {
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
-import { celebrationWindow, todayIn } from "@/lib/celebrations";
+import { celebrationWindow } from "@/lib/celebrations";
 import { celebrationsIn } from "@/lib/celebrations-query";
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { tableContext } from "@/lib/data-table";
+import { todayIn } from "@/lib/dates";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/patterns/data-table";

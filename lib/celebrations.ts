@@ -2,12 +2,9 @@
  * Birthdays, spiritual birthdays and wedding anniversaries falling inside a
  * window of days.
  *
- * Everything here works on the `"YYYY-MM-DD"` strings Postgres `date` columns
- * come back as, never on `Date`: a celebration is a month and a day, and
- * turning one into an instant invites the server's timezone to move it. The
- * one place a clock is read is `todayIn`, which asks for the calendar date in
- * the church's own timezone rather than the server's (Vercel runs in UTC, eight
- * hours behind Manila).
+ * This module holds the celebration rules — which dates count, for whom, and
+ * how a range becomes a window. The calendar arithmetic under them, on
+ * `"YYYY-MM-DD"` strings, is `lib/dates.ts`.
  *
  * Pure — no React, no Drizzle — so it is tested in `lib/celebrations.test.ts`.
  * The query that feeds it is `lib/celebrations-query.ts`.
@@ -19,9 +16,15 @@ import {
   type MaritalStatus,
   type MemberStatus,
 } from "@/lib/constants";
-
-/** The church keeps Philippine time; "today" means today in Manila. */
-export const CHURCH_TIME_ZONE = "Asia/Manila";
+import {
+  addDays,
+  anniversaryIn,
+  dateParts,
+  datesBetween,
+  daysInMonth,
+  isLeapYear,
+  isoDate,
+} from "@/lib/dates";
 
 export const CELEBRATION_RANGES = ["week", "month"] as const;
 export type CelebrationRange = (typeof CELEBRATION_RANGES)[number];
@@ -80,20 +83,6 @@ export function parseCelebrationRange(value: unknown): CelebrationRange {
   return CELEBRATION_RANGES.find((range) => range === first) ?? "week";
 }
 
-/** Today's calendar date in `timeZone`, as `"YYYY-MM-DD"`. */
-export function todayIn(
-  timeZone: string = CHURCH_TIME_ZONE,
-  now: Date = new Date(),
-): string {
-  // en-CA is the locale whose short date is already ISO-ordered.
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
-}
-
 /**
  * The days a range covers. The week runs forward from today, so it never
  * lists a birthday that has already been missed; the month is the whole
@@ -103,11 +92,11 @@ export function celebrationWindow(
   range: CelebrationRange,
   today: string,
 ): CelebrationWindow {
-  const { year, month } = parts(today);
+  const { year, month } = dateParts(today);
   if (range === "month") {
     return {
-      start: iso(year, month, 1),
-      end: iso(year, month, daysInMonth(year, month)),
+      start: isoDate(year, month, 1),
+      end: isoDate(year, month, daysInMonth(year, month)),
     };
   }
   return { start: today, end: addDays(today, 6) };
@@ -120,13 +109,11 @@ export function celebrationWindow(
  * is celebrated.
  */
 export function monthDayKeys(window: CelebrationWindow): number[] {
-  const keys: number[] = [];
-  for (let day = window.start; day <= window.end; day = addDays(day, 1)) {
-    const { year, month, date } = parts(day);
-    keys.push(month * 100 + date);
-    if (month === 2 && date === 28 && !isLeapYear(year)) keys.push(229);
-  }
-  return keys;
+  return datesBetween(window.start, window.end).flatMap((date) => {
+    const { year, month, day } = dateParts(date);
+    const key = month * 100 + day;
+    return key === 228 && !isLeapYear(year) ? [key, 229] : [key];
+  });
 }
 
 /**
@@ -138,16 +125,10 @@ export function observedIn(
   date: string,
   window: CelebrationWindow,
 ): string | null {
-  const { month, date: day } = parts(date);
-  const startYear = parts(window.start).year;
-  const endYear = parts(window.end).year;
+  const startYear = dateParts(window.start).year;
+  const endYear = dateParts(window.end).year;
   for (let year = startYear; year <= endYear; year++) {
-    // 29 February is kept on the 28th in a year without one.
-    const observed = iso(
-      year,
-      month,
-      month === 2 && day === 29 && !isLeapYear(year) ? 28 : day,
-    );
+    const observed = anniversaryIn(date, year);
     if (observed >= window.start && observed <= window.end) return observed;
   }
   return null;
@@ -182,7 +163,7 @@ export function collectCelebrations(
       if (!date) continue;
       const observedOn = observedIn(date, window);
       if (!observedOn) continue;
-      const years = parts(observedOn).year - parts(date).year;
+      const years = dateParts(observedOn).year - dateParts(date).year;
       found.push({
         key: `${member.id}:${kind}`,
         memberId: member.id,
@@ -211,28 +192,4 @@ export function celebrationYearsLabel(
   if (years == null) return null;
   if (kind === "birthday") return `Turns ${years}`;
   return years === 1 ? "1 year" : `${years} years`;
-}
-
-export function isLeapYear(year: number): boolean {
-  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-}
-
-function parts(value: string) {
-  const [year, month, date] = value.split("-").map(Number);
-  return { year, month, date };
-}
-
-function iso(year: number, month: number, date: number): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${String(year).padStart(4, "0")}-${pad(month)}-${pad(date)}`;
-}
-
-function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-function addDays(value: string, days: number): string {
-  const { year, month, date } = parts(value);
-  const next = new Date(Date.UTC(year, month - 1, date + days));
-  return iso(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate());
 }
