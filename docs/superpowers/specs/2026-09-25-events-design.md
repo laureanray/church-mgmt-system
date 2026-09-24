@@ -3,22 +3,24 @@
 **Date:** 2026-09-25
 **Status:** Draft, awaiting review
 **Implementation plan:** `docs/superpowers/plans/2026-09-25-events.md`
+**Revision 3:** events are single-day and have their own attendance; sessions-as-services is dropped (§3.1).
 
 ## 1. Purpose
 
 Staff need one place to run everything that is not a routine worship service:
-a youth camp, a couples' retreat, a leadership summit, a medical mission, a
-water baptism, or an anniversary celebration. Running one means:
+a leadership summit, a youth conference, a medical mission, a water baptism,
+a fellowship night, or an anniversary celebration. Running one means:
 
 1. **Planning it**: a checklist of who does what by when, working back from
    the event date.
-2. **Scheduling the program**: the run of show, with talks, worship, meals,
-   and breaks, grouped by day.
+2. **Scheduling the program**: the run of show for the day, with talks,
+   worship, meals, and breaks.
 3. **Taking registrations**: who is coming, which fee tier they are on, and
    whether the event is full.
 4. **Collecting fees**: what each registrant owes, what they have paid by
    cash or GCash, and what is outstanding.
-5. **Taking attendance** on the day, through the existing check-in.
+5. **Taking attendance** on the day, through the `/scan` page, recorded
+   against the event itself.
 
 Today the only related concept is `services.type = "special_event"`. It is a
 single timestamp with no category, no end date, and nothing attached to it.
@@ -31,6 +33,9 @@ without the events tables being generalised in advance.
 
 ### Non-goals
 
+- **Multi-day events.** In v1 an event is one gathering on one day. §3.1
+  describes how multi-day events would be added later without reworking this
+  design.
 - Recurring events. Recurrence stays with `service_schedules`.
 - Public or self-service registration. Staff register people, and a
   member-facing portal is issue #32's territory.
@@ -44,9 +49,9 @@ without the events tables being generalised in advance.
 
 | Term | Meaning |
 | --- | --- |
-| **Event** | The umbrella, e.g. "Youth Camp 2026, 12–14 Dec, Tagaytay". |
-| **Category** | The kind of event, e.g. Camp, Retreat, or Conference. Staff-editable data. |
-| **Session** | One gathering where attendance is taken. **It is a `services` row with `event_id` set.** |
+| **Event** | One gathering on one day, e.g. "Youth Leadership Summit, Sat 12 Dec 2026, 8 AM–5 PM, Main Hall". |
+| **Category** | The kind of event, e.g. Conference, Outreach, or Fellowship. Staff-editable data. |
+| **Event attendance** | One member checked in to one event. It is recorded in `event_attendance`, **not** in the services `attendance` table. |
 | **Program item** | One entry in the run of show, e.g. "9:00 Worship" or "10:00 Talk: Identity, Ptr. Santos". |
 | **Task** | One planning checklist item with an optional due date and assignee. A **milestone** is a task flagged as a key date. |
 | **Fee** | A price tier on an event, e.g. "Early bird ₱1,200 until 30 Nov", "Regular ₱1,500", or "Child ₱800". |
@@ -55,24 +60,54 @@ without the events tables being generalised in advance.
 
 ## 3. Key decisions
 
-### 3.1 Sessions are services
+### 3.1 An event is one gathering with its own attendance
 
-An event's check-in gatherings are `services` rows with a nullable
-`services.event_id`. The alternatives were a separate `event_attendance`
-table, which duplicates the one-check-in-per-member invariant, the scan flow,
-face matching, and Sheets sync, or renaming services into events, which
-rewrites the busiest module for no user need. With `event_id`, `/scan`, face
-and name-search check-in, `recordAttendance`, and Sheets sync work unchanged.
+An event is a single gathering on a single Manila day, and people check in to
+**the event itself**. Its check-ins live in a dedicated `event_attendance`
+table with the same shape and the same invariant as the services
+`attendance` table: one row per member per event, unique, with a duplicate
+detected by an empty `returning()` after `onConflictDoNothing()`.
+
+**Services are not touched.** Service attendance, the dashboard's check-in
+counts, member attendance history, service reports, and the Google Sheets
+sync keep reading only `attendance`, so events cannot skew them or be deleted
+through them. Where a screen should show both, such as a member's history,
+it reads both tables deliberately (phase 6).
+
+**Check-in is shared up to the last step.** Resolving *who* is being checked
+in (today a QR token, later face match #16 or name search #18), the
+reactivate-inactive-member prompt, and the result display are the same for
+services and events. Only the final insert differs. `/scan` therefore picks a
+**check-in target**, `{ kind: "service" | "event", id }`, and one server-side
+`checkIn(target, …)` inserts into the right table (§7.4).
+
+Two alternatives were rejected:
+
+- **Event sessions as `services` rows** (an earlier draft of this design).
+  That mixed event check-ins into service attendance, needed guards in the
+  services module so a services-page delete could not wipe an event's
+  attendance, and existed only to support multi-day events.
+- **One attendance table with either `service_id` or `event_id`.** This has
+  less duplication, but every existing attendance query, count, and the
+  Sheets sync would need an extra filter to exclude event rows, which is the
+  same coupling again.
+
+**Multi-day events later** would add an `event_sessions` table inside the
+events module (never `services`), add a nullable `session_id` to
+`event_attendance`, and move the unique key to `(session_id, member_id)`.
+`starts_at`/`ends_at` are already a range, so the events table itself would
+not change. Only the v1 same-day validator would be relaxed.
 
 ### 3.2 Every registrant is a member
 
 A registration always points at a `members` row. Someone new, such as a
-friend invited to camp, is created **inline as a member with status
+friend invited to a conference, is created **inline as a member with status
 `visitor`**. The visitor status already exists and is in the directory's
 default view. This means:
 
-- Registrants can check in with face or name search like anyone else, because
-  attendance is keyed by member.
+- Registrants check in at `/scan` like anyone else, because event attendance
+  is keyed by member. The registration list can then show who arrived with a
+  simple join on `(event_id, member_id)`.
 - There are no parallel guest name and contact columns to reconcile later.
 - It overlaps directly with #19, "Register a first-time visitor at the door".
   The inline visitor form built here is the component #19 needs.
@@ -156,11 +191,11 @@ sort column.
 
 | Column | Type | Notes |
 | --- | --- | --- |
-| `id` | text PK | System rows use stable ids: `camp`, `retreat`, `conference`, `outreach`, `celebration`, `baptism`, `other`. |
+| `id` | text PK | System rows use stable ids: `conference`, `training`, `outreach`, `fellowship`, `celebration`, `baptism`, `other`. |
 | `name` | text, unique | |
 | `description` | text? | |
 | `color` | text enum `chart-1`…`chart-5` | A token name, never a hex value (§8.5). |
-| `registration_default` | boolean, default false | Prefills `events.registration_enabled`. True for camp, retreat, and conference. |
+| `registration_default` | boolean, default false | Prefills `events.registration_enabled`. True for conference and training. |
 | `is_system` | boolean | Cannot be deleted. The name stays editable. |
 | `active` | boolean | Inactive categories are hidden from the new-event picker. |
 | `sort_order` | integer | |
@@ -174,8 +209,8 @@ sort column.
 | `category_id` | FK → categories, `restrict` | A category in use cannot be deleted. It can be deactivated instead. |
 | `description`, `location`, `notes` | text? | |
 | `starts_at` | timestamptz | |
-| `ends_at` | timestamptz | **Required**, and at least `starts_at`. The program, task, and session-per-day features all need the range. |
-| `all_day` | boolean | When true, `starts_at` and `ends_at` hold Manila midnight and the end of day, and the UI hides the time. |
+| `ends_at` | timestamptz | **Required**, and after `starts_at`. In v1 the validator also requires it to fall on the **same Manila day** as `starts_at`. That rule lives in the validator, not the database, so multi-day can be allowed later without a migration (§3.1). |
+| `all_day` | boolean | When true, `starts_at` and `ends_at` hold that day's Manila start and end, and the UI hides the times. |
 | `status` | `scheduled` \| `cancelled` | |
 | `registration_enabled` | boolean | |
 | `registration_opens_at`, `registration_closes_at` | timestamptz? | A null open time means open now. A null close time means open until the event **ends**, so walk-ins can register during an ongoing event. Set a close time to stop registration earlier. |
@@ -184,11 +219,24 @@ sort column.
 
 Indexes: `starts_at`, `category_id`, `status`.
 
-### 4.3 `services.event_id`
+### 4.3 `event_attendance`
 
-This is a nullable FK to `events` with `ON DELETE SET NULL`, plus an index.
-The event delete action removes or blocks sessions explicitly (§7.5), so
-`SET NULL` is only a backstop.
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | text PK | |
+| `event_id` | FK → events, **`restrict`** | The database itself refuses to delete an event that has attendance (§7.5). |
+| `member_id` | FK → members, `cascade` | Matches `attendance.member_id`. |
+| `checked_in_at` | timestamptz, default now | |
+| `recorded_by` | FK → users, `set null` | |
+
+Constraints: **unique `(event_id, member_id)`**. Because the key leads with
+`event_id`, it also serves the per-event counts and lists, which the services
+table needs a separate index for. Other indexes: `member_id`, for member
+history, and `recorded_by`, because deleting a staff user nulls it.
+
+There is no link to the registration row. "Registered and arrived" is the
+join on `(event_id, member_id)`, so a walk-in is simply an attendance row
+without a matching registration.
 
 ### 4.4 `event_fees`
 
@@ -270,14 +318,13 @@ Indexes cover `registration_id` and `paid_at`.
 | --- | --- | --- |
 | `id` | text PK | |
 | `event_id` | FK, `cascade` | |
-| `starts_at` | timestamptz | Must fall within the event's range, compared by Manila day. |
+| `starts_at` | timestamptz | Must fall on the event's Manila day. It may be before `events.starts_at`, e.g. "7:00 Volunteers' call time". |
 | `ends_at` | timestamptz? | At least `starts_at`. |
 | `title` | text | |
 | `kind` | `worship` \| `talk` \| `meal` \| `activity` \| `break` \| `logistics` \| `other` | Drives only the icon and a facet. |
 | `speaker_member_id` | FK → members, `set null`, nullable | |
 | `speaker_name` | text? | For an external speaker. Displayed when `speaker_member_id` is null. |
 | `location`, `notes` | text? | Location defaults to the event location in the UI. |
-| `session_id` | FK → services, `set null`, nullable | Links an item to the check-in session it belongs to, e.g. "Day 1 Morning". |
 
 The index is `(event_id, starts_at)`. Items are ordered by `starts_at` and
 then `id`.
@@ -291,7 +338,7 @@ then `id`.
 | `title` | text | |
 | `description` | text? | |
 | `team` | text? | Free text, e.g. "Logistics", "Food", or "Program". It is used as a facet and group heading. |
-| `due_on` | **date** | A `"YYYY-MM-DD"` string, formatted with `formatDate`. Optional. There is **no lower bound**, because planning happens before the event. The upper bound is the event's last Manila day plus 14 days, for wrap-up such as thank-you notes and liquidation. |
+| `due_on` | **date** | A `"YYYY-MM-DD"` string, formatted with `formatDate`. Optional. There is **no lower bound**, because planning happens before the event. The upper bound is the event's Manila day plus 14 days, for wrap-up such as thank-you notes and liquidation. |
 | `assignee_member_id` | FK → members, `set null`, nullable | Committee heads are members. They do not need a staff login. |
 | `milestone` | boolean | Shown on the event overview and the planning timeline. |
 | `status` | `todo` \| `doing` \| `done` | |
@@ -303,9 +350,9 @@ Indexes are `(event_id, due_on)` and `assignee_member_id`.
 ### 4.9 Relations and types
 
 Add Drizzle `relations` for every foreign key above, and inferred types
-`Event`, `EventCategory`, `EventFee`, `EventRegistration`,
-`EventRegistrationChargeChange`, `EventPayment`, `EventProgramItem`, and
-`EventTask`. Enum arrays and labels go in
+`Event`, `EventCategory`, `EventAttendance`, `EventFee`,
+`EventRegistration`, `EventRegistrationChargeChange`, `EventPayment`,
+`EventProgramItem`, and `EventTask`. Enum arrays and labels go in
 `lib/constants.ts`: `EVENT_STATUSES`, `REGISTRATION_STATUSES`,
 `PAYMENT_METHODS`, `PROGRAM_ITEM_KINDS`, `TASK_STATUSES`, and
 `EVENT_CATEGORY_COLORS`. Each is kept in sync with the schema and the
@@ -315,11 +362,12 @@ validators.
 
 | Module | Exports |
 | --- | --- |
-| `lib/manila-time.ts` | `parseManilaDateTime("2026-12-12T09:00") → Date`, `toManilaDateTimeInput(Date)`, `parseManilaDate("2026-12-12", "start"\|"end")`, `manilaDayKey(Date) → "YYYY-MM-DD"`, `eachManilaDay(start, end) → string[]`. |
+| `lib/manila-time.ts` | `parseManilaDateTime("2026-12-12T09:00") → Date`, `toManilaDateTimeInput(Date)`, `parseManilaDate("2026-12-12", "start"\|"end")`, `manilaDayKey(Date) → "YYYY-MM-DD"`, `sameManilaDay(a, b)`. |
 | `lib/money.ts` | `parsePesos("1,500.50") → 150050 \| null`, `formatPeso(150050) → "₱1,500.50"`, `sumCentavos`. |
-| `lib/events.ts` | `eventPhase(event, now) → "upcoming"\|"ongoing"\|"past"\|"cancelled"`; `registrationState(event, fees, registeredCount, now) → "disabled"\|"cancelled"\|"not_open"\|"open"\|"full"\|"no_fee_offered"\|"closed"`, where "full" means new registrations go to the waitlist and are not refused; `offeredFees(fees, now)`; `defaultFee(fees, now)`, which is the cheapest offered fee; `formatEventRange(event)`, which prints "12–14 Dec 2026" or "12 Dec 2026, 9:00 AM – 5:00 PM". |
+| `lib/events.ts` | `eventPhase(event, now) → "upcoming"\|"ongoing"\|"past"\|"cancelled"`; `registrationState(event, fees, registeredCount, now) → "disabled"\|"cancelled"\|"not_open"\|"open"\|"full"\|"no_fee_offered"\|"closed"`, where "full" means new registrations go to the waitlist and are not refused; `offeredFees(fees, now)`; `defaultFee(fees, now)`, which is the cheapest offered fee; `formatEventWhen(event)`, which prints "Sat, 12 Dec 2026 · 8:00 AM – 5:00 PM", or "Sat, 12 Dec 2026" when all-day. |
+| `lib/check-in-target.ts` | `CheckInTarget = { kind: "service" \| "event"; id: string }`; `parseCheckInTarget(searchParams)`, which reads `?service=` (unchanged) or `?event=`; `checkInTargetHref(target)`; and `mergeScanTargets(services, events, now)`, which extends `lib/scan-selection.ts` so the picker shows one time-ordered list with the nearest target preselected. |
 | `lib/event-payments.ts` | `effectiveAmountDue(registration, eventStatus)`, following the table in §3.3; `settle(registration, eventStatus, payments) → { effective, paid, outstanding, refundDue }`, which ignores voided payments; `paymentStatus(settlement) → "free"\|"unpaid"\|"partial"\|"paid"\|"refund_due"`; `eventFinanceSummary(settlements) → { charged, collected, outstanding, refundsDue }`, which **sums per-registration figures** and never nets amounts across people. |
-| `lib/event-program.ts` | `groupProgramByDay(items)` returns `[{ day: "YYYY-MM-DD", items }]` in Manila days; `programConflicts(items)` lists overlapping items, which the UI shows as a warning and does not block. |
+| `lib/event-program.ts` | `programConflicts(items)` lists overlapping items, which the UI shows as a warning and does not block. |
 | `lib/event-tasks.ts` | `taskBucket(task, eventStartsAt, now) → "overdue"\|"this_week"\|"later"\|"no_date"\|"done"`; `weeksBeforeEvent(dueOn, eventStartsAt)`, which gives the "T-4 wks" label; `shiftTasksForCopy(sourceTasks, sourceStart, targetStart)`, which keeps each task's offset from the event start. |
 
 ## 6. Authorization
@@ -331,13 +379,18 @@ permission rows and grants, following `docs/authorization.md`.
 | --- | --- | --- | --- | --- |
 | `events.view` | ✓ | ✓ | ✓ | Every `/events` page, read-only, including the finance summary. |
 | `events.create` | ✓ | ✓ | | Create events. |
-| `events.update` | ✓ | ✓ | | Edit the event, fees, sessions, program, and tasks; cancel or uncancel the event; **override capacity** when promoting from the waitlist. |
+| `events.update` | ✓ | ✓ | | Edit the event, fees, program, and tasks; cancel or uncancel the event; **override capacity** when promoting from the waitlist. |
 | `events.delete` | ✓ | | | Delete an event (§7.5 guards). |
 | `events.manage_categories` | ✓ | | | `/events/categories`. |
 | `events.register` | ✓ | ✓ | ✓ | Register members and create visitors inline, **choosing a fee tier only at registration**, promote from the waitlist while there is room, and cancel with no retained amount. |
 | `events.adjust_amount` | ✓ | ✓ | | Anything that changes a charge after registration: change a registration's fee tier, adjust the charge, and set a retained amount when cancelling. |
 | `events.record_payment` | ✓ | ✓ | ✓ | `recordPayment`, which accepts **positive amounts only**. |
 | `events.void_payment` | ✓ | | | `voidPayment` and `recordRefund`, which **writes negative amounts only**. |
+
+**Check-in keeps the existing keys.** `attendance.view` opens `/scan`, and
+`attendance.record` checks someone in, whether the target is a service or an
+event. The same door staff do both, and a separate key would only let the
+two drift apart. Seeing an event's attendance list needs `events.view`.
 
 Ushers staff the registration desk, so they can register people and take
 payments, but they cannot change a charge, keep a cancellation fee, refund,
@@ -351,8 +404,8 @@ or void. The server enforces this and the UI only reflects it:
   only when the user also has `events.update`.
 - Every page calls `requirePermission` before reading. Every action calls it
   for **its own** key, and controls render only when `hasPermission` is true.
-- **Every action scopes by event.** Each registration, fee, session, program
-  item, task, and payment id is loaded with `WHERE id = $1 AND event_id = $2`,
+- **Every action scopes by event.** Each registration, fee, program item,
+  task, and payment id is loaded with `WHERE id = $1 AND event_id = $2`,
   or joined to its registration's event, where `$2` is the event in the URL.
   A mismatch is treated as not found. For example, a fee id from another
   event cannot be attached to this event's registration.
@@ -418,45 +471,44 @@ Outcomes:
   overview shows the total refunds due and a per-person list. Uncancelling
   restores the effective amounts, and ledgers never change.
 
-### 7.4 Sessions are protected in both modules
+### 7.4 Check-in
 
-A session is a `services` row, so the `/services` routes need guards too.
-Phase 1 changes `app/(app)/services/actions.ts` and `app/(app)/scan/actions.ts`:
+Phase 1 changes `/scan` and `app/(app)/scan/actions.ts`:
 
-- **`deleteService`**: for a service with `event_id`, delete is refused while
-  it has any attendance. This matches `removeSession`, because attendance
-  cascades from `services` and would otherwise disappear silently. It also
-  requires `events.update` in addition to `services.delete`. Services without
-  an event keep their current behaviour.
-- **`updateService`**: for an event session, the new time must stay within
-  the event's Manila day range. Changing `type` is not offered.
-- **`recordAttendance`** (and the name-search and face check-in actions that
-  record attendance): refuse check-in into a session whose event is
-  **cancelled**, with the message "This event was cancelled". This covers
-  `/scan?service=…` deep links and scanner tabs that were already open when
-  the event was cancelled. Hiding cancelled events in the `/scan` picker is
-  the UI half, and this is the enforcement half.
-- `/services/[id]` shows "Part of *Event*" and, for a cancelled event, a
-  cancelled banner.
-- Apart from a cancelled event, check-in is **never** blocked by
-  registration or balance. In phase 6, for a session of an event with
-  registration, the check-in result shows "Not registered" or
-  "Balance ₱500". Staff can act on it, but attendance is still recorded.
+- **Picking a target.** The picker lists services, as today, and scheduled
+  events in the same time window, merged into one list by time. Events are
+  labelled with their category badge. `?service=<id>` keeps working, and
+  `?event=<id>` is new. The event overview's "Open check-in" button links to
+  it.
+- **One action, two tables.** `recordAttendance` takes a `CheckInTarget`. It
+  resolves the member exactly as today, including the
+  reactivate-inactive-member prompt, and then inserts into `attendance` or
+  `event_attendance`. Both use `onConflictDoNothing()` and treat an empty
+  `returning()` as "already checked in". The face (#16) and name-search (#18)
+  check-in work passes the same target, so it needs no event-specific code.
+- **A cancelled event refuses check-in** with "This event was cancelled".
+  This is enforced in the action, so it also covers `?event=` deep links and
+  scanners left open when the event was cancelled. Hiding cancelled events
+  from the picker is only the UI half.
+- **Nothing else blocks check-in.** Walk-ins, people who are not registered,
+  and people with an unpaid balance are all checked in. In phase 6, the
+  result for an event with registration adds "Not registered" or
+  "Balance ₱500", which staff can act on.
 
 ### 7.5 Deleting an event
 
-Delete is refused if **any** of these exist: attendance in any session, any
-payment row (**including voided ones**), or any charge-history row. Otherwise
-the action, in one transaction, deletes its sessions and then the event, and
-the rest cascades. The normal path is **cancel**, not delete, and the
+Delete is refused if **any** of these exist: an `event_attendance` row (the
+foreign key also enforces this), any payment row (**including voided ones**),
+or any charge-history row. Otherwise the event is deleted and its fees,
+registrations, program items, and tasks cascade. The normal path is **cancel**, not delete, and the
 refusal message says so.
 
 ### 7.6 Program and planning
 
-- Program items must fall within the event's Manila day range. Overlapping
-  items only produce a warning.
-- Task due dates have no lower bound and an upper bound of the event's last
-  day plus 14 days (§4.8).
+- Program items must fall on the event's Manila day. Overlapping items only
+  produce a warning.
+- Task due dates have no lower bound and an upper bound of the event's day
+  plus 14 days (§4.8).
 - **Copying the checklist** from a past event inserts its tasks as `todo`,
   unassigned, with due dates shifted by `shiftTasksForCopy`. Existing tasks
   are not affected. It can run more than once, and it is not deduplicated
@@ -481,7 +533,8 @@ reused: `PageHeader`, `DataTable`, `DetailList`, `StatCard`, `EmptyState`,
 /events/[id]/registrations                Registrations tab (DataTable)
 /events/[id]/registrations/new            find member / add visitor → register
 /events/[id]/registrations/[regId]        registration detail + payment ledger
-/events/[id]/program                      Program tab (timeline by day)
+/events/[id]/attendance                   Attendance tab (DataTable)
+/events/[id]/program                      Program tab (run of show)
 /events/[id]/program/new                  add item
 /events/[id]/program/[itemId]/edit        edit item
 /events/[id]/tasks                        Planning tab (checklist)
@@ -497,7 +550,8 @@ copying a checklist, are `Dialog`s over a server-action `<form>`.
 
 `app/(app)/events/[id]/layout.tsx` renders the event header once: name,
 category badge, phase badge, date range, and location. Below it is a
-**`SectionTabs`** row with Overview · Registrations · Program · Planning. The
+**`SectionTabs`** row with Overview · Registrations · Attendance · Program ·
+Planning. The
 Registrations tab is hidden only when registration is disabled **and** no
 registrations exist (§7.2). `SectionTabs` is a
 new pattern made of **links**, not Base UI `Tabs`. Each tab is a URL, so it
@@ -515,11 +569,12 @@ it later.
 - **Overview** shows stat cards for registered/capacity (with the waitlist
   count and any "over capacity" note), charged, collected, outstanding,
   refunds due (shown when greater than 0), and tasks done/total with
-  the overdue count. Below those are a **next milestones** list, the
-  **Sessions** card (from the earlier design: add a session, add one per day,
-  and each row links to `/services/[id]` with its check-in count), a
-  `DetailList` of the details, and the fee tiers table with inline
-  add/edit/deactivate for `events.update`.
+  the overdue count, and checked in (for an event with registration,
+  "18 checked in · 15 of 20 registered"). The header has an **"Open
+  check-in"** button linking to `/scan?event=<id>`, shown with
+  `attendance.view` for a scheduled event. Below the stats are a **next
+  milestones** list, a `DetailList` of the details, and the fee tiers table
+  with inline add/edit/deactivate for `events.update`.
 - **Registrations** is a `DataTable` with the columns name, fee, charge,
   effective amount due, paid, outstanding / refund due, payment status,
   registration status, and registered on.
@@ -541,9 +596,14 @@ it later.
   form (defaulting to the refund due) appears for `events.void_payment`,
   alongside the cancel (with a retained amount), reactivate, and promote
   actions.
-- **Program** is a vertical **`Timeline`**, grouped by Manila day ("Day 1 ·
-  Sat 12 Dec"). Each item shows time, kind icon, title, speaker, and
-  location, with an overlap warning where items clash. The page includes a
+- **Attendance** is a `DataTable` with the columns name, checked in at,
+  recorded by, and (when the event has registration) a registered or walk-in
+  badge. Facets are registered or walk-in. For an event with registration, a
+  second view `?show=absent` lists registered people who have not checked
+  in. Search is by member name.
+- **Program** is a vertical **`Timeline`** for the event's day. Each item
+  shows time, kind icon, title, speaker, and location, with an overlap
+  warning where items clash. The page includes a
   "Print run of show" link, which gives a print stylesheet version of the
   same page.
 - **Planning** is a checklist grouped by bucket: overdue, this week, later,
@@ -557,14 +617,14 @@ it later.
 | Component | Location | Stories must show |
 | --- | --- | --- |
 | `SectionTabs` | `components/patterns/` | default, active tab, a hidden tab, narrow overflow scroll |
-| `Timeline` | `components/patterns/` | grouped days, one day, empty, an item with an overlap warning |
+| `Timeline` | `components/patterns/` | several items, a single item, empty, an item with an overlap warning, and the print layout |
 | `MemberPicker` | `components/form/` | empty, typing, results, no results, "already registered" rows, disabled, and the error wired through `Field`. Search is an injected async function, so stories use fixtures. |
 | `MoneyInput` | `components/form/` | default, a prefilled balance, an invalid amount |
 | `EventCategoryBadge` | `components/events/` | every colour × both themes |
 | `EventPhaseBadge`, `PaymentStatusBadge`, `RegistrationStatusBadge` | `components/events/` | every value |
 | `EventForm` | `components/events/` | create, edit, all-day, registration on/off, errors, pending |
 | `FeeTiersCard` | `components/events/` | free event, several tiers, an expired early bird, read-only |
-| `EventSessionsCard` | `components/events/` | empty, populated, read-only |
+| Scan target picker (extends the existing `/scan` picker in `components/scan/`) | `components/scan/` | services only, services and events mixed, an event preselected via `?event=`, a cancelled-event refusal result, and the "already checked in" result. The existing scanner has no story, so this adds the missing coverage. |
 | `RegisterForm` | `components/events/` | an existing member, the visitor path, no fees offered, full (waitlist notice) |
 | `PaymentLedger` + `RecordPaymentForm` + `RecordRefundForm` | `components/events/` | unpaid, partial, paid, refund due, a voided row, a refund, a GCash reference error, a read-only (usher) view without refund or void |
 | `ChargeHistory` | `components/events/` | no changes, a fee change, an adjustment |
@@ -585,18 +645,17 @@ Category colours are the token **names** `chart-1`…`chart-5`, which exist in
 
 - **Sidebar**: an "Events" item, gated on `events.view`, placed after
   Services.
-- **`/scan`**: the session picker labels a session "Youth Camp 2026 ·
-  Day 1". Cancelled-event enforcement and the phase 6 check-in hint are in §7.4.
-- **`/services/[id]`**: a "Part of *Youth Camp 2026*" link when `event_id`
-  is set.
+- **`/scan`**: events appear in the target picker (§7.4).
 - **`/members/[id]`**: an "Events" card listing the member's registrations
-  with their balance (phase 6).
+  with their balance, and event check-ins added to the attendance history
+  with an "Event" label (phase 6).
 - **Dashboard**: an "Upcoming events" card (phase 6).
 
 ## 9. Testing
 
 - **Unit** (`bun test lib`): every function in §5, including Manila
-  day-boundary cases at 23:30 and 00:30, all-day ranges, a fee cutoff that
+  day-boundary cases at 23:30 and 00:30, all-day events, target parsing with
+  both or neither parameter, a fee cutoff that
   is exactly now, refunds, all-voided ledgers, and task shifting across a
   month end.
 - **Validators** (`lib/validators.test.ts`): `eventSchema`, `feeSchema`,
@@ -609,11 +668,12 @@ Category colours are the token **names** `chart-1`…`chart-5`, which exist in
   `composeStories`, covering interaction states and accessible names.
 - **Integration** (`bun run test:integration`): every acceptance test in
   §9.1 that touches the database, plus the permission guard on every action
-  and a session appearing in the `/scan` query.
-- **E2E** (`bun run test:e2e`): an admin creates a camp, adds two fee tiers
-  and three day sessions, registers a member and a new visitor, records a
-  partial GCash payment, sees the outstanding balance on the overview, and
-  checks the visitor in at `/scan` for Day 1.
+  and an event appearing in the `/scan` target list.
+- **E2E** (`bun run test:e2e`): an admin creates a one-day conference, adds
+  two fee tiers, registers a member and a new visitor, records a partial
+  GCash payment, and sees the outstanding balance on the overview. They then
+  use "Open check-in", check the visitor in at `/scan?event=`, and see the
+  visitor on the Attendance tab as registered.
 
 ### 9.1 Acceptance tests
 
@@ -651,26 +711,29 @@ integration test, and "E" an E2E test.
 
 | # | Given → when → then | Level |
 | --- | --- | --- |
-| C1 | A fee id, registration id, session id, program item id, or task id belonging to event B is posted to an event A action → not found, and nothing is written. | I |
+| C1 | A fee id, registration id, program item id, or task id belonging to event B is posted to an event A action → not found, and nothing is written. | I |
 
-**Sessions and check-in (phase 1)**
+**Check-in (phase 1)**
 
 | # | Given → when → then | Level |
 | --- | --- | --- |
-| K1 | A session with attendance → `deleteService` from `/services` is refused and the attendance survives. `removeSession` is refused too. | I |
-| K2 | A session without attendance → `deleteService` needs `services.delete` **and** `events.update`. | I |
-| K3 | The event is cancelled → `recordAttendance` for its session is refused, including through a `?service=` deep link. Uncancelled → it succeeds. | I, E |
-| K4 | `updateService` moves a session outside the event's days → refused. | I |
+| K1 | A member is checked in to an event, then scanned again → exactly one `event_attendance` row, and the second result says "already checked in". | I |
+| K2 | The event is cancelled → check-in is refused, including through a `?event=` deep link and from a scanner opened before the cancellation. Uncancelled → it succeeds. | I, E |
+| K3 | Checking in to an event → no `attendance` row is written, and the dashboard's 7-day check-in count and the service attendance lists are unchanged. | I |
+| K4 | A member with no registration checks in to an event with registration → recorded, and listed as a walk-in on the Attendance tab. | I |
+| K5 | The same member checks in to a service and to an event at the same time → one row in each table, and neither blocks the other. | I |
 
 **Lifecycle (phases 1–3, 5)**
 
 | # | Given → when → then | Level |
 | --- | --- | --- |
 | L1 | The only payment on an event is voided → event delete is still refused. | I |
-| L2 | No attendance, payments, or charge history → delete succeeds and removes the sessions. | I |
+| L2 | No attendance, payments, or charge history → delete succeeds, and the fees, registrations, program, and tasks go with it. | I |
 | L3 | Registration is disabled after registrations exist → the tab, ledgers, and payment recording remain, and new registrations are refused. | I, E |
 | L4 | Registration close time is null → registering during an ongoing event succeeds, and after the event ends it is refused. | U, I |
-| L5 | A task due 60 days before the event → accepted. A task due at the event end plus 15 days → refused. | U |
+| L5 | A task due 60 days before the event → accepted. A task due 15 days after the event → refused. | U |
+| L6 | An event with one check-in → delete is refused. | I |
+| L7 | An event whose end is on a different Manila day from its start → refused by the validator. So is an end before the start. | U |
 
 ## 10. Delivery
 
@@ -686,9 +749,9 @@ Phase 1 ships the shared `MemberPicker` and `MoneyInput`, so phases 2, 4, and
 5 depend only on phase 1 and can be built in any order. Phase 3 needs
 phase 2.
 
-1. **Events core**: categories, events, sessions, the shell and tabs, the
-   list, the shared `MemberPicker` and `MoneyInput`, and the session guards
-   in `/services` and check-in (§7.4).
+1. **Events core**: categories, events, event attendance and check-in from
+   `/scan` (§7.4), the shell and tabs, the list, and the shared
+   `MemberPicker` and `MoneyInput`.
 2. **Registration and fees**: fee tiers, registrations, charge history,
    inline visitors, and capacity/waitlist under the seat protocol.
 3. **Payments**: ledger, record/void/refund, balances, finance stats, and
@@ -697,8 +760,8 @@ phase 2.
    print.
 5. **Planning**: the task checklist, milestones, and copying from a past
    event.
-6. **Integration polish**: `/scan` hints, the member events card, the
-   dashboard card, and retiring `special_event` services.
+6. **Integration polish**: `/scan` registration hints, the member events card
+   and history, the dashboard card, and retiring `special_event` services.
 
 ## 11. Decisions made on the user's behalf
 
@@ -712,9 +775,15 @@ These can be changed in review. Each is marked in the text above.
    is manual (§7.1). Only users with `events.update` can override capacity.
 4. Task assignees are members, not staff users (§4.8).
 5. Payments are recorded only. There is no online payment gateway (§1).
+6. Events are single-day in v1, enforced by the validator only (§3.1, §4.2).
+7. Event check-in uses the existing `attendance.view` and `attendance.record`
+   keys rather than new event-specific ones (§6).
+8. The system categories are Conference, Training, Outreach, Fellowship,
+   Celebration, Baptism, and Other. Their names are editable (§4.1).
 
 ## 12. Candidate follow-ups (not planned)
 
+- Multi-day events, via `event_sessions` inside the events module (§3.1).
 - Expenses and a budget per event, which together with fees give a net
   result.
 - Custom registration fields per event (t-shirt size, allergies), as typed
