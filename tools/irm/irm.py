@@ -18,6 +18,7 @@ import time
 import tomllib
 import network
 import git_sync
+import remote
 import urllib.request
 import urllib.error
 from urllib.parse import urlsplit, urlunsplit
@@ -209,13 +210,15 @@ def cleanup(args):
         print(f"Removed {tree['path']}; retained branch {tree['branch']}.")
 
 
-def initialize():
+def initialize(worktree_root=None):
     if CONFIG.exists():
         raise ValueError(f'Configuration already exists: {CONFIG}; use irm ws to select a worktree.')
     tree = Path(output(['git', 'rev-parse', '--show-toplevel'])).resolve()
     raw = output(['git', '-C', str(tree), 'worktree', 'list', '--porcelain', '-z'])
     repo = raw.split('\0', 1)[0].removeprefix('worktree ')
     data = {'repo': repo, 'worktree': str(tree), 'network': 'auto', 'theme': 'auto'}
+    if worktree_root:
+        data['worktree_root'] = str(Path(worktree_root).expanduser().resolve())
     for candidate in (tree / '.env', Path(repo) / '.env'):
         if candidate.is_file():
             data['env_source'] = str(candidate.resolve())
@@ -231,8 +234,8 @@ def new_tree(branch, slug):
     output(['git', '-C', repo, 'check-ref-format', '--branch', branch])
     call(['git', '-C', repo, 'fetch', 'origin', '+refs/heads/main:refs/remotes/origin/main'])
     head = output(['git', '-C', repo, 'rev-parse', 'origin/main'])
-    primary = Path(trees()[0][0])
-    destination = primary.parent / (primary.name + '-' + slug)
+    destination = remote.worktree_path(config(), slug)
+    destination.parent.mkdir(parents=True, exist_ok=True)
     call(['git', '-C', repo, 'worktree', 'add', '--no-track', '-b', branch, str(destination), head])
     if (output(['git', '-C', str(destination), 'rev-parse', 'HEAD']) != head or
         output(['git', '-C', str(destination), 'symbolic-ref', '--short', 'HEAD']) != branch):
@@ -312,7 +315,9 @@ def occupied(port):
 
 
 def address():
-    return network.address(config().get('network', 'auto'))
+    # irm remote runs the host's dashboard with IRM_NETWORK=local: the browser
+    # reaches it through SSH forwards, never the host's network address.
+    return network.address(os.environ.get('IRM_NETWORK') or config().get('network', 'auto'))
 
 
 def read_environment():
@@ -537,6 +542,8 @@ def start(service):
         return
     port = SERVICES[service]
     if occupied(port):
+        if remote.session_open():
+            raise ValueError(f'Port {port} is forwarded to the remote by irm remote. Close it with irm remote kill.')
         raise ValueError(f'Port {port} is occupied by a process outside irm; left intact.')
     validate_service_scripts(tree, [service])
     if service == 'dev':
@@ -727,10 +734,38 @@ def dashboard():
     os.execvp(command[0], command)
 
 
+def remote_command(args):
+    if args.action == 'kill':
+        remote.kill()
+    elif args.action == 'host':
+        with (STATE / 'lock').open('w') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            cfg = config()
+            if args.names:
+                cfg['remote_hosts'] = args.names
+                save(cfg)
+        print('Remote hosts: ' + (', '.join(remote.hosts(cfg)) or 'none (irm remote host user@host [fallback])'))
+    elif args.action == 'sync':
+        registered = trees()
+        if args.all:
+            targets = registered[1:]
+        else:
+            paths = [resolve(name) for name in args.names] or [active()]
+            targets = [(p, b) for p, b in registered if Path(p) in paths]
+        remote.sync(config(), registered, targets, active(), force=args.force,
+                    memory=not args.no_memory, code=not args.memory_only)
+    elif args.action == '_loop':
+        remote.dashboard_loop(config(), active(), occupied)
+    else:
+        loop = [sys.executable, str(Path(__file__).resolve()), 'remote', '_loop']
+        remote.open_dashboard(config(), active(), occupied, loop)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest='command')
-    sub.add_parser('init', help='Initialize configuration from this checkout')
+    p = sub.add_parser('init', help='Initialize configuration from this checkout')
+    p.add_argument('--worktree-root', help='Create worktrees under this directory instead of beside the checkout')
     sub.add_parser('migrate', help='Apply Drizzle migrations to the local project only')
     p = sub.add_parser('new', help='Create a branch and sibling worktree from fresh origin/main')
     p.add_argument('branch')
@@ -768,6 +803,13 @@ def main(argv=None):
     sub.add_parser('ui-state', help='Read-only dashboard snapshot (JSON)')
     p = sub.add_parser('theme', help='Dashboard palette (auto follows terminal appearance)')
     p.add_argument('mode', choices=['auto', 'light', 'dark'], nargs='?')
+    p = sub.add_parser('remote', help='Remote host over SSH: dashboard with forwarded ports, worktree sync')
+    p.add_argument('action', choices=['open', 'kill', 'sync', 'host', '_loop'], default='open', nargs='?')
+    p.add_argument('names', nargs='*', help='sync: worktrees (default: the selected one); host: SSH hosts in order')
+    p.add_argument('--all', action='store_true', help='sync: every worktree except the primary checkout')
+    p.add_argument('--force', action='store_true', help='sync: overwrite edits and commits made on the remote')
+    p.add_argument('--no-memory', action='store_true', help='sync: skip Claude project memory')
+    p.add_argument('--memory-only', action='store_true', help='sync: only Claude project memory')
     for cmd in ('cd', 'status', 'doctor'):
         sub.add_parser(cmd)
     args = parser.parse_args(argv)
@@ -779,7 +821,7 @@ def main(argv=None):
             except BlockingIOError as error:
                 raise ValueError("Another irm command is running. Retry when it finishes.") from error
             if args.command == 'init':
-                initialize()
+                initialize(args.worktree_root)
             elif args.command == 'new':
                 new_tree(args.branch, args.slug)
             elif args.command == 'migrate':
@@ -827,6 +869,8 @@ def main(argv=None):
                     for service in services:
                         start(service)
                     print('\n'.join(status_lines()))
+    elif args.command == 'remote':
+        remote_command(args)
     elif args.command == 'supabase':
         data = supabase_status()
         print(json.dumps(data) if args.json else '\n'.join(supabase_lines(data)))

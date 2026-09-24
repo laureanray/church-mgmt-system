@@ -60,7 +60,9 @@ irm pull                   # fast-forward only; no autostash/reset/rebase
 
 `wt`, `context`, `env`, `updates`, `supabase status`, and `cleanup` accept `--json`.
 `updates --cached` avoids fetching. `new` always fetches main and creates a sibling
-of the primary checkout with no upstream; it does not switch selection. Publish
+of the primary checkout with no upstream; it does not switch selection. A checkout
+initialized with `irm init --worktree-root DIR` puts new worktrees in `DIR/<slug>`
+instead, which keeps a shared projects directory free of them. Publish
 explicitly with `git push -u origin <branch>` when ready. A branch with no upstream
 shows that state until published. Follow-up tasks reuse their existing worktree.
 
@@ -120,6 +122,54 @@ manager supplies the app URL, Next development origin, and Storybook allowed
 hosts. Only loopback Supabase URLs are rewritten for remote browsers; hosted URLs
 are preserved. Source environment files stay unchanged. Restart after changing
 network selection. Supabase's own Docker port bindings are controlled separately.
+
+## Remote host
+
+Run the stack on another Linux machine and drive it from this one over SSH.
+
+```sh
+irm remote host user@box.local user@box   # once: LAN name first, Tailscale fallback
+irm remote sync                            # mirror the selected worktree onto it
+irm remote sync feat/x feat/y              # or name worktrees; --all mirrors every one
+irm remote                                 # its dashboard, with the app's ports forwarded
+irm remote kill                            # close that; services on the host keep running
+```
+
+`irm remote` inside tmux opens a local `irm-remote` session running the host's
+dashboard over `ssh -t`, so there is one tmux and one prefix. Quitting the dashboard
+returns to your previous session and reconnects in the background. Outside tmux it
+runs in place. `IRM_REMOTE_HOST` overrides the configured hosts.
+
+While it is open, the connection forwards 3000 (app), 6006 (Storybook), the
+Supabase API, Studio and mail ports from `supabase/config.toml`, and Postgres on
+**db port + 10** (54432), so a local database keeps its own port. The dashboard runs
+with `IRM_NETWORK=local`: services bind loopback on the host and the browser sees
+`localhost` — a secure context, which camera access for face check-in requires.
+`irm network lan` on the host still serves phones on the network.
+If the app or Supabase API port is taken here, `irm remote` refuses: the browser
+would sign in against the local stack instead. Stop it with
+`irm stop all && irm supabase stop`. Other busy ports are skipped with a notice.
+`IRM_REMOTE_PORTS` (`PORT` or `LOCAL:REMOTE`, comma-separated) replaces the set.
+
+`sync` travels over SSH, not GitHub. It pushes each worktree's commit into the
+host's repository as `laptop/<branch>`, so unpushed commits arrive too, then ships
+uncommitted changes as a binary diff and untracked files as a tar. On the host, the
+worktree is created under its own `worktree_root` or beside its primary checkout,
+reset to that state, linked to the host's `.env`, and given dependencies. The
+host's `main` fast-forwards from origin; the primary checkout itself never
+travels. The laptop's selected worktree becomes the host's selection unless
+services are running there.
+Work done on the host is never overwritten: a checkout with edits the last sync did
+not leave, or a branch with commits on neither the laptop nor origin, is skipped
+with a warning (`--force` overwrites). Bring that work back through GitHub.
+`sync` also copies Claude Code project memory one way (`--no-memory`,
+`--memory-only`): files are added or replaced, never deleted, and `MEMORY.md`
+entries are appended to the host's index.
+
+The receiving half is `remote.py` itself, copied to `~/.cache/irm/` on every sync,
+so it works whatever irm version the host has checked out. The host needs Git,
+Python 3.11+, Bun, tmux, Docker and the Supabase CLI, plus `irm init` in its
+primary checkout. Each machine keeps its own local database.
 
 ## Cleanup
 

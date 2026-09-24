@@ -1,5 +1,5 @@
 {
-  "features": ["git-sync"],
+  "features": ["git-sync", "remote"],
   "platforms": ["Darwin", "Linux"],
   "network_modes": ["auto", "local", "lan", "tailscale"]
 }
