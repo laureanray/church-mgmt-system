@@ -8,7 +8,14 @@ const database = connectTestDatabase();
 const requirePermission = mock();
 class Redirect extends Error {}
 await mock.module("@/db", () => ({ db: database.db }));
-await mock.module("@/lib/auth-helpers", () => ({ requirePermission, requireUser: mock() }));
+// Only the session is replaced; bun keeps a module mock for the rest of the
+// run, so the real exports (hasPermission and friends) have to stay.
+const realAuthHelpers = await import("@/lib/auth-helpers");
+await mock.module("@/lib/auth-helpers", () => ({
+  ...realAuthHelpers,
+  requirePermission,
+  requireUser: mock(),
+}));
 await mock.module("next/cache", () => ({ revalidatePath: mock() }));
 await mock.module("next/navigation", () => ({
   redirect: (to: string) => {
@@ -22,7 +29,7 @@ const updateUserById = mock(
 await mock.module("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ auth: { admin: { updateUserById } } }),
 }));
-const { updateUser } = await import("../../app/(app)/users/actions");
+const { createUser, updateUser } = await import("../../app/(app)/users/actions");
 
 function editForm(memberId: string, email = "joy@example.test") {
   const data = new FormData();
@@ -165,3 +172,16 @@ it("keeps the profile in step when Supabase refuses the old email back", async (
   expect((await links()).find((row) => row.id === "joy-duplicate")?.userId).toBe("joy-login");
 });
 
+it("refuses to link a member at creation without users.update", async () => {
+  requirePermission.mockResolvedValue({ id: "admin", memberId: null, permissions: ["users.create"] });
+  const data = new FormData();
+  data.set("name", "Joy");
+  data.set("email", "joy.login@example.test");
+  data.set("roleId", "usher");
+  data.set("memberId", "joy");
+
+  const result = await createUser(undefined, data);
+  expect(result?.errors?.memberId).toBe("You cannot link a member record.");
+  expect(requirePermission).toHaveBeenCalledWith("users.create");
+  expect((await links()).find((row) => row.id === "joy")?.userId).toBeNull();
+});

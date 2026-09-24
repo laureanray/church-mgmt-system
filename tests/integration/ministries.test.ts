@@ -18,7 +18,14 @@ const requireUser = mock();
 const requirePermission = mock();
 class Redirect extends Error {}
 await mock.module("@/db", () => ({ db: database.db }));
-await mock.module("@/lib/auth-helpers", () => ({ requireUser, requirePermission }));
+// Only the session is replaced; bun keeps a module mock for the rest of the
+// run, so the real exports (hasPermission and friends) have to stay.
+const realAuthHelpers = await import("@/lib/auth-helpers");
+await mock.module("@/lib/auth-helpers", () => ({
+  ...realAuthHelpers,
+  requireUser,
+  requirePermission,
+}));
 await mock.module("next/cache", () => ({ revalidatePath: mock() }));
 await mock.module("next/navigation", () => ({
   redirect: (to: string) => {

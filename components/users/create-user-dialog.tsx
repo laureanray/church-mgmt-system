@@ -25,8 +25,11 @@ export function CreateUserDialog({
   action,
 }: {
   roles: { value: string; label: string }[];
-  /** Members not yet linked to a login. */
-  memberOptions: SelectOption[];
+  /**
+   * Members not yet linked to a login. Omit it when the viewer lacks
+   * `users.update`, which linking requires, and the field is not shown.
+   */
+  memberOptions?: SelectOption[];
   action: (
     state: CreateUserState,
     formData: FormData,
@@ -131,20 +134,22 @@ export function CreateUserDialog({
                   required
                 />
               </Field>
-              <Field
-                label="Member Record"
-                htmlFor="user-memberId"
-                error={errors.memberId}
-                hint="Link it if this person is a member, so their ministries apply."
-              >
-                <FormSelect
-                  id="user-memberId"
-                  name="memberId"
-                  options={memberOptions}
-                  clearLabel="Not linked"
-                  placeholder="Not linked"
-                />
-              </Field>
+              {memberOptions ? (
+                <Field
+                  label="Member Record"
+                  htmlFor="user-memberId"
+                  error={errors.memberId}
+                  hint="Link it if this person is a member, so their ministries apply."
+                >
+                  <FormSelect
+                    id="user-memberId"
+                    name="memberId"
+                    options={memberOptions}
+                    clearLabel="Not linked"
+                    placeholder="Not linked"
+                  />
+                </Field>
+              ) : null}
               <DialogFooter>
                 <DialogClose
                   render={<Button variant="outline" type="button" />}

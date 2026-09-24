@@ -7,7 +7,7 @@ function CreateUserDialogStory({
   memberOptions,
 }: {
   roles: { value: string; label: string }[];
-  memberOptions: { value: string; label: string }[];
+  memberOptions?: { value: string; label: string }[];
 }) {
   return (
     <CreateUserDialog
@@ -41,3 +41,9 @@ export const Default: Story = {};
 
 /** Every member already has a login; the field still offers "Not linked". */
 export const NoUnlinkedMembers: Story = { args: { memberOptions: [] } };
+
+/**
+ * The viewer can create logins but not edit them. Linking a member is a
+ * `users.update` action, so the field is left out.
+ */
+export const WithoutMemberLinking: Story = { args: { memberOptions: undefined } };

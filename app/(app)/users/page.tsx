@@ -54,12 +54,14 @@ export default async function UsersPage({
   const currentUser = await requirePermission("users.view");
   const canCreate = hasPermission(currentUser, "users.create");
   const canOpenMembers = hasPermission(currentUser, "members.view");
+  // Linking a login to a member is a users.update action, creation included.
+  const canLinkMembers = canCreate && hasPermission(currentUser, "users.update");
   const [roleOptions, unlinkedMembers] = await Promise.all([
     db
       .select({ value: roles.id, label: roles.name })
       .from(roles)
       .orderBy(asc(roles.name)),
-    canCreate
+    canLinkMembers
       ? db
           .select({ value: members.id, label: members.fullName })
           .from(members)
@@ -238,7 +240,7 @@ export default async function UsersPage({
         {canCreate ? (
           <CreateUserDialog
             roles={roleOptions}
-            memberOptions={unlinkedMembers}
+            memberOptions={canLinkMembers ? unlinkedMembers : undefined}
             action={createUser}
           />
         ) : null}

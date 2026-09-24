@@ -8,7 +8,7 @@ import { db } from "@/db";
 import { members, roles, users } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
-import { requirePermission } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { generateTempPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
@@ -104,6 +104,15 @@ export async function createUser(
   }
 
   const { name, email, roleId, memberId } = parsed.data;
+
+  // The linked member carries ministry access, so linking one is a
+  // users.update action even when it happens at creation.
+  if (memberId && !hasPermission(actor, "users.update")) {
+    return {
+      errors: { memberId: "You cannot link a member record." },
+      message: "Create the login unlinked; staff who can edit users can link it.",
+    };
+  }
 
   const assignedRole = await db.query.roles.findFirst({
     where: eq(roles.id, roleId),
