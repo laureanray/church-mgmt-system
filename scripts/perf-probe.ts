@@ -34,6 +34,41 @@ const DEFAULT_ROUTES = [
   "/settings",
 ];
 
+/**
+ * The router state a browser sits in on a top-level (app) page, as it sends it
+ * in `Next-Router-State-Tree` — captured from a real navigation, flags and all.
+ * Next's internal format: if an upgrade changes it, the navigation column
+ * reads `ERR 500`, and this needs recapturing from the request headers of a
+ * sidebar click in the browser's Network tab.
+ */
+function routerStateOn(segment: string) {
+  return encodeURIComponent(
+    JSON.stringify([
+      "",
+      {
+        children: [
+          "(app)",
+          {
+            children: [
+              segment,
+              { children: ["__PAGE__", {}, null, null, 0] },
+              null,
+              null,
+              0,
+            ],
+          },
+          null,
+          null,
+          4,
+        ],
+      },
+      null,
+      null,
+      24,
+    ]),
+  );
+}
+
 async function sessionCookie() {
   const response = await fetch(
     `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
@@ -87,9 +122,23 @@ for (const route of routes) {
     if (i > 0) times.push(performance.now() - start);
   }
 
+  // A client navigation sends the router's current tree, and the server skips
+  // every layout it already holds. Without it, `RSC: 1` alone returns the whole
+  // route, (app) layout included, and overstates the navigation by ~11KB.
+  // Measured as a sidebar click from the dashboard (or, for the dashboard
+  // itself, from settings — a navigation to where you already are is empty).
+  const from = route === "/dashboard" ? "settings" : "dashboard";
   const navigation = await fetch(BASE + route, {
-    headers: { cookie, RSC: "1" },
-  }).then((r) => r.text());
+    headers: {
+      cookie,
+      RSC: "1",
+      "Next-Router-State-Tree": routerStateOn(from),
+      "Next-Url": `/${from}`,
+    },
+  });
+  const navigationSize = navigation.ok
+    ? kb((await navigation.text()).length)
+    : `ERR ${navigation.status}`;
 
   let js = 0;
   const scripts = new Set(
@@ -108,7 +157,7 @@ for (const route of routes) {
     String(status).padEnd(7),
     `${median(times).toFixed(0)}ms`.padEnd(8),
     kb(html.length).padEnd(7),
-    kb(navigation.length).padEnd(8),
+    navigationSize.padEnd(8),
     kb(js),
   );
 }

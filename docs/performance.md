@@ -82,14 +82,14 @@ Baseline on the local stack (2026-09-25):
 
 | Route | Server | HTML | Nav RSC | JS (gzip) |
 | --- | --- | --- | --- | --- |
-| `/dashboard` | 17ms | 80KB | 32KB | 295KB |
-| `/scan` | 13ms | 55KB | 15KB | 312KB |
-| `/members` | 15ms | 118KB | 47KB | 295KB |
-| `/cell-groups` | 13ms | 82KB | 19KB | 314KB |
-| `/services` | 14ms | 111KB | 46KB | 298KB |
-| `/users` | 14ms | 103KB | 42KB | 310KB |
-| `/roles` | 10ms | 103KB | 42KB | 296KB |
-| `/settings` | 9ms | 68KB | 22KB | 295KB |
+| `/dashboard` | 17ms | 80KB | 21KB | 295KB |
+| `/scan` | 13ms | 55KB | 4KB | 312KB |
+| `/members` | 15ms | 118KB | 36KB | 295KB |
+| `/cell-groups` | 13ms | 82KB | 8KB | 314KB |
+| `/services` | 14ms | 111KB | 35KB | 298KB |
+| `/users` | 14ms | 103KB | 31KB | 310KB |
+| `/roles` | 10ms | 103KB | 31KB | 296KB |
+| `/settings` | 9ms | 68KB | 11KB | 295KB |
 
 About 140KB of the JavaScript is React and the Next runtime, and most of the
 rest is Base UI; a new page should add little on top. A server time well above
