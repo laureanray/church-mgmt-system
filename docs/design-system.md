@@ -85,7 +85,8 @@ tiers.
 [AGENTS.md](../AGENTS.md); two are worth repeating because Storybook documents
 them with a working example:
 
-- Composition is **`render`**, not `asChild` — see *UI/Badge → AsLink*.
+- Composition is **`render`**, not `asChild` — see *UI/Badge → AsLink*, and
+  *UI/Tabs → AsLinks* for tabs whose selection lives in the URL.
 - `CardHeader` is a **grid**. Trailing header content must be a `CardAction`, or
   it drops under the title. `<CardHeader className="flex-row justify-between">`
   looks correct and does nothing, since `flex-row` sets a direction on an
@@ -145,6 +146,27 @@ paging through decades. Today and Clear are explicit actions; Escape returns
 focus to the editable field. Both components have isolated Storybook examples,
 including validation and a native FormData/reset demonstration. Datetime fields
 continue to use their existing datetime control.
+
+### Celebrations
+
+`/celebrations` lists birthdays, spiritual birthdays and wedding anniversaries
+for the next seven days or the current month; the dashboard shows the first five
+of the week. The rules live in `lib/celebrations.ts`: only month and day are
+compared, 29 February is celebrated on the 28th in a common year, the week may
+cross New Year, and "today" is the date in Manila rather than on the server.
+The calendar arithmetic beneath them — on `"YYYY-MM-DD"` strings, never local
+`Date`s — is the reusable `lib/dates.ts`.
+Wedding anniversaries appear only for a spouse-relevant marital status, and
+transferred or deceased members never appear.
+
+`CelebrationKindBadge` gives each kind its own tone *and* icon (birthday
+`brand`, spiritual birthday `info`, anniversary `success`).
+`CelebrationRangeTabs` is the `Tabs` primitive with link triggers
+(`render={<Link />}` plus `nativeButton={false}`): the range lives in
+`?range=`, so only the selected panel is rendered and the server fills it.
+`CelebrationsTable` is a `DataTable` with a `compact` variant for the dashboard
+card, which drops the frame and the cell-group column. Stories use a fixed
+30 December so the week always spans the year boundary.
 
 ## Patterns
 

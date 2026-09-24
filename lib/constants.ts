@@ -1,5 +1,11 @@
 // Shared label maps and option lists for enums, used across forms and tables.
 
+/**
+ * The church keeps Philippine time, so "today" means today in Manila — not on
+ * the server, which on Vercel is UTC and eight hours behind.
+ */
+export const CHURCH_TIME_ZONE = "Asia/Manila";
+
 export const GENDERS = ["male", "female"] as const;
 export type Gender = (typeof GENDERS)[number];
 

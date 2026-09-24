@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Cake,
   Church,
   LayoutDashboard,
   QrCode,
@@ -41,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, permission: "dashboard.view" },
   { title: "Scan Attendance", href: "/scan", icon: QrCode, permission: "attendance.view" },
   { title: "Members", href: "/members", icon: Users, permission: "members.view" },
+  { title: "Celebrations", href: "/celebrations", icon: Cake, permission: "members.view" },
   { title: "Cell Groups", href: "/cell-groups", icon: Network, permission: "cell_groups.view" },
   { title: "Services", href: "/services", icon: CalendarDays, permission: "services.view" },
   {
