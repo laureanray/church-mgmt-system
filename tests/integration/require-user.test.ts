@@ -54,7 +54,9 @@ it("returns the profile with exactly its role's permissions", async () => {
     mustChangePassword: false,
   });
   expect(granted.length).toBeGreaterThan(0);
-  expect([...user.permissions].sort()).toEqual(granted.map((g) => g.key).sort());
+  expect<string[]>([...user.permissions].sort()).toEqual(
+    granted.map((g) => g.key).sort(),
+  );
 });
 
 it("gives a role with no permissions an empty list, not [null]", async () => {
