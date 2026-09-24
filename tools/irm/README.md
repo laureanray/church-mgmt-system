@@ -149,7 +149,8 @@ with `IRM_NETWORK=local`: services bind loopback on the host and the browser see
 If the app or Supabase API port is taken here, `irm remote` refuses: the browser
 would sign in against the local stack instead. Stop it with
 `irm stop all && irm supabase stop`. Other busy ports are skipped with a notice.
-`IRM_REMOTE_PORTS` (`PORT` or `LOCAL:REMOTE`, comma-separated) replaces the set.
+`IRM_REMOTE_PORTS` (`PORT` or `LOCAL:REMOTE`, comma-separated) replaces the set;
+the app and Supabase API ports cannot be remapped, since the browser is sent to them.
 
 `sync` travels over SSH, not GitHub. It pushes each worktree's commit into the
 host's repository as `laptop/<branch>`, so unpushed commits arrive too, then ships

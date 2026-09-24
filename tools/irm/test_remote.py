@@ -50,6 +50,10 @@ class PortAndHostTests(unittest.TestCase):
     def test_ports_override_accepts_local_remote_pairs(self):
         os.environ['IRM_REMOTE_PORTS'] = '3000, 15432:54422'
         self.assertEqual(remote.forward_ports(self.tree), [(3000, 3000, True), (15432, 54422, False)])
+        for remap in ('13000:3000', '15421:54421'):
+            os.environ['IRM_REMOTE_PORTS'] = remap
+            with self.assertRaisesRegex(ValueError, 'cannot remap'):
+                remote.forward_ports(self.tree)
 
     def test_dashboard_runs_loopback_network_through_forwards(self):
         command = remote.dashboard_command('lr@box', [(3000, 3000), (54432, 54422)])

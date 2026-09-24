@@ -91,7 +91,11 @@ def forward_ports(tree):
         # Postgres lands 10 ports up so a local database can keep its own port.
         pairs = [(3000, 3000), (6006, 6006), (api, api), (settings['studio']['port'],) * 2,
                  (settings['local_smtp']['port'],) * 2, (db + 10, db)]
-    return [(local, remote, local in required) for local, remote in pairs]
+    for local, remote in pairs:
+        # The browser is sent to these exact ports, so a remap would bypass the tunnel.
+        if remote in required and local != remote:
+            raise ValueError(f'IRM_REMOTE_PORTS cannot remap port {remote}; the browser always uses it. Forward it as {remote}.')
+    return [(local, remote, remote in required) for local, remote in pairs]
 
 
 def plan_ports(tree, occupied):
