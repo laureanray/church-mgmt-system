@@ -11,7 +11,7 @@ const revalidatePath = mock();
 await mock.module("@/db", () => ({ db: database.db }));
 await mock.module("@/lib/auth-helpers", () => ({ requirePermission }));
 await mock.module("next/cache", () => ({ revalidatePath }));
-await mock.module("next/navigation", () => ({ redirect: mock() }));
+await mock.module("next/navigation", () => ({ redirect: mock(), notFound: mock() }));
 const { reactivateMember, updateMember } = await import(
   "../../app/(app)/members/actions"
 );

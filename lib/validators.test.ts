@@ -154,3 +154,26 @@ describe("member status", () => {
     }
   });
 });
+
+describe("member input from JSON", () => {
+  it("treats an omitted optional field like an empty form field", () => {
+    // FormData reports a missing field as null; a JSON body just leaves it out.
+    const result = memberSchema.parse({ firstName: "Ana", lastName: "Santos" });
+    expect(result).toMatchObject({
+      fullName: "Ana Santos",
+      birthdate: null,
+      memberSinceYear: null,
+      gender: null,
+      contactNumber: null,
+      cellGroupId: null,
+      status: "active",
+    });
+  });
+
+  it("accepts a JSON number for the member-since year", () => {
+    expect(
+      memberSchema.parse({ firstName: "Ana", lastName: "Santos", memberSinceYear: 2019 })
+        .memberSinceYear,
+    ).toBe(2019);
+  });
+});

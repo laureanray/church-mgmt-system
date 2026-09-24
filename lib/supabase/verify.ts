@@ -56,9 +56,17 @@ export async function verifiedUserId(
 
   if (!session) return null;
 
-  const { data, error } = await getVerifier().auth.getClaims(
-    session.access_token,
-  );
+  return verifyAccessToken(session.access_token);
+}
+
+/**
+ * The subject of a Supabase access token, or null if the token is not one the
+ * project signed or has expired. This is how the HTTP API authenticates: a
+ * native client signs in with Supabase directly and sends the access token as
+ * `Authorization: Bearer …`, so there is no cookie session to read.
+ */
+export async function verifyAccessToken(token: string): Promise<string | null> {
+  const { data, error } = await getVerifier().auth.getClaims(token);
 
   if (error || !data) return null;
 

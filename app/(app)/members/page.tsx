@@ -1,10 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, ilike, inArray } from "drizzle-orm";
 import { Plus, Users } from "lucide-react";
 
-import { db } from "@/db";
-import { members } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import {
   DEFAULT_DIRECTORY_STATUSES,
@@ -20,31 +17,16 @@ import {
   overRunPage,
   tableContext,
   tableHref,
-  tableOffset,
   type RawSearchParams,
 } from "@/lib/data-table";
 import { cn } from "@/lib/utils";
+import { listMembers, MEMBER_SORT_KEYS, type Member } from "@/server/members";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { PageHeader } from "@/components/patterns/page-header";
 import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-
-type MemberRow = typeof members.$inferSelect;
-
-/**
- * The sort keys the URL is allowed to name, and the column each maps to.
- * `tableContext` rejects anything outside this map, so `?sort=` can never
- * reach the query with a column the page did not choose to expose.
- */
-const SORT_COLUMNS = {
-  name: members.fullName,
-  gender: members.gender,
-  marital: members.maritalStatus,
-  since: members.memberSinceYear,
-  contact: members.contactNumber,
-} as const;
 
 export default async function MembersPage({
   searchParams,
@@ -55,7 +37,7 @@ export default async function MembersPage({
   const manage = hasPermission(user, "members.create");
 
   const ctx = tableContext("/members", await searchParams, {
-    sortKeys: Object.keys(SORT_COLUMNS),
+    sortKeys: MEMBER_SORT_KEYS,
     filterKeys: ["gender", "marital", "status"],
     // People who have left or passed on stay on record but out of the way;
     // `?status=all` or a status of their own brings them back.
@@ -74,29 +56,19 @@ export default async function MembersPage({
   const gender = allowedValues(state.filters.gender, GENDERS);
   const marital = allowedValues(state.filters.marital, MARITAL_STATUSES);
   const status = allowedValues(state.filters.status, MEMBER_STATUSES);
-  const where = and(
-    state.query ? ilike(members.fullName, `%${state.query}%`) : undefined,
-    gender.length ? inArray(members.gender, gender) : undefined,
-    marital.length ? inArray(members.maritalStatus, marital) : undefined,
-    status.length ? inArray(members.status, status) : undefined,
-  );
 
-  const sortColumn = SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS];
-  const direction = state.direction === "asc" ? asc : desc;
-
-  const [rows, [{ matching }], total] = await Promise.all([
-    db
-      .select()
-      .from(members)
-      .where(where)
-      // A LIMIT/OFFSET walk over a non-unique sort column can repeat or skip
-      // rows between pages; the id breaks every remaining tie.
-      .orderBy(direction(sortColumn), asc(members.id))
-      .limit(state.perPage)
-      .offset(tableOffset(state)),
-    db.select({ matching: count() }).from(members).where(where),
-    db.$count(members),
-  ]);
+  // tableContext has already whitelisted the sort key against
+  // MEMBER_SORT_KEYS; the service owns the query itself.
+  const { rows, matching, total } = await listMembers(user, {
+    search: state.query || undefined,
+    gender,
+    marital,
+    status,
+    sort: (state.sort ?? undefined) as (typeof MEMBER_SORT_KEYS)[number],
+    direction: state.direction,
+    page: state.page,
+    perPage: state.perPage,
+  });
 
   // A bookmark to page 9 of a list that has since shrunk should land on the
   // last page with rows, and say so in the URL.
@@ -110,7 +82,7 @@ export default async function MembersPage({
     </Link>
   );
 
-  const columns: DataTableColumn<MemberRow>[] = [
+  const columns: DataTableColumn<Member>[] = [
     {
       id: "name",
       header: "Name",
