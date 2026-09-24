@@ -17,7 +17,8 @@ In order, for a click on a sidebar link in production:
    the legacy shared secret. `lib/supabase/verify.ts` logs a warning once per
    process in production if it sees an HS256 token — if that appears in the
    Vercel logs, rotate to an asymmetric key under Project Settings → JWT Keys.
-3. **`requireUser()`** — one query: profile, role and permissions together.
+3. **`requireUser()`** — one round trip: profile, role permissions, linked
+   member and ministry grants together (`lib/access.ts`).
    Memoised per request, so the layout, the page and the action share it.
 4. **The page's own queries**, which should be one `Promise.all` batch.
 5. **Streaming back.** `app/(app)/loading.tsx` shows a skeleton the moment the

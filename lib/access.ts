@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -32,76 +32,77 @@ export type UserAccess = {
 };
 
 /**
- * Everything authorization needs to know about one staff user.
- *
- * Every query is keyed by the user id alone, so all of them go out together:
- * one round trip, where reading the profile first and the role's permissions
- * second used to take two. Returns null when there is no profile row.
+ * Everything authorization needs to know about one staff user, in a single
+ * statement. This runs before every page and every action, and five parallel
+ * queries would take five pooled connections per request where one will do.
+ * The role permissions, linked member, memberships and grants ride along as
+ * subqueries. Returns null when there is no profile row.
  */
 export async function loadUserAccess(userId: string): Promise<UserAccess | null> {
-  const activeMembership = and(
-    eq(members.userId, userId),
-    eq(ministries.active, true),
-  );
+  // The linked member's memberships, in active ministries only.
+  const servesIn = sql`
+    join ${members} on ${members.id} = ${ministryMembers.memberId}
+    join ${ministries} on ${ministries.id} = ${ministryMembers.ministryId}
+    where ${members.userId} = ${users.id} and ${ministries.active}`;
 
-  const [[profile], roleGrants, linked, memberships, ministryGrants] =
-    await Promise.all([
-      db
-        .select({
-          id: users.id,
-          name: users.name,
-          email: users.email,
-          mustChangePassword: users.mustChangePassword,
-          roleId: roles.id,
-          roleName: roles.name,
-        })
-        .from(users)
-        .innerJoin(roles, eq(users.roleId, roles.id))
-        .where(eq(users.id, userId))
-        .limit(1),
-      db
-        .select({ key: rolePermissions.permissionKey })
-        .from(rolePermissions)
-        .innerJoin(users, eq(users.roleId, rolePermissions.roleId))
-        .where(eq(users.id, userId)),
-      db
-        .select({ id: members.id })
-        .from(members)
-        .where(eq(members.userId, userId))
-        .limit(1),
-      db
-        .select({
-          id: ministries.id,
-          name: ministries.name,
-          position: ministryMembers.position,
-        })
-        .from(ministryMembers)
-        .innerJoin(members, eq(members.id, ministryMembers.memberId))
-        .innerJoin(ministries, eq(ministries.id, ministryMembers.ministryId))
-        .where(activeMembership)
-        .orderBy(asc(ministries.name)),
-      db
-        .select({
-          ministryId: ministryPermissions.ministryId,
-          permissionKey: ministryPermissions.permissionKey,
-        })
-        .from(ministryPermissions)
-        .innerJoin(
-          ministryMembers,
-          eq(ministryMembers.ministryId, ministryPermissions.ministryId),
-        )
-        .innerJoin(members, eq(members.id, ministryMembers.memberId))
-        .innerJoin(ministries, eq(ministries.id, ministryPermissions.ministryId))
-        .where(activeMembership),
-    ]);
+  const [row] = await db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      mustChangePassword: users.mustChangePassword,
+      roleId: roles.id,
+      roleName: roles.name,
+      rolePermissions: sql<string[]>`coalesce(
+        (select array_agg(${rolePermissions.permissionKey}) from ${rolePermissions}
+          where ${rolePermissions.roleId} = ${roles.id}),
+        '{}'
+      )`,
+      memberId: sql<string | null>`(
+        select ${members.id} from ${members}
+          where ${members.userId} = ${users.id} limit 1
+      )`,
+      ministries: sql<MinistryMembership[]>`coalesce(
+        (select json_agg(json_build_object(
+            'id', ${ministries.id},
+            'name', ${ministries.name},
+            'position', ${ministryMembers.position}
+          ) order by ${ministries.name}, ${ministries.id})
+          from ${ministryMembers} ${servesIn}),
+        '[]'
+      )`,
+      ministryGrants: sql<MinistryGrant[]>`coalesce(
+        (select json_agg(json_build_object(
+            'ministryId', ${ministryPermissions.ministryId},
+            'permissionKey', ${ministryPermissions.permissionKey}
+          ))
+          from ${ministryPermissions}
+          join ${ministryMembers}
+            on ${ministryMembers.ministryId} = ${ministryPermissions.ministryId}
+          ${servesIn}),
+        '[]'
+      )`,
+    })
+    .from(users)
+    .innerJoin(roles, eq(users.roleId, roles.id))
+    .where(eq(users.id, userId))
+    .limit(1);
 
-  if (!profile) return null;
+  if (!row) return null;
 
+  const { memberId, ministryGrants, ...profile } = row;
   return {
-    profile,
-    memberId: linked[0]?.id ?? null,
-    rolePermissions: roleGrants.map(({ key }) => key),
-    ministries: memberships,
+    profile: {
+      id: profile.id,
+      name: profile.name,
+      email: profile.email,
+      mustChangePassword: profile.mustChangePassword,
+      roleId: profile.roleId,
+      roleName: profile.roleName,
+    },
+    memberId,
+    rolePermissions: row.rolePermissions,
+    ministries: row.ministries,
     ministryGrants,
   };
 }
