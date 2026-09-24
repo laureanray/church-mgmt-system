@@ -44,8 +44,11 @@ export const MEMBER_SORT_KEYS = Object.keys(SORT_COLUMNS) as [
   ...(keyof typeof SORT_COLUMNS)[],
 ];
 
+/** Longest name search the service accepts. */
+export const MEMBER_SEARCH_MAX_LENGTH = 200;
+
 export const memberListQuerySchema = z.object({
-  search: z.string().trim().max(200).optional(),
+  search: z.string().trim().max(MEMBER_SEARCH_MAX_LENGTH).optional(),
   gender: z.array(z.enum(GENDERS)).optional(),
   marital: z.array(z.enum(MARITAL_STATUSES)).optional(),
   /**

@@ -16,6 +16,35 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * process and used only to verify.
  */
 let verifier: SupabaseClient | undefined;
+let warnedLegacySigning = false;
+
+/**
+ * Says so, once per process, when production tokens are still HS256.
+ *
+ * Nothing else would: the `getUser()` fallback is correct, so the only symptom
+ * is every request quietly paying two HTTPS calls to Supabase Auth (one here in
+ * proxy.ts, one in requireUser) instead of none. The header is read without
+ * trusting it — it only decides whether to log.
+ */
+function warnIfLegacySigning(accessToken: string) {
+  if (warnedLegacySigning || process.env.NODE_ENV !== "production") return;
+  warnedLegacySigning = true;
+
+  try {
+    const header = JSON.parse(
+      Buffer.from(accessToken.split(".")[0], "base64url").toString(),
+    ) as { alg?: string };
+    if (header.alg === "HS256") {
+      console.warn(
+        "[auth] Supabase is signing tokens with the legacy shared secret (HS256), " +
+          "so every request verifies over HTTPS. Rotate to an asymmetric signing key " +
+          "(Supabase dashboard → Project Settings → JWT Keys) to verify locally.",
+      );
+    }
+  } catch {
+    // A malformed token fails verification below; nothing to report here.
+  }
+}
 
 function getVerifier(): SupabaseClient {
   // Built on first use, not at import: `next build` evaluates these modules to
@@ -66,6 +95,8 @@ export async function verifiedUserId(
  * `Authorization: Bearer …`, so there is no cookie session to read.
  */
 export async function verifyAccessToken(token: string): Promise<string | null> {
+  warnIfLegacySigning(token);
+
   const { data, error } = await getVerifier().auth.getClaims(token);
 
   if (error || !data) return null;

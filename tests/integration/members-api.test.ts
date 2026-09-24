@@ -19,7 +19,10 @@ const TOKENS: Record<string, string> = {
 await mock.module("@/db", () => ({ db: database.db }));
 await mock.module("@/lib/supabase/verify", () => ({
   verifiedUserId: mock(),
-  verifyAccessToken: async (token: string) => TOKENS[token] ?? null,
+  verifyAccessToken: async (token: string) => {
+    if (token === "outage-token") throw new Error("JWKS fetch failed");
+    return TOKENS[token] ?? null;
+  },
 }));
 const collection = await import("../../app/api/v1/members/route");
 const item = await import("../../app/api/v1/members/[id]/route");
@@ -66,6 +69,22 @@ it("refuses a request without a valid bearer token", async () => {
     const response = await collection.GET(request(token), undefined);
     expect(response.status).toBe(401);
     expect((await response.json()).error.code).toBe("unauthenticated");
+  }
+});
+
+it("answers an authentication outage with the documented 500 body", async () => {
+  const logged = mock();
+  const original = console.error;
+  console.error = logged;
+  try {
+    const response = await collection.GET(request("outage-token"), undefined);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: { code: "internal", message: "Something went wrong." },
+    });
+    expect(logged).toHaveBeenCalled();
+  } finally {
+    console.error = original;
   }
 });
 

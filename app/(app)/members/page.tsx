@@ -20,7 +20,12 @@ import {
   type RawSearchParams,
 } from "@/lib/data-table";
 import { cn } from "@/lib/utils";
-import { listMembers, MEMBER_SORT_KEYS, type Member } from "@/server/members";
+import {
+  listMembers,
+  MEMBER_SEARCH_MAX_LENGTH,
+  MEMBER_SORT_KEYS,
+  type Member,
+} from "@/server/members";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -58,9 +63,12 @@ export default async function MembersPage({
   const status = allowedValues(state.filters.status, MEMBER_STATUSES);
 
   // tableContext has already whitelisted the sort key against
-  // MEMBER_SORT_KEYS; the service owns the query itself.
+  // MEMBER_SORT_KEYS; the service owns the query itself. The search is the one
+  // input the URL can make longer than the service accepts, and an API client
+  // gets a 422 for that — a pasted or bookmarked URL should still get a page,
+  // so it is cut to length here. No name is that long anyway.
   const { rows, matching, total } = await listMembers(user, {
-    search: state.query || undefined,
+    search: state.query.slice(0, MEMBER_SEARCH_MAX_LENGTH) || undefined,
     gender,
     marital,
     status,

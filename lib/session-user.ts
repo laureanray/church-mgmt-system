@@ -1,6 +1,6 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { rolePermissions, roles, users } from "@/db/schema";
@@ -45,6 +45,10 @@ export async function userFromAuthorizationHeader(
  * profile row is missing, however the caller authenticated.
  */
 export async function loadSessionUser(userId: string): Promise<SessionUser | null> {
+  // One round trip, not two. The permissions ride along as an array rather
+  // than being fetched once the role is known, because this runs before every
+  // page, every action and every API call: a second sequential query here was
+  // a second sequential query everywhere.
   const [profile] = await db
     .select({
       id: users.id,
@@ -53,26 +57,29 @@ export async function loadSessionUser(userId: string): Promise<SessionUser | nul
       mustChangePassword: users.mustChangePassword,
       roleId: roles.id,
       roleName: roles.name,
+      // The FILTER keeps a role with no permissions at `{}`; a bare array_agg
+      // over the left join's lone NULL row would return `{NULL}`.
+      permissions: sql<string[]>`coalesce(
+        array_agg(${rolePermissions.permissionKey})
+          filter (where ${rolePermissions.permissionKey} is not null),
+        '{}'
+      )`,
     })
     .from(users)
     .innerJoin(roles, eq(users.roleId, roles.id))
+    .leftJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
     .where(eq(users.id, userId))
+    .groupBy(users.id, roles.id)
     .limit(1);
 
   if (!profile) return null;
-
-  const assignedPermissions = await db
-    .select({ key: rolePermissions.permissionKey })
-    .from(rolePermissions)
-    .where(eq(rolePermissions.roleId, profile.roleId));
 
   return {
     id: profile.id,
     name: profile.name,
     email: profile.email,
     role: { id: profile.roleId, name: profile.roleName },
-    permissions: assignedPermissions.map(({ key }) => key as PermissionKey),
+    permissions: profile.permissions as PermissionKey[],
     mustChangePassword: profile.mustChangePassword,
   };
 }
-

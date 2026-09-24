@@ -45,25 +45,27 @@ export function apiRoute<Context>(
   handler: (actor: Actor, request: Request, context: Context) => Promise<Response>,
 ) {
   return async (request: Request, context: Context): Promise<Response> => {
-    const user = await userFromAuthorizationHeader(
-      request.headers.get("authorization"),
-    );
-    if (!user) {
-      return apiError(401, {
-        code: "unauthenticated",
-        message: "Send a valid Supabase access token as a Bearer token.",
-      });
-    }
-    // The web app holds these users on /change-password; a temporary password
-    // an admin issued must not unlock the API either.
-    if (user.mustChangePassword) {
-      return apiError(403, {
-        code: "password_change_required",
-        message: "Change your temporary password before using the API.",
-      });
-    }
-
+    // Authentication sits inside the try as well: a JWKS fetch or the profile
+    // query failing is still a 500 in the documented shape, not a raw throw.
     try {
+      const user = await userFromAuthorizationHeader(
+        request.headers.get("authorization"),
+      );
+      if (!user) {
+        return apiError(401, {
+          code: "unauthenticated",
+          message: "Send a valid Supabase access token as a Bearer token.",
+        });
+      }
+      // The web app holds these users on /change-password; a temporary
+      // password an admin issued must not unlock the API either.
+      if (user.mustChangePassword) {
+        return apiError(403, {
+          code: "password_change_required",
+          message: "Change your temporary password before using the API.",
+        });
+      }
+
       return await handler(user, request, context);
     } catch (error) {
       if (isServiceError(error)) {

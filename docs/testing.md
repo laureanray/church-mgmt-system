@@ -31,8 +31,11 @@ details do not carry over from Vitest:
   register mocks first and then `await import(…)` the module under test. Keep
   that order when adding tests.
 - **No `globalSetup`.** Migrations run from `tests/support/integration-setup.ts`,
-  passed as `--preload` in the `test:integration` script; `bun test` runs files
-  sequentially in one process, so it executes exactly once.
+  passed as `--preload` in the `test:integration` script. The script also
+  passes `--isolate`, which gives each file a fresh module registry, so the
+  preload runs once per file (the migrations are idempotent). Without it,
+  `mock.module` is process-wide: one file mocking `@/lib/auth-helpers` would
+  replace the real module in `require-user.test.ts`, which tests it.
 
 ## UI tests
 
