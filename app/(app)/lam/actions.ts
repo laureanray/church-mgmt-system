@@ -234,24 +234,33 @@ export async function addLineupAssignment(
   }
 
   // The LAM roster is who may serve. This is the link between the ministry and
-  // its module: rostering someone in LAM is what makes them schedulable.
-  const rostered = await db.query.ministryMembers.findFirst({
-    where: and(
-      eq(ministryMembers.ministryId, LAM_MINISTRY_ID),
-      eq(ministryMembers.memberId, parsed.data.memberId),
-    ),
-    columns: { memberId: true },
+  // its module: rostering someone in LAM is what makes them schedulable. The
+  // roster row stays share-locked until the insert commits, so a head removing
+  // them meanwhile either waits for it or has already won and is seen here.
+  const outcome = await db.transaction(async (tx) => {
+    const [rostered] = await tx
+      .select({ memberId: ministryMembers.memberId })
+      .from(ministryMembers)
+      .where(
+        and(
+          eq(ministryMembers.ministryId, LAM_MINISTRY_ID),
+          eq(ministryMembers.memberId, parsed.data.memberId),
+        ),
+      )
+      .for("share");
+    if (!rostered) return "not-rostered" as const;
+
+    const added = await tx
+      .insert(lineupAssignments)
+      .values({ serviceId, ...parsed.data })
+      .onConflictDoNothing()
+      .returning({ id: lineupAssignments.id });
+    return added.length === 0 ? ("duplicate" as const) : ("added" as const);
   });
-  if (!rostered) {
+  if (outcome === "not-rostered") {
     return { errors: { memberId: "Only members on the LAM roster can be scheduled." } };
   }
-
-  const added = await db
-    .insert(lineupAssignments)
-    .values({ serviceId, ...parsed.data })
-    .onConflictDoNothing()
-    .returning({ id: lineupAssignments.id });
-  if (added.length === 0) {
+  if (outcome === "duplicate") {
     return { errors: { part: "They are already down for that part." } };
   }
 

@@ -93,6 +93,36 @@ describe("team", () => {
     expect(await database.db.select().from(lineupAssignments)).toHaveLength(2);
   });
 
+  it("refuses someone removed from the roster mid-request", async () => {
+    // A head removes Joy from LAM in a transaction that has not committed yet.
+    // The assignment's roster check has to wait for it rather than read the
+    // row that is about to go.
+    const rival = await database.client.reserve();
+    try {
+      await rival`BEGIN`;
+      await rival`DELETE FROM ministry_members WHERE ministry_id = 'lam' AND member_id = 'joy'`;
+
+      const pending = addLineupAssignment(
+        "sunday",
+        undefined,
+        form({ memberId: "joy", part: "vocals" }),
+      );
+      // Give the roster check time to block on the rival's row lock.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await rival`COMMIT`;
+
+      expect(await pending).toEqual({
+        errors: { memberId: "Only members on the LAM roster can be scheduled." },
+      });
+    } finally {
+      // A no-op after COMMIT; after a failure it keeps the pooled connection
+      // from carrying an open transaction into the next test.
+      await rival`ROLLBACK`.catch(() => {});
+      rival.release();
+    }
+    expect(await database.db.select().from(lineupAssignments)).toHaveLength(0);
+  });
+
   it("requires the line-up permission", async () => {
     requirePermission.mockRejectedValueOnce(new Redirect("/no-access"));
     await expect(
