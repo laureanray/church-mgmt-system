@@ -271,6 +271,12 @@ would desync it, so reach for generate + migrate instead.
   accepts a `?token=` URL for forward compatibility.
 - `app_settings` is a single row keyed `"singleton"`; write it with
   `onConflictDoUpdate`.
+- Every mutation of members, cell groups (and their membership), services,
+  staff users, roles and settings calls `recordAudit()` from `lib/audit.ts`
+  **inside the same transaction**, after the write — a rolled-back change
+  leaves no entry, and a failed entry undoes the change.
+  `recordAudit` diffs and redacts on its own (any key matching
+  secret/password/token), so pass whole rows rather than picking fields.
 
 ## Working here
 
@@ -365,6 +371,25 @@ primary agent verifies the handoff. If Luna is unavailable or the task stops
 being routine, continue with the primary agent and explain the fallback briefly.
 
 ### Project conventions
+
+- **Every feature that changes data is audited — no exceptions.** A new
+  entity, a new server action, or a new way of mutating an existing record
+  ships with its audit logging in the same PR, not as a follow-up:
+  1. Add its values to `AUDIT_ACTIONS` / `AUDIT_ACTION_LABELS` (and, for a new
+     kind of record, `AUDIT_ENTITIES` / `AUDIT_ENTITY_LABELS`) in
+     `lib/constants.ts`. These are stored, so never rename one.
+  2. Wrap the write in `db.transaction` and call `recordAudit(tx, …)` after it,
+     with the acting user from `requirePermission` as `actorId`, the row
+     before and/or after, and a one-line human summary.
+  3. Name any sensitive column so the redaction catches it (…`Secret`,
+     …`Password`, …`Token`), or strip it before passing the row. Never put a
+     secret in `summary`.
+  4. Add an integration test in `tests/integration/audit-log.test.ts` (or the
+     feature's own file) asserting the entry, and that a failed validation
+     writes none.
+  Reads, check-ins recorded by `recordAttendance` (attendance already carries
+  `recordedBy`), and system-generated rows (schedule top-ups) are the only
+  exemptions; say so in the PR if you rely on one.
 
 - `bun test lib` (the `test` script) runs the unit suite over `lib/**/*.test.ts`.
   Put pure logic in `lib/` so it is testable there — `lib/cell-graph.ts` with

@@ -47,3 +47,12 @@ redirects denied requests to `/no-access`.
 The sidebar receives only the role name and permission keys. It filters module
 links for usability, while each destination page and action remains responsible
 for its own authorization.
+
+## Audit log
+
+`audit.view` (module `audit`) opens `/settings/audit` and the History tab on a
+member's page. Migration 0008 grants it to Admin only: the log names who
+changed staff accounts and roles, so give it to another role deliberately. The
+log is append-only from the application's side — no action edits or deletes an
+entry; only `bun run audit:prune` removes expired ones.
+

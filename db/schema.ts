@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -331,6 +332,46 @@ export const appSettings = pgTable("app_settings", {
 });
 
 // ---------------------------------------------------------------------------
+// Audit log — an append-only record of who changed what. Written by
+// recordAudit() in lib/audit.ts inside the mutation's own transaction, so a
+// change that rolls back leaves no entry. Pruned after AUDIT_RETENTION_MONTHS
+// by `bun run audit:prune`.
+// ---------------------------------------------------------------------------
+
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+    // The staff user who made the change. Kept when the entry outlives them,
+    // just no longer attributable.
+    actorId: text("actor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    // e.g. "member.update" — AUDIT_ACTIONS in lib/constants.ts.
+    action: text("action").notNull(),
+    // e.g. "member" — AUDIT_ENTITIES in lib/constants.ts.
+    entity: text("entity").notNull(),
+    // Deliberately not a foreign key: the entry has to survive the record's
+    // deletion, which is often the very thing it records.
+    entityId: text("entity_id").notNull(),
+    // Only the changed fields on an update; the whole row on a create or a
+    // delete. Secrets are redacted before they get here.
+    before: jsonb("before"),
+    after: jsonb("after"),
+    summary: text("summary").notNull(),
+  },
+  (t) => [
+    // The member page's History tab reads one record's entries.
+    index("audit_log_entity_idx").on(t.entity, t.entityId),
+    // /settings/audit sorts newest-first, and pruning deletes by age.
+    index("audit_log_at_idx").on(t.at),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 
@@ -407,6 +448,13 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
   }),
 }));
 
+export const auditLogRelations = relations(auditLog, ({ one }) => ({
+  actor: one(users, {
+    fields: [auditLog.actorId],
+    references: [users.id],
+  }),
+}));
+
 export const attendanceRelations = relations(attendance, ({ one }) => ({
   member: one(members, {
     fields: [attendance.memberId],
@@ -434,3 +482,4 @@ export type Service = typeof services.$inferSelect;
 export type ServiceSchedule = typeof serviceSchedules.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
 export type CellGroup = typeof cellGroups.$inferSelect;
+export type AuditLogEntry = typeof auditLog.$inferSelect;

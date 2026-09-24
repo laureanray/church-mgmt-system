@@ -1,14 +1,16 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { members } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
+import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
-import { LAPSED_STATUSES } from "@/lib/constants";
+import { isLapsed, MEMBER_STATUS_LABELS } from "@/lib/constants";
 import { fieldErrors, memberSchema } from "@/lib/validators";
 
 export type MemberFormState =
@@ -54,7 +56,7 @@ export async function createMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requirePermission("members.create");
+  const actor = await requirePermission("members.create");
 
   const parsed = readMemberForm(formData);
   if (!parsed.success) {
@@ -64,10 +66,21 @@ export async function createMember(
     };
   }
 
-  const [row] = await db
-    .insert(members)
-    .values({ qrToken: nanoid(16), ...parsed.data })
-    .returning({ id: members.id });
+  const row = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(members)
+      .values({ qrToken: nanoid(16), ...parsed.data })
+      .returning();
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "member.create",
+      entity: "member",
+      entityId: row.id,
+      after: row,
+      summary: `Added ${row.fullName}`,
+    });
+    return row;
+  });
 
   revalidatePath("/members");
   // The dashboard's Active Members tile counts on status.
@@ -81,7 +94,7 @@ export async function updateMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requirePermission("members.update");
+  const actor = await requirePermission("members.update");
 
   const parsed = readMemberForm(formData);
   if (!parsed.success) {
@@ -91,16 +104,35 @@ export async function updateMember(
     };
   }
 
-  const previous = await db.query.members.findFirst({
-    where: eq(members.id, id),
-    columns: { cellGroupId: true },
-  });
+  const { previous, updated } = await db.transaction(async (tx) => {
+    // Locked so the "before" in the log is the row this update replaced, not
+    // one a concurrent edit has already moved on from.
+    const [previous] = await tx
+      .select()
+      .from(members)
+      .where(eq(members.id, id))
+      .for("update");
+    if (!previous) return { previous: undefined, updated: undefined };
 
-  const [updated] = await db
-    .update(members)
-    .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(members.id, id))
-    .returning({ cellGroupId: members.cellGroupId });
+    const [updated] = await tx
+      .update(members)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(members.id, id))
+      .returning();
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action:
+        previous.status === updated.status
+          ? "member.update"
+          : "member.status_change",
+      entity: "member",
+      entityId: id,
+      before: previous,
+      after: updated,
+      summary: (fields) => `Edited ${updated.fullName}: ${describeFields(fields)}`,
+    });
+    return { previous, updated };
+  });
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
@@ -112,11 +144,24 @@ export async function updateMember(
 }
 
 export async function deleteMember(id: string) {
-  await requirePermission("members.delete");
-  const [deleted] = await db
-    .delete(members)
-    .where(eq(members.id, id))
-    .returning({ cellGroupId: members.cellGroupId });
+  const actor = await requirePermission("members.delete");
+  const deleted = await db.transaction(async (tx) => {
+    const [deleted] = await tx
+      .delete(members)
+      .where(eq(members.id, id))
+      .returning();
+    if (deleted) {
+      await recordAudit(tx, {
+        actorId: actor.id,
+        action: "member.delete",
+        entity: "member",
+        entityId: id,
+        before: deleted,
+        summary: `Deleted ${deleted.fullName}`,
+      });
+    }
+    return deleted;
+  });
   revalidatePath("/members");
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
@@ -136,13 +181,32 @@ export type ReactivateResult =
 export async function reactivateMember(
   memberId: string,
 ): Promise<ReactivateResult> {
-  await requirePermission("members.update");
+  const actor = await requirePermission("members.update");
 
-  const [updated] = await db
-    .update(members)
-    .set({ status: "active", updatedAt: new Date() })
-    .where(and(eq(members.id, memberId), inArray(members.status, LAPSED_STATUSES)))
-    .returning({ id: members.id });
+  const updated = await db.transaction(async (tx) => {
+    const [previous] = await tx
+      .select()
+      .from(members)
+      .where(eq(members.id, memberId))
+      .for("update");
+    if (!previous || !isLapsed(previous.status)) return null;
+
+    const [updated] = await tx
+      .update(members)
+      .set({ status: "active", updatedAt: new Date() })
+      .where(eq(members.id, memberId))
+      .returning();
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "member.status_change",
+      entity: "member",
+      entityId: memberId,
+      before: previous,
+      after: updated,
+      summary: `Marked ${updated.fullName} active at check-in (was ${MEMBER_STATUS_LABELS[previous.status].toLowerCase()})`,
+    });
+    return updated;
+  });
 
   if (!updated) {
     return {

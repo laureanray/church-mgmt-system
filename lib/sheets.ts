@@ -4,13 +4,14 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { appSettings, attendance } from "@/db/schema";
+import type { DbExecutor } from "@/lib/audit";
 
 const SETTINGS_ID = "singleton";
 
 export type SheetsConfig = { url: string; secret: string };
 
-export async function getSettings() {
-  return db.query.appSettings.findFirst({
+export async function getSettings(executor: DbExecutor = db) {
+  return executor.query.appSettings.findFirst({
     where: eq(appSettings.id, SETTINGS_ID),
   });
 }
@@ -18,8 +19,9 @@ export async function getSettings() {
 export async function saveSheetsConfig(
   url: string | null,
   secret: string | null,
+  executor: DbExecutor = db,
 ) {
-  await db
+  const [saved] = await executor
     .insert(appSettings)
     .values({
       id: SETTINGS_ID,
@@ -34,7 +36,9 @@ export async function saveSheetsConfig(
         sheetsWebhookSecret: secret,
         updatedAt: new Date(),
       },
-    });
+    })
+    .returning();
+  return saved;
 }
 
 export async function getSheetsConfig(): Promise<SheetsConfig | null> {

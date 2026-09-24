@@ -2,10 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 
+import { db } from "@/db";
+import { recordAudit } from "@/lib/audit";
+import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
 import {
   buildAllRows,
   buildRowsForService,
+  getSettings,
   pingSheets,
   pushRows,
   saveSheetsConfig,
@@ -20,7 +24,7 @@ export async function saveSheetsSettings(
   _prev: SaveSettingsState,
   formData: FormData,
 ): Promise<SaveSettingsState> {
-  await requirePermission("settings.update");
+  const actor = await requirePermission("settings.update");
 
   const url = String(formData.get("webhookUrl") ?? "").trim() || null;
   const secret = String(formData.get("webhookSecret") ?? "").trim() || null;
@@ -32,7 +36,21 @@ export async function saveSheetsSettings(
     return { error: "Add a secret so the webhook can reject stray requests." };
   }
 
-  await saveSheetsConfig(url, secret);
+  await db.transaction(async (tx) => {
+    const before = await getSettings(tx);
+    const after = await saveSheetsConfig(url, secret, tx);
+    // recordAudit redacts the webhook secret; the entry shows only that it
+    // changed.
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "settings.update",
+      entity: "settings",
+      entityId: after.id,
+      before: before ?? { id: after.id },
+      after,
+      summary: (fields) => `Changed settings: ${describeFields(fields)}`,
+    });
+  });
   revalidatePath("/settings");
   return { ok: true, message: url ? "Google Sheets connected." : "Settings saved." };
 }
