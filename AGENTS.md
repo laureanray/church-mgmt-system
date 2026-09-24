@@ -257,6 +257,24 @@ Migrations are versioned and committed: `bun run db:generate`, then
 disabled so that `db/migrations` stays the single schema history; `db:push`
 would desync it, so reach for generate + migrate instead.
 
+## Performance
+
+Pages render in ~15ms of their own work; the cost users feel is round trips.
+`docs/performance.md` has the checklist and the measuring tool — the rules that
+matter while editing:
+
+- After `requirePermission`, a page makes **one** `Promise.all` batch of
+  queries. A second sequential `await db…` is a second trip; fold it into SQL.
+- `next.config.ts` sets `staleTimes` so visited and intent-prefetched pages are
+  reused briefly. Server actions must keep ending in `revalidatePath` or
+  `redirect` — that is what purges those caches after a write.
+- Primary navigation uses `IntentLink` (`components/patterns/`), which fully
+  prefetches a page on hover, focus or touch. In-content links stay `<Link>`.
+- Heavy client libraries load lazily in the one component that needs them,
+  never in the shared layout.
+- `bun run perf:probe` times routes against a local production build; put
+  before/after numbers in PRs that add or reshape a page.
+
 ## Invariants to preserve
 
 - Attendance is unique per `(memberId, serviceId)`. `recordAttendance` detects
