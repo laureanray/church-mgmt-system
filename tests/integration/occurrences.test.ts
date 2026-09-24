@@ -9,14 +9,16 @@ const { generateForSchedule, deleteFutureEmptyOccurrences, topUpAllSchedules } =
 beforeEach(() => resetTestDatabase(database.client));
 afterAll(() => database.client.end());
 
-it("generates weekly occurrences idempotently, including simultaneous requests", async () => {
+it("generates upcoming occurrences idempotently, including simultaneous requests", async () => {
+  // Tomorrow's weekday, so the schedule has exactly one upcoming occurrence.
+  const dayOfWeek = (new Date().getDay() + 1) % 7;
   const [schedule] = await database.db.insert(serviceSchedules).values({
-    name: 'Sunday', dayOfWeek: 0, timeOfDay: '09:00',
+    name: 'Sunday', dayOfWeek, timeOfDay: '09:00',
   }).returning();
-  const counts = await Promise.all([generateForSchedule(schedule, 4), generateForSchedule(schedule, 4)]);
-  expect(counts.reduce((a, b) => a + b, 0)).toBe(4);
-  expect(await generateForSchedule(schedule, 4)).toBe(0);
-  expect(await database.db.select().from(services)).toHaveLength(4);
+  const counts = await Promise.all([generateForSchedule(schedule), generateForSchedule(schedule)]);
+  expect(counts.reduce((a, b) => a + b, 0)).toBe(1);
+  expect(await generateForSchedule(schedule)).toBe(0);
+  expect(await database.db.select().from(services)).toHaveLength(1);
 });
 
 it("preserves past and attended occurrences when rebuilding a schedule", async () => {

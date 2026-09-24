@@ -5,23 +5,21 @@ import { and, eq, gte, notInArray } from "drizzle-orm";
 import { db } from "@/db";
 import { attendance, serviceSchedules, services } from "@/db/schema";
 import type { ServiceSchedule } from "@/db/schema";
-import { OCCURRENCE_WEEKS_AHEAD } from "@/lib/constants";
 
-/** Upcoming dates (at midnight) matching `dayOfWeek` for the next `weeks`. */
-function upcomingDates(dayOfWeek: number, weeks: number, from = new Date()) {
+/**
+ * The dates (at midnight) a schedule should have an occurrence on: the next
+ * one after today, plus today's when today is the meeting day. Today's is kept
+ * however late it is — /scan needs it all day — and the one after it means a
+ * schedule never reads as having nothing upcoming once its service has begun.
+ */
+function upcomingDates(dayOfWeek: number, from = new Date()) {
   const start = new Date(from);
   start.setHours(0, 0, 0, 0);
   const delta = (dayOfWeek - start.getDay() + 7) % 7;
-  const first = new Date(start);
-  first.setDate(start.getDate() + delta);
+  const next = new Date(start);
+  next.setDate(start.getDate() + (delta || 7));
 
-  const dates: Date[] = [];
-  for (let i = 0; i < weeks; i++) {
-    const d = new Date(first);
-    d.setDate(first.getDate() + i * 7);
-    dates.push(d);
-  }
-  return dates;
+  return delta === 0 ? [start, next] : [next];
 }
 
 function withTime(date: Date, timeOfDay: string) {
@@ -43,15 +41,11 @@ type SchedulePlan = Pick<
 >;
 
 /**
- * The rows the next `weeks` of a schedule would produce. Pure — no database —
- * so callers can batch several schedules into one insert.
+ * The rows a schedule's upcoming occurrences would produce. Pure — no database
+ * — so callers can batch several schedules into one insert.
  */
-export function occurrenceValues(
-  schedule: SchedulePlan,
-  weeks = OCCURRENCE_WEEKS_AHEAD,
-  from = new Date(),
-) {
-  return upcomingDates(schedule.dayOfWeek, weeks, from).map((date) => ({
+export function occurrenceValues(schedule: SchedulePlan, from = new Date()) {
+  return upcomingDates(schedule.dayOfWeek, from).map((date) => ({
     name: schedule.name,
     type: schedule.type,
     location: schedule.location ?? null,
@@ -61,15 +55,14 @@ export function occurrenceValues(
 }
 
 /**
- * Generate the next `weeks` of occurrences for a schedule. Idempotent — the
- * unique (scheduleId, scheduledAt) index means re-running only fills gaps.
- * Returns how many new occurrences were created.
+ * Generate a schedule's upcoming occurrences. Idempotent — the unique
+ * (scheduleId, scheduledAt) index means re-running only fills gaps. Returns
+ * how many new occurrences were created.
  */
 export async function generateForSchedule(
   schedule: SchedulePlan,
-  weeks = OCCURRENCE_WEEKS_AHEAD,
 ): Promise<number> {
-  const values = occurrenceValues(schedule, weeks);
+  const values = occurrenceValues(schedule);
 
   if (values.length === 0) return 0;
 
@@ -112,15 +105,13 @@ export async function deleteFutureEmptyOccurrences(scheduleId: string) {
  * schedules go in as one insert rather than one per schedule. Two round trips,
  * whatever the number of schedules.
  */
-export async function topUpAllSchedules(weeks = OCCURRENCE_WEEKS_AHEAD) {
+export async function topUpAllSchedules() {
   const active = await db
     .select()
     .from(serviceSchedules)
     .where(eq(serviceSchedules.active, true));
 
-  const values = active.flatMap((schedule) =>
-    occurrenceValues(schedule, weeks),
-  );
+  const values = active.flatMap((schedule) => occurrenceValues(schedule));
 
   if (values.length === 0) return 0;
 

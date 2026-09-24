@@ -110,6 +110,3 @@ export const MEETING_DAY_OPTIONS = DAYS_OF_WEEK.map((label, i) => ({
   value: String(i),
   label,
 }));
-
-// How many weeks of upcoming occurrences to keep generated per schedule.
-export const OCCURRENCE_WEEKS_AHEAD = 8;

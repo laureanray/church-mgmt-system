@@ -264,7 +264,9 @@ would desync it, so reach for generate + migrate instead.
 - Generated services are unique per `(scheduleId, scheduledAt)` — that
   constraint is what makes `generateForSchedule` idempotent.
 - `topUpAllSchedules()` is called from the `/services` and `/scan` page loads.
-  There is no cron; occurrences appear because someone opened a page.
+  There is no cron; occurrences appear because someone opened a page. Each
+  schedule keeps only its next occurrence (plus today's, on a meeting day) —
+  not weeks of empty future services.
 - Editing or pausing a schedule rebuilds only *future, un-attended*
   occurrences. Past and already-attended services survive.
 - `app_settings` is a single row keyed `"singleton"`; write it with

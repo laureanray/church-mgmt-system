@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, eq, gte, ilike, inArray } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, min } from "drizzle-orm";
 import {
   CalendarDays,
   CalendarPlus,
@@ -119,7 +119,7 @@ export default async function ServicesPage({
         timeOfDay: serviceSchedules.timeOfDay,
         location: serviceSchedules.location,
         active: serviceSchedules.active,
-        upcoming: count(services.id),
+        next: min(services.scheduledAt),
       })
       .from(serviceSchedules)
       .leftJoin(
@@ -290,7 +290,9 @@ export default async function ServicesPage({
                     </div>
 
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      {s.upcoming} upcoming
+                      {s.next
+                        ? `Next ${formatDateTime(s.next)}`
+                        : "Nothing upcoming"}
                     </span>
 
                     {canUpdate || canDelete ? (
