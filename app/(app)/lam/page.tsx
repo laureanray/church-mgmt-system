@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, eq, gte, ilike, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, count, desc, gte, ilike, lt } from "drizzle-orm";
 import { CalendarDays } from "lucide-react";
 
 import { db } from "@/db";
-import { lineupAssignments, lineupSongs, members, services } from "@/db/schema";
+import { services } from "@/db/schema";
 import { DataTable, type DataTableColumn } from "@/components/patterns/data-table";
 import { LinkTabs } from "@/components/patterns/link-tabs";
 import { PageHeader } from "@/components/patterns/page-header";
@@ -18,6 +18,7 @@ import {
   type RawSearchParams,
 } from "@/lib/data-table";
 import { formatDateTime } from "@/lib/format";
+import { lineupSummary } from "@/lib/lam-query";
 import { topUpAllSchedules } from "@/lib/occurrences";
 
 type LineupRow = {
@@ -26,6 +27,7 @@ type LineupRow = {
   scheduledAt: Date;
   songCount: number;
   teamCount: number;
+  leaders: string[];
 };
 
 // A service stays under "Upcoming" for half a day after it starts, so the team
@@ -58,12 +60,7 @@ export default async function LineupsPage({
   // eslint-disable-next-line react-hooks/purity -- request-time cutoff, read after auth
   const cutoff = new Date(Date.now() - STILL_UPCOMING_MS);
 
-  const songCount = db.$count(lineupSongs, eq(lineupSongs.serviceId, services.id));
-  const teamCount = sql<number>`(
-    select count(distinct ${lineupAssignments.memberId})
-    from ${lineupAssignments}
-    where ${lineupAssignments.serviceId} = ${services.id}
-  )`.mapWith(Number);
+  const { songCount, teamCount, leaders } = lineupSummary();
   const SORT_COLUMNS = {
     name: services.name,
     date: services.scheduledAt,
@@ -93,6 +90,7 @@ export default async function LineupsPage({
         scheduledAt: services.scheduledAt,
         songCount,
         teamCount,
+        leaders,
       })
       .from(services)
       .where(where)
@@ -108,23 +106,6 @@ export default async function LineupsPage({
   const clamped = overRunPage(state, matching);
   if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
 
-  const leaders = rows.length
-    ? await db
-        .select({ serviceId: lineupAssignments.serviceId, name: members.fullName })
-        .from(lineupAssignments)
-        .innerJoin(members, eq(members.id, lineupAssignments.memberId))
-        .where(
-          and(
-            inArray(
-              lineupAssignments.serviceId,
-              rows.map((row) => row.id),
-            ),
-            eq(lineupAssignments.part, "worship_leader"),
-          ),
-        )
-        .orderBy(asc(members.fullName))
-    : [];
-  const leadersByService = Map.groupBy(leaders, (leader) => leader.serviceId);
 
   const columns: DataTableColumn<LineupRow>[] = [
     {
@@ -158,10 +139,7 @@ export default async function LineupsPage({
       label: "Worship leader",
       hideBelow: "md",
       cell: (row) =>
-        leadersByService
-          .get(row.id)
-          ?.map((leader) => leader.name)
-          .join(", ") || <span className="text-muted-foreground">—</span>,
+        row.leaders.join(", ") || <span className="text-muted-foreground">—</span>,
     },
     {
       id: "songs",

@@ -10,6 +10,7 @@ import {
   ilike,
   inArray,
   or,
+  sql,
 } from "drizzle-orm";
 import { HandHeart, Pencil, Plus } from "lucide-react";
 
@@ -45,6 +46,7 @@ type MinistryRow = {
   isSystem: boolean;
   rosterCount: number;
   grantCount: number;
+  heads: string[];
 };
 
 const SORT_COLUMNS = {
@@ -102,6 +104,16 @@ export default async function MinistriesPage({
         isSystem: ministries.isSystem,
         rosterCount: countDistinct(ministryMembers.memberId),
         grantCount: countDistinct(ministryPermissions.permissionKey),
+        // In the row query, not a follow-up, so the page stays one batch.
+        // The subquery's own ministry_members shadows the outer join's.
+        heads: sql<string[]>`coalesce(
+          (select array_agg(${members.fullName} order by ${members.fullName})
+            from ${ministryMembers}
+            join ${members} on ${members.id} = ${ministryMembers.memberId}
+            where ${ministryMembers.ministryId} = ${ministries.id}
+              and ${ministryMembers.position} = 'head'),
+          '{}'
+        )`,
       })
       .from(ministries)
       .leftJoin(ministryMembers, eq(ministryMembers.ministryId, ministries.id))
@@ -120,27 +132,6 @@ export default async function MinistriesPage({
   const clamped = overRunPage(state, matching);
   if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
 
-  // Heads for just the rows on this page.
-  const heads = rows.length
-    ? await db
-        .select({
-          ministryId: ministryMembers.ministryId,
-          name: members.fullName,
-        })
-        .from(ministryMembers)
-        .innerJoin(members, eq(members.id, ministryMembers.memberId))
-        .where(
-          and(
-            inArray(
-              ministryMembers.ministryId,
-              rows.map((row) => row.id),
-            ),
-            eq(ministryMembers.position, "head"),
-          ),
-        )
-        .orderBy(asc(members.fullName))
-    : [];
-  const headsByMinistry = Map.groupBy(heads, (head) => head.ministryId);
 
   const canCreate = hasPermission(user, "ministries.create");
   const canUpdate = hasPermission(user, "ministries.update");
@@ -185,10 +176,7 @@ export default async function MinistriesPage({
       hideBelow: "md",
       cellClassName: "text-muted-foreground",
       cell: (ministry) =>
-        headsByMinistry
-          .get(ministry.id)
-          ?.map((head) => head.name)
-          .join(", ") || "—",
+        ministry.heads.join(", ") || "—",
     },
     {
       id: "roster",
