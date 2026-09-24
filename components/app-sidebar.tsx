@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { NavUser } from "@/components/nav-user";
+import { IntentLink } from "@/components/patterns/intent-link";
 import type { PermissionKey } from "@/lib/permissions";
 import {
   Sidebar,
@@ -109,7 +110,7 @@ export function AppSidebar({
               return (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
-                    render={<Link href={item.href} />}
+                    render={<IntentLink href={item.href} />}
                     isActive={active}
                     tooltip={item.title}
                   >

@@ -152,6 +152,7 @@ continue to use their existing datetime control.
 | --- | --- |
 | `PageHeader` | Title, description and actions above every page |
 | `BackLink` | The "← Back to members" ghost link, previously copied into 12 routes |
+| `IntentLink` | A `<Link>` that fully prefetches its page on hover, focus or touch — for primary navigation; see `docs/performance.md` |
 | `EmptyState` | The dashed placeholder *and* the muted line inside a Card (`variant="inline"`) |
 | `StatCard` | The dashboard's headline figures |
 | `InfoTile` | The icon-led attribute cards on a service |
