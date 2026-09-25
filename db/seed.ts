@@ -233,14 +233,16 @@ async function main() {
   // --- Sample services ----------------------------------------------------
   const existingServices = await db.$count(services);
   if (existingServices === 0) {
-    const now = new Date();
-    const thisSunday = new Date(now);
-    thisSunday.setDate(now.getDate() + ((7 - now.getDay()) % 7));
-    thisSunday.setHours(9, 0, 0, 0);
-
-    const wednesday = new Date(now);
-    wednesday.setDate(now.getDate() + ((3 - now.getDay() + 7) % 7));
-    wednesday.setHours(19, 0, 0, 0);
+    // The coming Sunday and Wednesday on the church's calendar, at church
+    // time — the same whatever zone the machine running the seed is in.
+    const { zonedInstant } = await import("../lib/church-time");
+    const { addDays, todayIn, weekdayOf } = await import("../lib/dates");
+    const today = todayIn();
+    const thisSunday = zonedInstant(addDays(today, (7 - weekdayOf(today)) % 7), "09:00");
+    const wednesday = zonedInstant(
+      addDays(today, (3 - weekdayOf(today) + 7) % 7),
+      "19:00",
+    );
 
     await db.insert(services).values([
       {

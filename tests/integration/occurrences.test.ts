@@ -13,13 +13,15 @@ import {
 const database = connectTestDatabase();
 await mock.module("@/db", () => ({ db: database.db }));
 const { generateForSchedule, deleteFutureEmptyOccurrences, topUpAllSchedules } = await import("../../lib/occurrences");
+const { todayIn, weekdayOf } = await import("../../lib/dates");
 
 beforeEach(() => resetTestDatabase(database.client));
 afterAll(() => database.client.end());
 
 it("generates upcoming occurrences idempotently, including simultaneous requests", async () => {
-  // Tomorrow's weekday, so the schedule has exactly one upcoming occurrence.
-  const dayOfWeek = (new Date().getDay() + 1) % 7;
+  // Tomorrow's weekday on the church's calendar, so the schedule has exactly
+  // one upcoming occurrence whatever zone the test process runs in.
+  const dayOfWeek = (weekdayOf(todayIn()) + 1) % 7;
   const [schedule] = await database.db.insert(serviceSchedules).values({
     name: 'Sunday', dayOfWeek, timeOfDay: '09:00',
   }).returning();

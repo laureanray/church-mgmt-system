@@ -11,34 +11,33 @@ import {
   services,
 } from "@/db/schema";
 import type { ServiceSchedule } from "@/db/schema";
+import { zonedInstant } from "@/lib/church-time";
+import { addDays, todayIn, weekdayOf } from "@/lib/dates";
+
+/*
+ * A schedule's day and time are the church's wall clock — "Sunday 09:00" means
+ * 9 AM in Manila — so "today", the weekday and the time are all worked out in
+ * the church's zone (lib/church-time.ts), never the server's. On Vercel the
+ * server is on UTC, where "today" starts at 8 AM Manila time and 09:00 is 5 PM.
+ */
 
 /**
- * The dates (at midnight) a schedule should have an occurrence on: the next
+ * The church-calendar dates a schedule should have an occurrence on: the next
  * one after today, plus today's when today is the meeting day. Today's is kept
  * however late it is — /scan needs it all day — and the one after it means a
  * schedule never reads as having nothing upcoming once its service has begun.
  */
 function upcomingDates(dayOfWeek: number, from = new Date()) {
-  const start = new Date(from);
-  start.setHours(0, 0, 0, 0);
-  const delta = (dayOfWeek - start.getDay() + 7) % 7;
-  const next = new Date(start);
-  next.setDate(start.getDate() + (delta || 7));
+  const today = todayIn(undefined, from);
+  const delta = (dayOfWeek - weekdayOf(today) + 7) % 7;
+  const next = addDays(today, delta || 7);
 
-  return delta === 0 ? [start, next] : [next];
+  return delta === 0 ? [today, next] : [next];
 }
 
-function withTime(date: Date, timeOfDay: string) {
-  const [h, m] = timeOfDay.split(":").map((n) => Number(n));
-  const d = new Date(date);
-  d.setHours(h || 0, m || 0, 0, 0);
-  return d;
-}
-
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
+/** Midnight at the start of the church's today, as an instant. */
+function startOfToday(now = new Date()) {
+  return zonedInstant(todayIn(undefined, now), "00:00");
 }
 
 type SchedulePlan = Pick<
@@ -55,7 +54,7 @@ export function occurrenceValues(schedule: SchedulePlan, from = new Date()) {
     name: schedule.name,
     type: schedule.type,
     location: schedule.location ?? null,
-    scheduledAt: withTime(date, schedule.timeOfDay),
+    scheduledAt: zonedInstant(date, schedule.timeOfDay),
     scheduleId: schedule.id,
   }));
 }
