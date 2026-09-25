@@ -50,7 +50,22 @@ class MemberAlreadyLinked extends Error {}
  * rolls this transaction back instead of silently taking the member over,
  * which would move its ministry access from one login to another.
  */
-async function linkMember(tx: Tx, userId: string, memberId: string | null) {
+/** The name of the member record a login is linked to — how the log shows it. */
+async function linkedMemberName(tx: Tx, userId: string) {
+  const [member] = await tx
+    .select({ fullName: members.fullName })
+    .from(members)
+    .where(eq(members.userId, userId))
+    .limit(1);
+  return member?.fullName ?? null;
+}
+
+/** Links the login to `memberId` (or unlinks it) and returns the member's name. */
+async function linkMember(
+  tx: Tx,
+  userId: string,
+  memberId: string | null,
+): Promise<string | null> {
   await tx
     .update(members)
     .set({ userId: null, updatedAt: new Date() })
@@ -69,9 +84,11 @@ async function linkMember(tx: Tx, userId: string, memberId: string | null) {
           or(isNull(members.userId), eq(members.userId, userId)),
         ),
       )
-      .returning({ id: members.id });
+      .returning({ fullName: members.fullName });
     if (claimed.length === 0) throw new MemberAlreadyLinked();
+    return claimed[0].fullName;
   }
+  return null;
 }
 
 export type CreateUserState =
@@ -162,15 +179,15 @@ export async function createUser(
           mustChangePassword: true,
         })
         .returning();
+      const linkedMember = await linkMember(tx, data.user.id, memberId);
       await recordAudit(tx, {
         actorId: actor.id,
         action: "user.create",
         entity: "user",
         entityId: created.id,
-        after: created,
+        after: { ...created, linkedMember },
         summary: `Created staff account for ${name} (${assignedRole.name})`,
       });
-      await linkMember(tx, data.user.id, memberId);
     });
   } catch (err) {
     // Roll the auth user back, otherwise it lingers with no profile and its
@@ -268,12 +285,13 @@ export async function updateUser(
   // this user may do exactly as a role change can.
   try {
     await db.transaction(async (tx) => {
+      const previousMember = await linkedMemberName(tx, id);
       const [updated] = await tx
         .update(users)
         .set({ name, email, roleId, updatedAt: new Date() })
         .where(eq(users.id, id))
         .returning();
-      await linkMember(tx, id, memberId);
+      const linkedMember = await linkMember(tx, id, memberId);
       if (!existing || !updated) return;
 
       const roleChanged = existing.roleId !== updated.roleId;
@@ -282,8 +300,9 @@ export async function updateUser(
         action: roleChanged ? "user.role_change" : "user.update",
         entity: "user",
         entityId: id,
-        before: existing,
-        after: updated,
+        // The member link carries ministry access, so it is logged like a field.
+        before: { ...existing, linkedMember: previousMember },
+        after: { ...updated, linkedMember },
         summary: (fields) => {
           const others = describeFields(fields.filter((field) => field !== "roleId"));
           if (!roleChanged) return `Edited staff user ${name}: ${others}`;
@@ -304,11 +323,22 @@ export async function updateUser(
     // Supabase refused the old address, so it keeps the new one. The profile
     // is the half we can still move: bring its email into line, and say so.
     const emailKept = Boolean(restore?.error);
-    if (emailKept) {
-      await db
-        .update(users)
-        .set({ email, updatedAt: new Date() })
-        .where(eq(users.id, id));
+    if (emailKept && previousEmail) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(users)
+          .set({ email, updatedAt: new Date() })
+          .where(eq(users.id, id));
+        await recordAudit(tx, {
+          actorId: currentUser.id,
+          action: "user.update",
+          entity: "user",
+          entityId: id,
+          before: { email: previousEmail },
+          after: { email },
+          summary: `Kept ${name}’s new login email after the rest of the edit failed`,
+        });
+      });
       revalidatePath("/users");
     }
     if (err instanceof MemberAlreadyLinked) {

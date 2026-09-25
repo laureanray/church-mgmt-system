@@ -11,6 +11,8 @@ import {
   ministryMembers,
   ministryPermissions,
 } from "@/db/schema";
+import { recordAudit, type DbExecutor } from "@/lib/audit";
+import { describeFields } from "@/lib/audit-diff";
 import { requirePermission, requireUser } from "@/lib/auth-helpers";
 import { canManageRoster } from "@/lib/ministry-access";
 import type { MinistryPosition } from "@/lib/constants";
@@ -47,7 +49,7 @@ export async function createMinistry(
   _previous: MinistryFormState,
   formData: FormData,
 ): Promise<MinistryFormState> {
-  await requirePermission("ministries.create");
+  const actor = await requirePermission("ministries.create");
   const parsed = ministrySchema.safeParse(ministryValues(formData));
   if (!parsed.success) {
     return {
@@ -68,7 +70,7 @@ export async function createMinistry(
     const [ministry] = await tx
       .insert(ministries)
       .values({ name, description, active })
-      .returning({ id: ministries.id });
+      .returning();
     if (permissions.length) {
       await tx.insert(ministryPermissions).values(
         permissions.map((permissionKey) => ({
@@ -77,6 +79,14 @@ export async function createMinistry(
         })),
       );
     }
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "ministry.create",
+      entity: "ministry",
+      entityId: ministry.id,
+      after: { ...ministry, permissions: [...permissions].sort() },
+      summary: `Created ministry ${ministry.name}`,
+    });
     return ministry.id;
   });
 
@@ -89,7 +99,7 @@ export async function updateMinistry(
   _previous: MinistryFormState,
   formData: FormData,
 ): Promise<MinistryFormState> {
-  await requirePermission("ministries.update");
+  const actor = await requirePermission("ministries.update");
   const parsed = ministrySchema.safeParse(ministryValues(formData));
   if (!parsed.success) {
     return {
@@ -107,10 +117,13 @@ export async function updateMinistry(
   }
 
   await db.transaction(async (tx) => {
-    await tx
+    const before = await ministryWithGrants(tx, id);
+    const [updated] = await tx
       .update(ministries)
       .set({ name, description, active, updatedAt: new Date() })
-      .where(eq(ministries.id, id));
+      .where(eq(ministries.id, id))
+      .returning();
+    if (!before || !updated) return;
     await tx
       .delete(ministryPermissions)
       .where(eq(ministryPermissions.ministryId, id));
@@ -119,6 +132,17 @@ export async function updateMinistry(
         .insert(ministryPermissions)
         .values(permissions.map((permissionKey) => ({ ministryId: id, permissionKey })));
     }
+    // The grants ride along as one field, so a change to what the ministry
+    // grants reads in the log like any other edit.
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "ministry.update",
+      entity: "ministry",
+      entityId: id,
+      before,
+      after: { ...updated, permissions: [...permissions].sort() },
+      summary: (fields) => `Edited ministry ${updated.name}: ${describeFields(fields)}`,
+    });
   });
 
   revalidateMinistry(id);
@@ -126,7 +150,7 @@ export async function updateMinistry(
 }
 
 export async function deleteMinistry(id: string) {
-  await requirePermission("ministries.delete");
+  const actor = await requirePermission("ministries.delete");
   const ministry = await db.query.ministries.findFirst({
     where: eq(ministries.id, id),
     columns: { isSystem: true },
@@ -134,9 +158,79 @@ export async function deleteMinistry(id: string) {
   // Built-in ministries own a module; LAM's roster is who a line-up can list.
   if (!ministry || ministry.isSystem) return;
 
-  await db.delete(ministries).where(eq(ministries.id, id));
+  await db.transaction(async (tx) => {
+    const before = await ministryWithGrants(tx, id);
+    const rosterCount = await tx.$count(ministryMembers, eq(ministryMembers.ministryId, id));
+    const [deleted] = await tx
+      .delete(ministries)
+      .where(and(eq(ministries.id, id), eq(ministries.isSystem, false)))
+      .returning();
+    if (!before || !deleted) return;
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "ministry.delete",
+      entity: "ministry",
+      entityId: id,
+      before: { ...before, rosterCount },
+      summary: `Deleted ministry ${deleted.name} and its roster of ${rosterCount}`,
+    });
+  });
   revalidateMinistry();
   redirect("/ministries");
+}
+
+/** A ministry row with its grants as a sorted list — how the log stores one. */
+async function ministryWithGrants(executor: DbExecutor, id: string) {
+  const ministry = await executor.query.ministries.findFirst({
+    where: eq(ministries.id, id),
+  });
+  if (!ministry) return null;
+  const grants = await executor
+    .select({ key: ministryPermissions.permissionKey })
+    .from(ministryPermissions)
+    .where(eq(ministryPermissions.ministryId, id))
+    .orderBy(ministryPermissions.permissionKey);
+  return { ...ministry, permissions: grants.map((grant) => grant.key) };
+}
+
+/**
+ * Records a roster change against the member, like a cell group move, so it
+ * shows on their History tab: a roster place is part of what they may do.
+ */
+async function recordRosterChange(
+  executor: DbExecutor,
+  actorId: string,
+  change: {
+    ministryId: string;
+    memberId: string;
+    before: MinistryPosition | null;
+    after: MinistryPosition | null;
+  },
+) {
+  const [names] = await executor
+    .select({ ministry: ministries.name, member: members.fullName })
+    .from(ministries)
+    .innerJoin(members, eq(members.id, change.memberId))
+    .where(eq(ministries.id, change.ministryId));
+  if (!names) return;
+
+  const summary =
+    change.before === null
+      ? `Added ${names.member} to ${names.ministry}`
+      : change.after === null
+        ? `Removed ${names.member} from ${names.ministry}`
+        : change.after === "head"
+          ? `Made ${names.member} a head of ${names.ministry}`
+          : `Made ${names.member} a member of ${names.ministry}, no longer a head`;
+  await recordAudit(executor, {
+    actorId,
+    action: "member.ministry_change",
+    entity: "member",
+    entityId: change.memberId,
+    before: { ministry: change.before && names.ministry, position: change.before },
+    after: { ministry: change.after && names.ministry, position: change.after },
+    summary,
+  });
 }
 
 /**
@@ -154,7 +248,7 @@ export async function addRosterMember(
   _previous: RosterFormState,
   formData: FormData,
 ): Promise<RosterFormState> {
-  await requireRosterManager(ministryId);
+  const actor = await requireRosterManager(ministryId);
   const parsed = rosterAddSchema.safeParse({ memberId: formData.get("memberId") });
   if (!parsed.success) return { errors: fieldErrors(parsed.error) };
 
@@ -164,12 +258,23 @@ export async function addRosterMember(
   });
   if (!member) return { errors: { memberId: "That member no longer exists." } };
 
-  const added = await db
-    .insert(ministryMembers)
-    .values({ ministryId, memberId: member.id })
-    .onConflictDoNothing()
-    .returning({ memberId: ministryMembers.memberId });
-  if (added.length === 0) {
+  const added = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .insert(ministryMembers)
+      .values({ ministryId, memberId: member.id })
+      .onConflictDoNothing()
+      .returning();
+    if (row) {
+      await recordRosterChange(tx, actor.id, {
+        ministryId,
+        memberId: member.id,
+        before: null,
+        after: row.position,
+      });
+    }
+    return row;
+  });
+  if (!added) {
     return { errors: { memberId: `${member.fullName} is already on this roster.` } };
   }
 
@@ -179,15 +284,25 @@ export async function addRosterMember(
 }
 
 export async function removeRosterMember(ministryId: string, memberId: string) {
-  await requireRosterManager(ministryId);
-  await db
-    .delete(ministryMembers)
-    .where(
-      and(
-        eq(ministryMembers.ministryId, ministryId),
-        eq(ministryMembers.memberId, memberId),
-      ),
-    );
+  const actor = await requireRosterManager(ministryId);
+  await db.transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(ministryMembers)
+      .where(
+        and(
+          eq(ministryMembers.ministryId, ministryId),
+          eq(ministryMembers.memberId, memberId),
+        ),
+      )
+      .returning();
+    if (!removed) return;
+    await recordRosterChange(tx, actor.id, {
+      ministryId,
+      memberId,
+      before: removed.position,
+      after: null,
+    });
+  });
   revalidateMinistry(ministryId);
   revalidatePath(`/members/${memberId}`);
 }
@@ -198,20 +313,33 @@ export async function setRosterPosition(
   position: MinistryPosition,
 ) {
   // Appointing heads is not delegated to heads — see canAppointHeads.
-  await requirePermission("ministries.update");
+  const actor = await requirePermission("ministries.update");
   // Bound arguments travel through the client, so they are parsed like input.
   const parsed = rosterPositionSchema.safeParse({ memberId, position });
   if (!parsed.success) return;
 
-  await db
-    .update(ministryMembers)
-    .set({ position: parsed.data.position })
-    .where(
-      and(
-        eq(ministryMembers.ministryId, ministryId),
-        eq(ministryMembers.memberId, memberId),
-      ),
+  await db.transaction(async (tx) => {
+    const onRoster = and(
+      eq(ministryMembers.ministryId, ministryId),
+      eq(ministryMembers.memberId, memberId),
     );
+    const [current] = await tx
+      .select({ position: ministryMembers.position })
+      .from(ministryMembers)
+      .where(onRoster)
+      .for("update");
+    if (!current || current.position === parsed.data.position) return;
+    await tx
+      .update(ministryMembers)
+      .set({ position: parsed.data.position })
+      .where(onRoster);
+    await recordRosterChange(tx, actor.id, {
+      ministryId,
+      memberId,
+      before: current.position,
+      after: parsed.data.position,
+    });
+  });
   revalidateMinistry(ministryId);
   revalidatePath(`/members/${memberId}`);
 }

@@ -320,7 +320,8 @@ matter while editing:
 - `app_settings` is a single row keyed `"singleton"`; write it with
   `onConflictDoUpdate`.
 - Every mutation of members, cell groups (and their membership), services,
-  staff users, roles and settings calls `recordAudit()` from `lib/audit.ts`
+  staff users (and their member link), roles, settings, ministries (and their
+  rosters), songs and line-ups calls `recordAudit()` from `lib/audit.ts`
   **inside the same transaction**, after the write — a rolled-back change
   leaves no entry, and a failed entry undoes the change.
   `recordAudit` diffs and redacts on its own (any key matching

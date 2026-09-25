@@ -8,12 +8,15 @@ import { db } from "@/db";
 import {
   lineupAssignments,
   lineupSongs,
+  members,
   ministryMembers,
   services,
   songs,
 } from "@/db/schema";
+import { recordAudit, type DbExecutor } from "@/lib/audit";
+import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
-import { LAM_MINISTRY_ID } from "@/lib/constants";
+import { LAM_MINISTRY_ID, LINEUP_PART_LABELS } from "@/lib/constants";
 import { isForeignKeyViolation } from "@/lib/db-errors";
 import {
   fieldErrors,
@@ -47,7 +50,7 @@ export async function createSong(
   _previous: SongFormState,
   formData: FormData,
 ): Promise<SongFormState> {
-  await requirePermission("lam.songs_create");
+  const actor = await requirePermission("lam.songs_create");
   const parsed = songSchema.safeParse(songValues(formData));
   if (!parsed.success) {
     return {
@@ -56,7 +59,17 @@ export async function createSong(
     };
   }
 
-  await db.insert(songs).values(parsed.data);
+  await db.transaction(async (tx) => {
+    const [song] = await tx.insert(songs).values(parsed.data).returning();
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "song.create",
+      entity: "song",
+      entityId: song.id,
+      after: song,
+      summary: `Added ${song.title} to the song library`,
+    });
+  });
   revalidatePath("/lam/songs");
   redirect("/lam/songs");
 }
@@ -66,7 +79,7 @@ export async function updateSong(
   _previous: SongFormState,
   formData: FormData,
 ): Promise<SongFormState> {
-  await requirePermission("lam.songs_update");
+  const actor = await requirePermission("lam.songs_update");
   const parsed = songSchema.safeParse(songValues(formData));
   if (!parsed.success) {
     return {
@@ -75,10 +88,24 @@ export async function updateSong(
     };
   }
 
-  await db
-    .update(songs)
-    .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(songs.id, id));
+  await db.transaction(async (tx) => {
+    const [before] = await tx.select().from(songs).where(eq(songs.id, id)).for("update");
+    const [updated] = await tx
+      .update(songs)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(eq(songs.id, id))
+      .returning();
+    if (!before || !updated) return;
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "song.update",
+      entity: "song",
+      entityId: id,
+      before,
+      after: updated,
+      summary: (fields) => `Edited song ${updated.title}: ${describeFields(fields)}`,
+    });
+  });
   revalidatePath("/lam/songs");
   // Line-ups show the title and default key.
   revalidatePath("/lam", "layout");
@@ -86,11 +113,23 @@ export async function updateSong(
 }
 
 export async function deleteSong(id: string) {
-  await requirePermission("lam.songs_delete");
+  const actor = await requirePermission("lam.songs_delete");
   // No check-then-delete: a song could join a line-up between the two. The
-  // restrictive foreign key is the atomic check, and a song in use is a no-op.
+  // restrictive foreign key is the atomic check, and a song in use is a no-op
+  // — its audit entry rolls back with the delete.
   try {
-    await db.delete(songs).where(eq(songs.id, id));
+    await db.transaction(async (tx) => {
+      const [deleted] = await tx.delete(songs).where(eq(songs.id, id)).returning();
+      if (!deleted) return;
+      await recordAudit(tx, {
+        actorId: actor.id,
+        action: "song.delete",
+        entity: "song",
+        entityId: id,
+        before: deleted,
+        summary: `Deleted ${deleted.title} from the song library`,
+      });
+    });
   } catch (err) {
     if (isForeignKeyViolation(err)) return;
     throw err;
@@ -116,6 +155,37 @@ async function lockService(tx: Tx, serviceId: string) {
     .for("update");
 }
 
+/**
+ * A line-up is part of its service, so its changes are logged against the
+ * service. `describe` receives the service's name for the summary.
+ */
+async function recordLineupChange(
+  executor: DbExecutor,
+  entry: {
+    actorId: string;
+    serviceId: string;
+    action: "lineup.songs_change" | "lineup.team_change";
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    describe: (service: string) => string;
+  },
+) {
+  const [service] = await executor
+    .select({ name: services.name })
+    .from(services)
+    .where(eq(services.id, entry.serviceId));
+  if (!service) return;
+  await recordAudit(executor, {
+    actorId: entry.actorId,
+    action: entry.action,
+    entity: "service",
+    entityId: entry.serviceId,
+    before: entry.before,
+    after: entry.after,
+    summary: entry.describe(service.name),
+  });
+}
+
 async function serviceExists(serviceId: string) {
   const service = await db.query.services.findFirst({
     where: eq(services.id, serviceId),
@@ -129,7 +199,7 @@ export async function addLineupSong(
   _previous: LineupFormState,
   formData: FormData,
 ): Promise<LineupFormState> {
-  await requirePermission("lam.lineups_update");
+  const actor = await requirePermission("lam.lineups_update");
   const parsed = lineupSongSchema.safeParse({
     songId: formData.get("songId"),
     songKey: formData.get("songKey"),
@@ -141,7 +211,7 @@ export async function addLineupSong(
 
   const song = await db.query.songs.findFirst({
     where: eq(songs.id, parsed.data.songId),
-    columns: { id: true },
+    columns: { id: true, title: true },
   });
   if (!song) return { errors: { songId: "That song is no longer in the library." } };
 
@@ -153,11 +223,21 @@ export async function addLineupSong(
       .select({ last: max(lineupSongs.position) })
       .from(lineupSongs)
       .where(eq(lineupSongs.serviceId, serviceId));
-    await tx.insert(lineupSongs).values({
+    const [added] = await tx
+      .insert(lineupSongs)
+      .values({
+        serviceId,
+        songId: song.id,
+        songKey: parsed.data.songKey,
+        position: (last ?? 0) + 1,
+      })
+      .returning();
+    await recordLineupChange(tx, {
+      actorId: actor.id,
       serviceId,
-      songId: song.id,
-      songKey: parsed.data.songKey,
-      position: (last ?? 0) + 1,
+      action: "lineup.songs_change",
+      after: { song: song.title, songKey: added.songKey, position: added.position },
+      describe: (service) => `Added ${song.title} to the set list for ${service}`,
     });
   });
 
@@ -171,7 +251,7 @@ export async function moveLineupSong(
   id: string,
   direction: "up" | "down",
 ) {
-  await requirePermission("lam.lineups_update");
+  const actor = await requirePermission("lam.lineups_update");
   // Arguments bound on the client arrive as whatever the client sent.
   if (direction !== "up" && direction !== "down") return;
   await db.transaction(async (tx) => {
@@ -206,15 +286,43 @@ export async function moveLineupSong(
       .update(lineupSongs)
       .set({ position: item.position })
       .where(eq(lineupSongs.id, neighbour.id));
+
+    const song = await tx.query.songs.findFirst({
+      where: eq(songs.id, item.songId),
+      columns: { title: true },
+    });
+    await recordLineupChange(tx, {
+      actorId: actor.id,
+      serviceId,
+      action: "lineup.songs_change",
+      before: { song: song?.title, position: item.position },
+      after: { song: song?.title, position: neighbour.position },
+      describe: (service) => `Moved ${song?.title} ${direction} in the set list for ${service}`,
+    });
   });
   revalidateLineup(serviceId);
 }
 
 export async function removeLineupSong(serviceId: string, id: string) {
-  await requirePermission("lam.lineups_update");
-  await db
-    .delete(lineupSongs)
-    .where(and(eq(lineupSongs.id, id), eq(lineupSongs.serviceId, serviceId)));
+  const actor = await requirePermission("lam.lineups_update");
+  await db.transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(lineupSongs)
+      .where(and(eq(lineupSongs.id, id), eq(lineupSongs.serviceId, serviceId)))
+      .returning();
+    if (!removed) return;
+    const song = await tx.query.songs.findFirst({
+      where: eq(songs.id, removed.songId),
+      columns: { title: true },
+    });
+    await recordLineupChange(tx, {
+      actorId: actor.id,
+      serviceId,
+      action: "lineup.songs_change",
+      before: { song: song?.title, songKey: removed.songKey, position: removed.position },
+      describe: (service) => `Removed ${song?.title} from the set list for ${service}`,
+    });
+  });
   revalidateLineup(serviceId);
 }
 
@@ -223,7 +331,7 @@ export async function addLineupAssignment(
   _previous: LineupFormState,
   formData: FormData,
 ): Promise<LineupFormState> {
-  await requirePermission("lam.lineups_update");
+  const actor = await requirePermission("lam.lineups_update");
   const parsed = lineupAssignmentSchema.safeParse({
     memberId: formData.get("memberId"),
     part: formData.get("part"),
@@ -250,12 +358,15 @@ export async function addLineupAssignment(
       .for("share");
     if (!rostered) return "not-rostered" as const;
 
-    const added = await tx
+    const [added] = await tx
       .insert(lineupAssignments)
       .values({ serviceId, ...parsed.data })
       .onConflictDoNothing()
-      .returning({ id: lineupAssignments.id });
-    return added.length === 0 ? ("duplicate" as const) : ("added" as const);
+      .returning();
+    if (!added) return "duplicate" as const;
+
+    await recordTeamChange(tx, actor.id, { serviceId, added });
+    return "added" as const;
   });
   if (outcome === "not-rostered") {
     return { errors: { memberId: "Only members on the LAM roster can be scheduled." } };
@@ -269,11 +380,44 @@ export async function addLineupAssignment(
 }
 
 export async function removeLineupAssignment(serviceId: string, id: string) {
-  await requirePermission("lam.lineups_update");
-  await db
-    .delete(lineupAssignments)
-    .where(
-      and(eq(lineupAssignments.id, id), eq(lineupAssignments.serviceId, serviceId)),
-    );
+  const actor = await requirePermission("lam.lineups_update");
+  await db.transaction(async (tx) => {
+    const [removed] = await tx
+      .delete(lineupAssignments)
+      .where(
+        and(eq(lineupAssignments.id, id), eq(lineupAssignments.serviceId, serviceId)),
+      )
+      .returning();
+    if (removed) await recordTeamChange(tx, actor.id, { serviceId, removed });
+  });
   revalidateLineup(serviceId);
+}
+
+type Assignment = typeof lineupAssignments.$inferSelect;
+
+async function recordTeamChange(
+  executor: DbExecutor,
+  actorId: string,
+  change: { serviceId: string; added?: Assignment; removed?: Assignment },
+) {
+  const assignment = change.added ?? change.removed;
+  if (!assignment) return;
+  const member = await executor.query.members.findFirst({
+    where: eq(members.id, assignment.memberId),
+    columns: { fullName: true },
+  });
+  const who = member?.fullName ?? "a member";
+  const part = LINEUP_PART_LABELS[assignment.part as keyof typeof LINEUP_PART_LABELS] ?? assignment.part;
+  const row = { member: who, part: assignment.part };
+  await recordLineupChange(executor, {
+    actorId,
+    serviceId: change.serviceId,
+    action: "lineup.team_change",
+    before: change.removed ? row : undefined,
+    after: change.added ? row : undefined,
+    describe: (service) =>
+      change.added
+        ? `Put ${who} on ${part} for ${service}`
+        : `Took ${who} off ${part} for ${service}`,
+  });
 }

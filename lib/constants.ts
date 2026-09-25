@@ -140,6 +140,15 @@ export const AUDIT_ACTIONS = [
   "role.update",
   "role.delete",
   "settings.update",
+  "ministry.create",
+  "ministry.update",
+  "ministry.delete",
+  "member.ministry_change",
+  "song.create",
+  "song.update",
+  "song.delete",
+  "lineup.songs_change",
+  "lineup.team_change",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -162,6 +171,15 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "role.update": "Role edited",
   "role.delete": "Role deleted",
   "settings.update": "Settings changed",
+  "ministry.create": "Ministry created",
+  "ministry.update": "Ministry edited",
+  "ministry.delete": "Ministry deleted",
+  "member.ministry_change": "Ministry roster changed",
+  "song.create": "Song added",
+  "song.update": "Song edited",
+  "song.delete": "Song deleted",
+  "lineup.songs_change": "Set list changed",
+  "lineup.team_change": "Line-up team changed",
 };
 
 /** The kind of record an audit entry is about — `audit_log.entity`. */
@@ -172,6 +190,8 @@ export const AUDIT_ENTITIES = [
   "user",
   "role",
   "settings",
+  "ministry",
+  "song",
 ] as const;
 export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
 
@@ -182,6 +202,8 @@ export const AUDIT_ENTITY_LABELS: Record<AuditEntity, string> = {
   user: "Staff user",
   role: "Role",
   settings: "Settings",
+  ministry: "Ministry",
+  song: "Song",
 };
 
 // How long audit entries are kept before `bun run audit:prune` removes them.

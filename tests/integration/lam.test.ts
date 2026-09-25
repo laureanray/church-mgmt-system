@@ -3,12 +3,14 @@ import { asc, eq } from "drizzle-orm";
 
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import {
+  auditLog,
   lineupAssignments,
   lineupSongs,
   members,
   ministryMembers,
   services,
   songs,
+  users,
 } from "../../db/schema";
 
 const database = connectTestDatabase();
@@ -32,9 +34,12 @@ await mock.module("next/navigation", () => ({
 const {
   addLineupAssignment,
   addLineupSong,
+  createSong,
   deleteSong,
   moveLineupSong,
+  removeLineupAssignment,
   removeLineupSong,
+  updateSong,
 } = await import("../../app/(app)/lam/actions");
 
 function form(values: Record<string, string>) {
@@ -56,6 +61,10 @@ beforeEach(async () => {
   await resetTestDatabase(database.client);
   requirePermission.mockReset();
   requirePermission.mockResolvedValue({ id: "staff", permissions: ["lam.lineups_update"] });
+  // The acting staff member: audit entries reference a real user.
+  await database.db
+    .insert(users)
+    .values({ id: "staff", email: "staff@example.test", name: "Staff", roleId: "usher" });
   await database.db.insert(members).values([
     { id: "joy", fullName: "Joy Villanueva", qrToken: "joy" },
     { id: "mark", fullName: "Mark Bautista", qrToken: "mark" },
@@ -201,5 +210,97 @@ describe("songs", () => {
 
     const remaining = await database.db.select({ id: songs.id }).from(songs).orderBy(asc(songs.id));
     expect(remaining.map((song) => song.id)).toEqual(["goodness", "way-maker"]);
+  });
+});
+
+describe("audit", () => {
+  async function entries() {
+    return database.db
+      .select({
+        action: auditLog.action,
+        entity: auditLog.entity,
+        entityId: auditLog.entityId,
+        before: auditLog.before,
+        after: auditLog.after,
+        summary: auditLog.summary,
+      })
+      .from(auditLog)
+      .orderBy(asc(auditLog.at), asc(auditLog.id));
+  }
+
+  function songForm(values: Record<string, string>) {
+    return form({ artist: "", defaultKey: "", tempo: "", referenceUrl: "", notes: "", ...values });
+  }
+
+  it("logs the song library, and nothing for a rejected form or a song in use", async () => {
+    requirePermission.mockResolvedValue({
+      id: "staff",
+      permissions: ["lam.songs_create", "lam.songs_update", "lam.songs_delete"],
+    });
+    expect(await createSong(undefined, songForm({ title: "" }))).toMatchObject({
+      errors: { title: expect.any(String) },
+    });
+    await database.db
+      .insert(lineupSongs)
+      .values({ serviceId: "sunday", songId: "way-maker", position: 1 });
+    await deleteSong("way-maker");
+    expect(await entries()).toEqual([]);
+
+    await expect(createSong(undefined, songForm({ title: "Firm Foundation" }))).rejects.toThrow(
+      Redirect,
+    );
+    await expect(
+      updateSong("unused", undefined, songForm({ title: "Build My Life", defaultKey: "G" })),
+    ).rejects.toThrow(Redirect);
+    await deleteSong("goodness");
+
+    expect(await entries()).toMatchObject([
+      { action: "song.create", entity: "song", summary: "Added Firm Foundation to the song library" },
+      {
+        action: "song.update",
+        entityId: "unused",
+        before: { defaultKey: null },
+        after: { defaultKey: "G" },
+        summary: "Edited song Build My Life: default key",
+      },
+      {
+        action: "song.delete",
+        entityId: "goodness",
+        before: { title: "Goodness of God" },
+        summary: "Deleted Goodness of God from the song library",
+      },
+    ]);
+  });
+
+  it("logs line-up changes against the service", async () => {
+    await addLineupSong("sunday", undefined, form({ songId: "way-maker", songKey: "D" }));
+    await addLineupSong("sunday", undefined, form({ songId: "goodness", songKey: "" }));
+    const [first] = await database.db
+      .select({ id: lineupSongs.id })
+      .from(lineupSongs)
+      .where(eq(lineupSongs.songId, "goodness"));
+    await moveLineupSong("sunday", first.id, "up");
+    await removeLineupSong("sunday", first.id);
+    await addLineupAssignment("sunday", undefined, form({ memberId: "joy", part: "vocals" }));
+    const [assignment] = await database.db.select({ id: lineupAssignments.id }).from(lineupAssignments);
+    await removeLineupAssignment("sunday", assignment.id);
+
+    const logged = await entries();
+    expect(logged.every((entry) => entry.entity === "service" && entry.entityId === "sunday")).toBe(
+      true,
+    );
+    expect(logged.map((entry) => [entry.action, entry.summary])).toEqual([
+      ["lineup.songs_change", "Added Way Maker to the set list for Sunday"],
+      ["lineup.songs_change", "Added Goodness of God to the set list for Sunday"],
+      ["lineup.songs_change", "Moved Goodness of God up in the set list for Sunday"],
+      ["lineup.songs_change", "Removed Goodness of God from the set list for Sunday"],
+      ["lineup.team_change", "Put Joy Villanueva on Vocals for Sunday"],
+      ["lineup.team_change", "Took Joy Villanueva off Vocals for Sunday"],
+    ]);
+  });
+
+  it("logs nothing when a scheduling attempt is refused", async () => {
+    await addLineupAssignment("sunday", undefined, form({ memberId: "mark", part: "keys" }));
+    expect(await entries()).toEqual([]);
   });
 });

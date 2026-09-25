@@ -1,8 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it, mock } from "bun:test";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import {
+  auditLog,
   members,
   ministries,
   ministryMembers,
@@ -36,6 +37,7 @@ const { loadUserAccess } = await import("../../lib/access");
 const { loadSessionUser } = await import("../../lib/session-user");
 const {
   addRosterMember,
+  createMinistry,
   deleteMinistry,
   removeRosterMember,
   setRosterPosition,
@@ -76,6 +78,8 @@ beforeEach(async () => {
   requireUser.mockReset();
   requirePermission.mockReset();
   await database.db.insert(users).values([
+    // The acting staff member: audit entries reference a real user.
+    { id: "staff", email: "staff@example.test", name: "Staff", roleId: "usher" },
     { id: "joy-login", email: "joy@example.test", name: "Joy", roleId: "usher" },
     { id: "unlinked", email: "unlinked@example.test", name: "Unlinked", roleId: "usher" },
   ]);
@@ -280,5 +284,120 @@ describe("ministry actions", () => {
     ).toEqual([]);
     // The member record itself is untouched.
     expect(await database.db.select().from(members).where(eq(members.id, "mark"))).toHaveLength(1);
+  });
+});
+
+describe("audit", () => {
+  async function entries() {
+    return database.db
+      .select({
+        actorId: auditLog.actorId,
+        action: auditLog.action,
+        entity: auditLog.entity,
+        entityId: auditLog.entityId,
+        before: auditLog.before,
+        after: auditLog.after,
+        summary: auditLog.summary,
+      })
+      .from(auditLog)
+      .orderBy(asc(auditLog.at), asc(auditLog.id));
+  }
+
+  it("logs a new ministry with its grants, and nothing for a rejected form", async () => {
+    requirePermission.mockResolvedValue(session({ permissions: ["ministries.create"] }));
+    expect(
+      await createMinistry(undefined, form({ name: "", description: "" })),
+    ).toMatchObject({ errors: { name: expect.any(String) } });
+    expect(await entries()).toEqual([]);
+
+    await expect(
+      createMinistry(
+        undefined,
+        form({ name: "Prayer", description: "", active: "on", permissions: ["members.view"] }),
+      ),
+    ).rejects.toThrow(Redirect);
+
+    const [entry] = await entries();
+    expect(entry).toMatchObject({
+      actorId: "staff",
+      action: "ministry.create",
+      entity: "ministry",
+      summary: "Created ministry Prayer",
+    });
+    expect(entry.after).toMatchObject({ name: "Prayer", permissions: ["members.view"] });
+  });
+
+  it("logs a change of grants as a change to the ministry", async () => {
+    requirePermission.mockResolvedValue(session({ permissions: ["ministries.update"] }));
+    await database.db.insert(ministries).values({ id: "prayer", name: "Prayer", active: true });
+
+    await expect(
+      updateMinistry(
+        "prayer",
+        undefined,
+        form({ name: "Prayer", description: "", active: "on", permissions: ["members.view"] }),
+      ),
+    ).rejects.toThrow(Redirect);
+
+    expect(await entries()).toMatchObject([
+      {
+        action: "ministry.update",
+        entityId: "prayer",
+        before: { permissions: [] },
+        after: { permissions: ["members.view"] },
+        summary: "Edited ministry Prayer: permissions",
+      },
+    ]);
+  });
+
+  it("logs roster changes against the member, where their history shows them", async () => {
+    requireUser.mockResolvedValue(session({ permissions: ["ministries.update"] }));
+    requirePermission.mockResolvedValue(session({ permissions: ["ministries.update"] }));
+
+    expect(await addRosterMember("lam", undefined, form({ memberId: "mark" }))).toBeUndefined();
+    await setRosterPosition("lam", "mark", "head");
+    // Already a head: nothing changed, so nothing is logged.
+    await setRosterPosition("lam", "mark", "head");
+    await removeRosterMember("lam", "mark");
+
+    expect(await entries()).toEqual([
+      {
+        actorId: "staff",
+        action: "member.ministry_change",
+        entity: "member",
+        entityId: "mark",
+        before: { ministry: null, position: null },
+        after: { ministry: "LAM", position: "member" },
+        summary: "Added Mark Bautista to LAM",
+      },
+      expect.objectContaining({
+        entityId: "mark",
+        before: { position: "member" },
+        after: { position: "head" },
+        summary: "Made Mark Bautista a head of LAM",
+      }),
+      expect.objectContaining({
+        entityId: "mark",
+        before: { ministry: "LAM", position: "head" },
+        after: { ministry: null, position: null },
+        summary: "Removed Mark Bautista from LAM",
+      }),
+    ]);
+  });
+
+  it("logs a deleted ministry with the roster it took along", async () => {
+    requirePermission.mockResolvedValue(session({ permissions: ["ministries.delete"] }));
+    await database.db.insert(ministries).values({ id: "prayer", name: "Prayer" });
+    await database.db.insert(ministryMembers).values({ ministryId: "prayer", memberId: "mark" });
+
+    await expect(deleteMinistry("prayer")).rejects.toThrow(Redirect);
+    expect(await entries()).toMatchObject([
+      {
+        action: "ministry.delete",
+        entityId: "prayer",
+        before: { name: "Prayer", rosterCount: 1 },
+        summary: "Deleted ministry Prayer and its roster of 1",
+      },
+    ]);
   });
 });

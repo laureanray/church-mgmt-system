@@ -2,7 +2,7 @@ import { afterAll, beforeEach, expect, it, mock } from "bun:test";
 import { asc, eq } from "drizzle-orm";
 
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
-import { members, users } from "../../db/schema";
+import { auditLog, members, users } from "../../db/schema";
 
 const database = connectTestDatabase();
 const requirePermission = mock();
@@ -184,4 +184,45 @@ it("refuses to link a member at creation without users.update", async () => {
   expect(result?.errors?.memberId).toBe("You cannot link a member record.");
   expect(requirePermission).toHaveBeenCalledWith("users.create");
   expect((await links()).find((row) => row.id === "joy")?.userId).toBeNull();
+});
+
+it("logs a changed member link on the staff user", async () => {
+  await expect(updateUser("joy-login", undefined, editForm("joy"))).rejects.toThrow(Redirect);
+  const entries = await database.db
+    .select({
+      actorId: auditLog.actorId,
+      action: auditLog.action,
+      entityId: auditLog.entityId,
+      before: auditLog.before,
+      after: auditLog.after,
+      summary: auditLog.summary,
+    })
+    .from(auditLog);
+  expect(entries).toEqual([
+    {
+      actorId: "admin",
+      action: "user.update",
+      entityId: "joy-login",
+      before: { linkedMember: "Joy V." },
+      after: { linkedMember: "Joy Villanueva" },
+      summary: "Edited staff user Joy: linked member",
+    },
+  ]);
+});
+
+it("logs the kept email when the rest of an edit fails", async () => {
+  updateUserById
+    .mockImplementationOnce(async () => ({ error: null }))
+    .mockImplementationOnce(async () => ({ error: { message: "Service unavailable" } }));
+  await editWhileRivalClaimsJoy(editForm("joy", "joy.new@example.test"));
+  const entries = await database.db
+    .select({ before: auditLog.before, after: auditLog.after, summary: auditLog.summary })
+    .from(auditLog);
+  expect(entries).toEqual([
+    {
+      before: { email: "joy@example.test" },
+      after: { email: "joy.new@example.test" },
+      summary: "Kept Joy’s new login email after the rest of the edit failed",
+    },
+  ]);
 });
