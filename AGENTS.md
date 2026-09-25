@@ -358,8 +358,13 @@ matter while editing:
   - **The Tencent client is server-only.** `lib/tencent-face.ts` imports
     `server-only`; the key never reaches the browser, and recognition runs
     through `server/faces.ts`, which ends in `recordAttendanceForMember`.
-  - Unset, face is off and `/scan` scans QR codes as before. Enrolment stays off
-    in production until consent (#21) lands.
+  - **No face without consent.** `enrollMemberFace` refuses a first enrolment
+    without it, whatever the form sent. The consent (when, who recorded it, and
+    the notice as worded then) lives on the `member_faces` row, so every removal
+    takes it too. Removal always goes to Tencent **before** the local delete,
+    and member deletion waits if Tencent cannot be reached. `docs/privacy.md` is
+    the policy; keep it in step.
+  - Unset, face is off and `/scan` scans QR codes as before.
 
 ## Working here
 

@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Camera, Loader2, ScanFace, Trash2, Upload } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+  Camera,
+  Loader2,
+  ScanFace,
+  ShieldCheck,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import type {
@@ -12,6 +19,7 @@ import { FaceCaptureDialog } from "@/components/members/face-capture-dialog";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardAction,
@@ -36,6 +44,9 @@ export type FaceEnrollmentSummary = {
   /** ISO timestamp. */
   enrolledAt: string;
   enrolledByName: string | null;
+  /** ISO timestamp of the member's consent, recorded at first enrolment. */
+  consentAt: string;
+  consentRecordedByName: string | null;
   /** Where the enrolment photo is served; see members/[id]/face-photo. */
   photoUrl: string;
 };
@@ -47,11 +58,17 @@ export type FaceEnrollmentSummary = {
  *
  * Nothing here is shown as enrolled until Tencent has accepted the photo, so
  * "Enrolled" always means the camera at the door will know them.
+ *
+ * A first enrolment asks for the member's consent: the notice is shown, and
+ * the photo buttons stay disabled until the box is ticked. The server checks
+ * it again. Replacing a photo keeps the consent already on record; removing
+ * the face removes the consent with it.
  */
 export function FaceEnrollmentCard({
   memberName,
   configured,
   enrollment,
+  consentNotice,
   canEdit,
   enroll,
   remove,
@@ -61,6 +78,8 @@ export function FaceEnrollmentCard({
   /** False when this deployment has no Tencent credentials. */
   configured: boolean;
   enrollment: FaceEnrollmentSummary | null;
+  /** The notice a member agrees to before a first enrolment. */
+  consentNotice: string;
   canEdit: boolean;
   /** Enrol the photo in the form data's `photo` field. */
   enroll: (formData: FormData) => Promise<FaceEnrollResult>;
@@ -73,6 +92,7 @@ export function FaceEnrollmentCard({
   const [error, setError] = useState<string | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const [consented, setConsented] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const blobUrlRef = useRef<string | null>(null);
 
@@ -89,6 +109,7 @@ export function FaceEnrollmentCard({
   async function submit(photo: Blob): Promise<string | null> {
     const form = new FormData();
     form.set("photo", photo, "face.jpg");
+    if (consented) form.set("consent", "yes");
     let result: FaceEnrollResult;
     try {
       result = await enroll(form);
@@ -102,6 +123,8 @@ export function FaceEnrollmentCard({
     setLocal({
       enrolledAt: result.enrolledAt,
       enrolledByName: result.enrolledByName,
+      consentAt: result.consentAt,
+      consentRecordedByName: result.consentRecordedByName,
       photoUrl: blobUrlRef.current,
     });
     setError(null);
@@ -132,6 +155,8 @@ export function FaceEnrollmentCard({
         setError(result.message);
       } else {
         setLocal(null);
+        // Consent went with the face; a new enrolment asks again.
+        setConsented(false);
         toast.success(`${memberName}’s face was removed`);
       }
     } catch {
@@ -142,13 +167,17 @@ export function FaceEnrollmentCard({
     }
   }
 
+  // A replacement keeps the consent on record; a first enrolment needs it now.
+  const blocked = busy || (!current && !consented);
+  const consentId = useId();
+
   const actions =
     configured && canEdit ? (
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
           variant="outline"
-          disabled={busy}
+          disabled={blocked}
           onClick={() => setCapturing(true)}
         >
           <Camera className="size-4" />
@@ -157,7 +186,7 @@ export function FaceEnrollmentCard({
         <Button
           size="sm"
           variant="outline"
-          disabled={busy}
+          disabled={blocked}
           onClick={() => fileRef.current?.click()}
         >
           <Upload className="size-4" />
@@ -223,13 +252,18 @@ export function FaceEnrollmentCard({
                 </div>
               ) : null}
             </div>
-            <div className="min-w-0 text-sm">
+            <div className="min-w-0 space-y-0.5 text-sm">
               <p className="font-medium">Checks in by face</p>
               <p className="text-muted-foreground">
-                Enrolled {formatDateTime(current.enrolledAt)}
+                Enrolled {formatDateTime(current.enrolledAt)} by{" "}
+                {current.enrolledByName ?? "a former staff account"}
               </p>
-              <p className="text-muted-foreground">
-                by {current.enrolledByName ?? "a former staff account"}
+              <p className="flex items-start gap-1 text-muted-foreground">
+                <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-success" aria-hidden />
+                <span>
+                  Consent recorded {formatDateTime(current.consentAt)} by{" "}
+                  {current.consentRecordedByName ?? "a former staff account"}
+                </span>
               </p>
             </div>
           </div>
@@ -241,10 +275,39 @@ export function FaceEnrollmentCard({
             {busy
               ? "Enrolling…"
               : canEdit
-                ? "Take or upload a clear photo of their face, and the camera at the door will check them in."
+                ? "With their consent, take or upload a clear photo of their face, and the camera at the door will check them in."
                 : "Not enrolled yet. They check in by name at the door."}
           </p>
         )}
+
+        {configured && canEdit && !current ? (
+          <div className="space-y-2 rounded-md border bg-muted/40 p-3">
+            <p className="text-xs font-medium">Consent notice</p>
+            <div
+              className="max-h-40 overflow-y-auto text-xs whitespace-pre-line text-muted-foreground"
+              tabIndex={0}
+              aria-label="Consent notice"
+            >
+              {consentNotice}
+            </div>
+            <label
+              htmlFor={consentId}
+              className="flex items-start gap-2 border-t pt-2 text-sm"
+            >
+              <Checkbox
+                id={consentId}
+                checked={consented}
+                onCheckedChange={(checked) => setConsented(checked === true)}
+                disabled={busy}
+                className="mt-0.5"
+              />
+              <span>
+                {memberName} has read this notice, or had it read to them, and
+                agrees.
+              </span>
+            </label>
+          </div>
+        ) : null}
 
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -273,8 +336,9 @@ export function FaceEnrollmentCard({
           <DialogHeader>
             <DialogTitle>Remove {memberName}’s face?</DialogTitle>
             <DialogDescription>
-              The photo is deleted here and from face recognition. They will
-              check in by name until a new photo is taken.
+              The photo and the record of their consent are deleted here and
+              from face recognition. They will check in by name until they
+              consent again and a new photo is taken.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

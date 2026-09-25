@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
 import type { FaceEnrollResult, FaceRemoveResult } from "@/app/(app)/members/actions";
 import { Toaster } from "@/components/ui/sonner";
+import { DEFAULT_FACE_CONSENT_NOTICE } from "@/lib/face-consent";
 import { FaceEnrollmentCard } from "./face-enrollment-card";
 import { SAMPLE_FACE_PHOTO } from "./face-photo.fixture";
 
@@ -22,6 +23,8 @@ type Story = StoryObj<typeof meta>;
 const ENROLLED = {
   enrolledAt: "2026-09-20T09:14:00+08:00",
   enrolledByName: "Grace Mendoza",
+  consentAt: "2026-09-20T09:12:00+08:00",
+  consentRecordedByName: "Grace Mendoza",
   photoUrl: SAMPLE_FACE_PHOTO,
 };
 
@@ -29,7 +32,14 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function accept(): Promise<FaceEnrollResult> {
   await wait(800);
-  return { status: "ok", enrolledAt: new Date().toISOString(), enrolledByName: "You" };
+  const now = new Date().toISOString();
+  return {
+    status: "ok",
+    enrolledAt: now,
+    enrolledByName: "You",
+    consentAt: now,
+    consentRecordedByName: "You",
+  };
 }
 
 async function removed(): Promise<FaceRemoveResult> {
@@ -44,6 +54,7 @@ function Preview(props: Partial<ComponentProps<typeof FaceEnrollmentCard>>) {
         memberName="Ana Santos"
         configured
         enrollment={null}
+        consentNotice={DEFAULT_FACE_CONSENT_NOTICE}
         canEdit
         enroll={accept}
         remove={removed}
@@ -54,15 +65,23 @@ function Preview(props: Partial<ComponentProps<typeof FaceEnrollmentCard>>) {
   );
 }
 
-/** Not enrolled yet. "Upload photo" takes any image file; the fake accepts it. */
+/**
+ * Not enrolled yet: the consent notice, and photo buttons that stay disabled
+ * until the member's consent is ticked. "Upload photo" then takes any image
+ * file; the fake accepts it.
+ */
 export const NotEnrolled: Story = { render: () => <Preview /> };
 
-/** Enrolled: the photo, when, and by whom — with replace and remove. */
+/** Enrolled: the photo, when and by whom, the consent on record — with replace and remove. */
 export const Enrolled: Story = { render: () => <Preview enrollment={ENROLLED} /> };
 
 /** The staff account that enrolled them has since been deleted. */
 export const EnrolledByFormerStaff: Story = {
-  render: () => <Preview enrollment={{ ...ENROLLED, enrolledByName: null }} />,
+  render: () => (
+    <Preview
+      enrollment={{ ...ENROLLED, enrolledByName: null, consentRecordedByName: null }}
+    />
+  ),
 };
 
 /** Staff who may view members but not edit them see the state, and no actions. */

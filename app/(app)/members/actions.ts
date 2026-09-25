@@ -116,13 +116,19 @@ export async function updateMember(
   redirect(`/members/${id}`);
 }
 
-export async function deleteMember(id: string) {
+export type DeleteMemberResult = { error: string } | undefined;
+
+export async function deleteMember(id: string): Promise<DeleteMemberResult> {
   const user = await requirePermission("members.delete");
 
   let cellGroupId: string | null = null;
   try {
     ({ cellGroupId } = await membersService.deleteMember(user, id));
   } catch (error) {
+    // Their face could not be removed from Tencent, so nothing was deleted.
+    if (isServiceError(error) && error.code === "unavailable") {
+      return { error: error.message };
+    }
     // Already gone — a double click, or someone else got there first.
     if (!isServiceError(error) || error.code !== "not_found") throw error;
   }
@@ -160,7 +166,13 @@ export async function reactivateMember(
 }
 
 export type FaceEnrollResult =
-  | { status: "ok"; enrolledAt: string; enrolledByName: string | null }
+  | {
+      status: "ok";
+      enrolledAt: string;
+      enrolledByName: string | null;
+      consentAt: string;
+      consentRecordedByName: string | null;
+    }
   | { status: "error"; message: string };
 
 export type FaceRemoveResult = { status: "ok" } | { status: "error"; message: string };
@@ -194,7 +206,12 @@ export async function enrollMemberFace(
 
   let enrollment;
   try {
-    enrollment = await facesService.enrollMemberFace(user, memberId, photo);
+    enrollment = await facesService.enrollMemberFace(
+      user,
+      memberId,
+      photo,
+      formData.get("consent"),
+    );
   } catch (error) {
     return toFaceError(error);
   }
@@ -204,6 +221,8 @@ export async function enrollMemberFace(
     status: "ok",
     enrolledAt: enrollment.enrolledAt.toISOString(),
     enrolledByName: enrollment.enrolledByName,
+    consentAt: enrollment.consentAt.toISOString(),
+    consentRecordedByName: enrollment.consentRecordedByName,
   };
 }
 

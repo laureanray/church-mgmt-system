@@ -38,8 +38,11 @@ from the server only; the browser never talks to Tencent and never sees the key.
 It is off until configured. Without the variables below, `/scan` scans QR codes
 exactly as before and the member page says face check-in is not set up.
 
-> **Do not enable enrolment in production until consent (#21) lands.** A face
-> is biometric data; members must agree before one is taken.
+A face is biometric data, and sensitive personal information under the Data
+Privacy Act, so **enrolment requires the member's consent** to a notice the
+church controls. `docs/privacy.md` covers consent, retention and every deletion
+path. Have whoever handles the church's data privacy confirm the notice text
+(Settings → Face check-in) before turning this on in production.
 
 ### Setting it up
 
@@ -67,8 +70,9 @@ exactly as before and the member page says face check-in is not set up.
 
 ### How it works
 
-- **Enrolment** — on a member's page, staff with `members.update` take a photo
-  with the device camera or upload one. Tencent must accept it (it rejects a
+- **Enrolment** — on a member's page, staff with `members.update` record the
+  member's consent to the notice, then take a photo with the device camera or
+  upload one. Tencent must accept it (it rejects a
   dark, blurred or half-hidden face); only then is the photo kept in
   `member_faces` and an audit entry written. The member is a "person" in the
   group whose id and name are both the member's id — no name or other detail
@@ -94,5 +98,7 @@ Liveness detection is USD 0.40 a call and is deliberately not used.
 
 Tencent keeps enrolled faces until they are deleted; its error logs keep a
 request's input for a few days; and its terms share data with Tencent Cloud
-Computing (Beijing). Where the data is stored is not documented. All of this
-belongs in the consent wording (#21).
+Computing (Beijing). Where the data is stored is not documented. The built-in
+consent notice says all of this. `docs/privacy.md` has the full account of what
+is kept and how each kind of deletion works, including **Purge all face data**
+in Settings for a church that stops using the feature.

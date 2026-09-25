@@ -151,6 +151,7 @@ export const AUDIT_ACTIONS = [
   "lineup.team_change",
   "member.face_enroll",
   "member.face_remove",
+  "settings.face_purge",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -184,6 +185,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   "lineup.team_change": "Line-up team changed",
   "member.face_enroll": "Face enrolled",
   "member.face_remove": "Face removed",
+  "settings.face_purge": "All face data purged",
 };
 
 /** The kind of record an audit entry is about — `audit_log.entity`. */

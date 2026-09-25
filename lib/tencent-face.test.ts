@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 import {
+  deleteFaceGroup,
   enrollFacePerson,
   ensureFaceGroup,
   faceConfig,
@@ -189,5 +190,15 @@ describe("ensureFaceGroup", () => {
     await expect(ensureFaceGroup()).rejects.toMatchObject({
       code: "InvalidParameterValue.GroupIdNotExist",
     });
+  });
+});
+
+describe("deleteFaceGroup", () => {
+  it("deletes this deployment's group, and accepts one already gone", async () => {
+    tencent({});
+    await deleteFaceGroup();
+    expect(sent[0]).toMatchObject({ action: "DeleteGroup", body: { GroupId: "irm-test" } });
+    tencent(failure("InvalidParameterValue.GroupIdNotExist"));
+    await deleteFaceGroup();
   });
 });

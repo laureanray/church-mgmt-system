@@ -15,19 +15,30 @@ describe("FaceEnrollmentCard", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  test("offers a photo to a member not yet enrolled", () => {
+  test("shows the consent notice, and holds the photo buttons until consent is ticked", async () => {
+    const user = userEvent.setup();
     render(<NotEnrolled />);
     expect(screen.getByText("Not enrolled")).toBeInTheDocument();
+    expect(screen.getByLabelText("Consent notice")).toHaveTextContent("Data Privacy Act");
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Upload photo" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
+
+    await user.click(
+      screen.getByRole("checkbox", { name: /Ana Santos has read this notice/ }),
+    );
     expect(screen.getByRole("button", { name: "Take photo" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Upload photo" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
   });
 
   test("shows the photo, when and by whom, with replace and remove", () => {
     render(<Enrolled />);
     expect(screen.getByText("Enrolled")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Enrolment photo of Ana Santos" })).toBeInTheDocument();
-    expect(screen.getByText("by Grace Mendoza")).toBeInTheDocument();
+    expect(screen.getByText(/^Enrolled .* by Grace Mendoza/)).toBeInTheDocument();
+    expect(screen.getByText(/Consent recorded .* by Grace Mendoza/)).toBeInTheDocument();
+    // Consent is on record, so a replacement does not ask again.
+    expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByRole("button", { name: "Retake" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remove Ana Santos’s face" })).toBeInTheDocument();
@@ -35,7 +46,7 @@ describe("FaceEnrollmentCard", () => {
 
   test("names a deleted staff account without inventing one", () => {
     render(<EnrolledByFormerStaff />);
-    expect(screen.getByText("by a former staff account")).toBeInTheDocument();
+    expect(screen.getAllByText(/by a former staff account/)).toHaveLength(2);
   });
 
   test("shows the state but no actions to staff who cannot edit members", () => {
@@ -54,6 +65,9 @@ describe("FaceEnrollmentCard", () => {
 
     expect(await screen.findByText("Not enrolled", {}, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.queryByRole("img", { name: /Enrolment photo/ })).toBeNull();
+    // Consent went with the face: enrolling again asks for it again.
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Take photo" })).toBeDisabled();
   });
 
   test("keeps the enrolment and explains when removal fails", async () => {

@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 
 import { db } from "@/db";
-import { memberFaces, members } from "@/db/schema";
+import { members } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
 import {
@@ -21,7 +21,7 @@ import { memberSchema } from "@/lib/validators";
 
 import { authorize, type Actor } from "./actor";
 import { parseInput, ServiceError } from "./errors";
-import { forgetDeletedMemberFace } from "./faces";
+import { forgetMemberFaceBeforeDelete } from "./faces";
 
 /**
  * Members: the one place their business rules live. The web app's pages and
@@ -196,9 +196,12 @@ export async function updateMember(
 
 export async function deleteMember(actor: Actor, id: string): Promise<Member> {
   authorize(actor, "members.delete");
-  const { deleted, hadFace } = await db.transaction(async (tx) => {
-    // Read before the delete, which cascades the face row away with them.
-    const hadFace = (await tx.$count(memberFaces, eq(memberFaces.memberId, id))) > 0;
+  // First, and outside the transaction: Tencent cannot roll back with it, and
+  // a face left in the group after its member is gone could never be removed
+  // from the member page again. If Tencent is down the deletion waits; the
+  // face row then cascades away with the member.
+  await forgetMemberFaceBeforeDelete(id);
+  return db.transaction(async (tx) => {
     const [deleted] = await tx
       .delete(members)
       .where(eq(members.id, id))
@@ -212,12 +215,8 @@ export async function deleteMember(actor: Actor, id: string): Promise<Member> {
       before: deleted,
       summary: `Deleted ${deleted.fullName}`,
     });
-    return { deleted, hadFace };
+    return deleted;
   });
-  // After the commit: Tencent cannot roll back with the transaction, and a
-  // deletion must not fail because face recognition is down.
-  if (hadFace) await forgetDeletedMemberFace(id);
-  return deleted;
 }
 
 /**

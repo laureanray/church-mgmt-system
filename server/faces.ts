@@ -1,12 +1,19 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/db";
-import { memberFaces, members, users } from "@/db/schema";
+import { appSettings, memberFaces, members, users } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import type { MemberStatus } from "@/lib/constants";
 import { isForeignKeyViolation } from "@/lib/db-errors";
+import {
+  consentGiven,
+  effectiveConsentNotice,
+  faceConsentNoticeSchema,
+  isPurgeConfirmed,
+} from "@/lib/face-consent";
 import {
   FACE_IMAGE_MAX_BYTES,
   faceBand,
@@ -15,6 +22,7 @@ import {
   type FaceProblemKind,
 } from "@/lib/face-policy";
 import {
+  deleteFaceGroup,
   enrollFacePerson,
   isFaceConfigured,
   isTencentFaceError,
@@ -24,24 +32,34 @@ import {
 
 import { authorize, type Actor } from "./actor";
 import { recordAttendanceForMember, type CheckIn } from "./attendance";
-import { ServiceError } from "./errors";
+import { parseInput, ServiceError } from "./errors";
 
 /**
  * Face check-in: enrolling a member's face, and recognising one at the door.
  *
  * Tencent holds the face; `member_faces` holds the local record of it (the
- * photo, when, by whom). Every change calls Tencent first and writes the row
- * and its audit entry after, so a refused photo leaves nothing behind locally.
+ * photo, when, by whom, and the member's consent). Every change calls Tencent
+ * first and writes the row and its audit entry after, so a refused photo
+ * leaves nothing behind locally.
+ *
+ * Consent (#21) is a condition of enrolment, checked here rather than trusted
+ * to the form: no row means no consent yet, and enrolling needs it. Removing
+ * the face removes the consent with it.
  *
  * Recognition ends in `recordAttendanceForMember`, like every other way of
  * identifying someone, so a face check-in and a name check-in report a
  * duplicate identically. Scan frames are never stored.
  */
 
+const SETTINGS_ID = "singleton";
+
 export type FaceEnrollment = {
   enrolledAt: Date;
   /** Null once the staff account that enrolled them has been deleted. */
   enrolledByName: string | null;
+  consentAt: Date;
+  /** Who recorded the member's consent; null once that account is deleted. */
+  consentRecordedByName: string | null;
 };
 
 /** Whether this deployment has Tencent credentials and a face group. */
@@ -87,15 +105,79 @@ function fromTencent(error: unknown): never {
   throw error;
 }
 
+// ---------------------------------------------------------------------------
+// The consent notice
+// ---------------------------------------------------------------------------
+
+/** The notice in force, as shown beside the consent checkbox. */
+export async function getFaceConsentNotice(actor: Actor): Promise<string> {
+  // Read on the member page (to enrol) and in Settings (to reword it).
+  if (!actor.permissions.includes("settings.view")) authorize(actor, "members.view");
+  return readConsentNotice();
+}
+
+async function readConsentNotice(): Promise<string> {
+  const settings = await db.query.appSettings.findFirst({
+    where: eq(appSettings.id, SETTINGS_ID),
+    columns: { faceConsentNotice: true },
+  });
+  return effectiveConsentNotice(settings?.faceConsentNotice);
+}
+
+/** Reword the notice. Members already enrolled keep the wording they agreed to. */
+export async function saveFaceConsentNotice(
+  actor: Actor,
+  input: unknown,
+): Promise<string> {
+  authorize(actor, "settings.update");
+  const notice = parseInput(faceConsentNoticeSchema, input);
+
+  await db.transaction(async (tx) => {
+    const before = await tx.query.appSettings.findFirst({
+      where: eq(appSettings.id, SETTINGS_ID),
+      columns: { id: true, faceConsentNotice: true },
+    });
+    await tx
+      .insert(appSettings)
+      .values({ id: SETTINGS_ID, faceConsentNotice: notice, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: appSettings.id,
+        set: { faceConsentNotice: notice, updatedAt: new Date() },
+      });
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "settings.update",
+      entity: "settings",
+      entityId: SETTINGS_ID,
+      before: { faceConsentNotice: before?.faceConsentNotice ?? null },
+      after: { faceConsentNotice: notice },
+      summary: "Changed the face check-in consent notice",
+    });
+  });
+  return notice;
+}
+
+// ---------------------------------------------------------------------------
+// Enrolment
+// ---------------------------------------------------------------------------
+
+const consentUsers = alias(users, "consent_users");
+
 export async function getFaceEnrollment(
   actor: Actor,
   memberId: string,
 ): Promise<FaceEnrollment | null> {
   authorize(actor, "members.view");
   const [row] = await db
-    .select({ enrolledAt: memberFaces.enrolledAt, enrolledByName: users.name })
+    .select({
+      enrolledAt: memberFaces.enrolledAt,
+      enrolledByName: users.name,
+      consentAt: memberFaces.consentAt,
+      consentRecordedByName: consentUsers.name,
+    })
     .from(memberFaces)
     .leftJoin(users, eq(users.id, memberFaces.enrolledBy))
+    .leftJoin(consentUsers, eq(consentUsers.id, memberFaces.consentRecordedBy))
     .where(eq(memberFaces.memberId, memberId));
   return row ?? null;
 }
@@ -125,16 +207,36 @@ async function findMember(memberId: unknown) {
   return member;
 }
 
-/** Enrol `image` as the member's face, replacing any earlier one. */
+/**
+ * Enrol `image` as the member's face, replacing any earlier one.
+ *
+ * A first enrolment needs `consent` — the member agreed to the notice, and
+ * `actor` is recording it for them. A replacement keeps the consent already
+ * on record; consent is per member, not per photo.
+ */
 export async function enrollMemberFace(
   actor: Actor,
   memberId: string,
   image: unknown,
+  consent: unknown,
 ): Promise<FaceEnrollment> {
   authorize(actor, "members.update");
   const photo = readImage(image);
   requireFace();
   const member = await findMember(memberId);
+
+  const [existing] = await db
+    .select({ consentAt: memberFaces.consentAt })
+    .from(memberFaces)
+    .where(eq(memberFaces.memberId, member.id));
+  if (!existing && !consentGiven(consent)) {
+    throw new ServiceError(
+      "invalid",
+      `Record ${member.fullName}’s consent before enrolling their face.`,
+    );
+  }
+  // Read now, before Tencent: the wording they were shown is the one stored.
+  const notice = existing ? null : await readConsentNotice();
 
   try {
     await enrollFacePerson(member.id, photo);
@@ -148,54 +250,91 @@ export async function enrollMemberFace(
         .select({
           enrolledAt: memberFaces.enrolledAt,
           enrolledBy: memberFaces.enrolledBy,
+          consentAt: memberFaces.consentAt,
+          consentRecordedBy: memberFaces.consentRecordedBy,
         })
         .from(memberFaces)
         .where(eq(memberFaces.memberId, member.id))
         .for("update");
 
-      const enrolledAt = new Date();
-      const values = {
+      const now = new Date();
+      const photoValues = {
         photo: Buffer.from(photo),
-        enrolledAt,
+        enrolledAt: now,
         enrolledBy: actor.id,
       };
+      // Consent comes from the row already there, or is recorded now. A row
+      // removed since the check above means consent went with it; without a
+      // fresh tick there is none to record.
+      const consentValues = previous
+        ? { consentAt: previous.consentAt, consentRecordedBy: previous.consentRecordedBy }
+        : consentGiven(consent)
+          ? { consentAt: now, consentRecordedBy: actor.id }
+          : null;
+      if (!consentValues) {
+        throw new ServiceError(
+          "invalid",
+          `Record ${member.fullName}’s consent before enrolling their face.`,
+        );
+      }
+
       await tx
         .insert(memberFaces)
-        .values({ memberId: member.id, ...values })
-        .onConflictDoUpdate({ target: memberFaces.memberId, set: values });
+        .values({
+          memberId: member.id,
+          ...photoValues,
+          ...consentValues,
+          consentNotice: notice ?? (await readConsentNotice()),
+        })
+        .onConflictDoUpdate({ target: memberFaces.memberId, set: photoValues });
 
       // The photo stays out of the log: the entry records that it changed,
-      // and when, never the face itself.
+      // when, and the consent — never the face itself.
       await recordAudit(tx, {
         actorId: actor.id,
         action: "member.face_enroll",
         entity: "member",
         entityId: member.id,
         before: previous ?? null,
-        after: { enrolledAt, enrolledBy: actor.id },
+        after: { enrolledAt: now, enrolledBy: actor.id, ...consentValues },
         summary: previous
           ? `Replaced ${member.fullName}’s face for check-in`
-          : `Enrolled ${member.fullName}’s face for check-in`,
+          : `Enrolled ${member.fullName}’s face for check-in, with their consent`,
       });
 
-      const [enrolledBy] = await tx
-        .select({ name: users.name })
-        .from(users)
-        .where(eq(users.id, actor.id));
-      return { enrolledAt, enrolledByName: enrolledBy?.name ?? null };
+      const [names] = await tx
+        .select({ enrolledByName: users.name, consentRecordedByName: consentUsers.name })
+        .from(memberFaces)
+        .leftJoin(users, eq(users.id, memberFaces.enrolledBy))
+        .leftJoin(consentUsers, eq(consentUsers.id, memberFaces.consentRecordedBy))
+        .where(eq(memberFaces.memberId, member.id));
+      return {
+        enrolledAt: now,
+        consentAt: consentValues.consentAt,
+        enrolledByName: names?.enrolledByName ?? null,
+        consentRecordedByName: names?.consentRecordedByName ?? null,
+      };
     });
   } catch (error) {
-    // Deleted while Tencent was enrolling them: take the face back out, so
-    // Tencent holds nobody this app has no record of.
+    // Deleted while Tencent was enrolling them, or consent withdrawn in the
+    // meantime: take the face back out, so Tencent holds nobody this app has
+    // no consented record of.
     if (isForeignKeyViolation(error)) {
       await removeFacePerson(member.id).catch(() => {});
       throw new ServiceError("not_found", "Member not found.");
+    }
+    if (error instanceof ServiceError) {
+      await removeFacePerson(member.id).catch(() => {});
     }
     throw error;
   }
 }
 
-/** Remove the member's face from Tencent and the local record. */
+/**
+ * Remove the member's face from Tencent, then the photo and consent here.
+ * Idempotent: each step accepts that it already happened, so a retry after a
+ * half-finished attempt completes it.
+ */
 export async function removeMemberFace(
   actor: Actor,
   memberId: string,
@@ -217,6 +356,8 @@ export async function removeMemberFace(
       .returning({
         enrolledAt: memberFaces.enrolledAt,
         enrolledBy: memberFaces.enrolledBy,
+        consentAt: memberFaces.consentAt,
+        consentRecordedBy: memberFaces.consentRecordedBy,
       });
     // Nothing was enrolled — a double click. Nothing to record either.
     if (!removed) return;
@@ -226,24 +367,90 @@ export async function removeMemberFace(
       entity: "member",
       entityId: member.id,
       before: removed,
-      summary: `Removed ${member.fullName}’s face from check-in`,
+      summary: `Removed ${member.fullName}’s face and consent from check-in`,
     });
   });
 }
 
 /**
- * After a member is deleted (the row cascades with them), take their face out
- * of Tencent too. Best effort: the deletion has already committed, and a
- * leftover face matches nobody, since recognition ignores unknown members.
+ * Before a member is deleted: take their face out of Tencent, so the deletion
+ * cannot leave a face behind. Throws `unavailable` when Tencent cannot be
+ * reached, and the deletion should wait — unless face recognition is not
+ * configured at all, when there is no Tencent to reach and nothing to wait for.
  */
-export async function forgetDeletedMemberFace(memberId: string): Promise<void> {
-  if (!isFaceConfigured()) return;
+export async function forgetMemberFaceBeforeDelete(memberId: string): Promise<void> {
+  const [face] = await db
+    .select({ memberId: memberFaces.memberId })
+    .from(memberFaces)
+    .where(eq(memberFaces.memberId, memberId));
+  if (!face) return;
+  if (!isFaceConfigured()) {
+    console.error(
+      "Deleting a member with an enrolled face while face recognition is not configured; their face may remain in Tencent",
+      memberId,
+    );
+    return;
+  }
   try {
     await removeFacePerson(memberId);
   } catch (error) {
-    console.error("Could not remove a deleted member's face from Tencent", error);
+    if (!isTencentFaceError(error)) throw error;
+    console.error("Could not remove a member's face from Tencent", error.code, error.requestId);
+    throw new ServiceError(
+      "unavailable",
+      "Their face could not be removed from face recognition, so the member was not deleted. Try again in a moment.",
+    );
   }
 }
+
+/** How many members are enrolled, for Settings. */
+export async function countEnrolledFaces(actor: Actor): Promise<number> {
+  authorize(actor, "settings.view");
+  const [row] = await db.select({ faces: count() }).from(memberFaces);
+  return row?.faces ?? 0;
+}
+
+/**
+ * Delete every face: Tencent's whole group, then every photo and consent
+ * here. For a church that stops using face check-in. `confirmation` must be
+ * FACE_PURGE_CONFIRMATION, typed out — checked here, not only in the dialog.
+ */
+export async function purgeAllFaceData(
+  actor: Actor,
+  confirmation: unknown,
+): Promise<{ removed: number }> {
+  authorize(actor, "settings.update");
+  if (!isPurgeConfirmed(confirmation)) {
+    throw new ServiceError("invalid", "Type the confirmation phrase exactly to purge.");
+  }
+  requireFace();
+
+  try {
+    await deleteFaceGroup();
+  } catch (error) {
+    fromTencent(error);
+  }
+
+  return db.transaction(async (tx) => {
+    const removed = await tx
+      .delete(memberFaces)
+      .returning({ memberId: memberFaces.memberId });
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "settings.face_purge",
+      entity: "settings",
+      entityId: SETTINGS_ID,
+      before: { enrolledFaces: removed.length },
+      after: { enrolledFaces: 0 },
+      summary: `Purged all face data (${removed.length} ${removed.length === 1 ? "member" : "members"})`,
+    });
+    return { removed: removed.length };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Recognition
+// ---------------------------------------------------------------------------
 
 export type FaceIdentification =
   /** Recognised with confidence, and checked in (or already was). */

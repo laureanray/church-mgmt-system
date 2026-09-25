@@ -92,6 +92,10 @@ them with a working example:
   looks correct and does nothing, since `flex-row` sets a direction on an
   element that is not a flex container. See *UI/Card → WithAction*.
 
+`Checkbox` is shadcn's Base UI checkbox. Give it an `id` and a
+`<label htmlFor>` so the sentence beside it is part of the click target and its
+accessible name. See *UI/Checkbox*.
+
 `Badge` carries the semantic variants (`success`, `warning`, `info`, `brand`)
 and a `size` scale, so a status pill never has to be hand-rolled from utility
 classes.
@@ -161,9 +165,16 @@ story needs a camera, a key or a server:
   The loop is a motion check on a 32×24 grayscale sample (`FaceScanGate` in
   `lib/face-policy.ts`), **not** a face detector.
 - `FaceEnrollmentCard` (`components/members/`) sits on the member page:
-  not configured, not enrolled, enrolled (photo, date, who enrolled them), a
-  read-only variant, busy, and a refusal explained in Tencent's terms made
-  plain. Take photo, Upload photo, Replace and Remove; Remove confirms first.
+  not configured, not enrolled, enrolled (photo, date, who enrolled them, and
+  the consent on record), a read-only variant, busy, and a refusal explained in
+  Tencent's terms made plain. A first enrolment shows the consent notice in a
+  scrolling muted panel with a `Checkbox`, and Take photo / Upload photo stay
+  disabled until it is ticked. Replace keeps the consent; Remove confirms first
+  and clears it.
+- `FaceSettingsCard` (`components/settings/`) is Settings' face check-in card:
+  on or off, how many are enrolled, a link to `docs/privacy.md`, the editable
+  consent notice (read-only without `settings.update`), and **Purge all face
+  data** behind a dialog whose button stays disabled until the phrase is typed.
 - `FaceCaptureDialog` (`components/members/`) takes the enrolment photo with
   the front camera: starting, live (an oval guide), captured, enrolling,
   refused, camera blocked and no camera. The live preview is mirrored; the

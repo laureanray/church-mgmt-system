@@ -4,7 +4,11 @@ import { notFound, redirect } from "next/navigation";
 import { CalendarCheck, Pencil } from "lucide-react";
 
 import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
-import { enrollMemberFace, removeMemberFace } from "@/app/(app)/members/actions";
+import {
+  deleteMember,
+  enrollMemberFace,
+  removeMemberFace,
+} from "@/app/(app)/members/actions";
 import { db } from "@/db";
 import {
   attendance,
@@ -57,7 +61,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { faceCheckInEnabled, getFaceEnrollment } from "@/server/faces";
+import {
+  faceCheckInEnabled,
+  getFaceConsentNotice,
+  getFaceEnrollment,
+} from "@/server/faces";
 
 type HistoryRow = {
   id: string;
@@ -136,6 +144,7 @@ export default async function MemberDetailPage({
     memberMinistries,
     login,
     face,
+    consentNotice,
   ] =
     await Promise.all([
       generateQrDataUrl(member.qrToken),
@@ -208,6 +217,7 @@ export default async function MemberDetailPage({
           })
         : Promise.resolve(undefined),
       getFaceEnrollment(user, member.id),
+      getFaceConsentNotice(user),
     ]);
 
   const clampedHistoryPage = overRunPage(historyState, attendedCount);
@@ -310,7 +320,11 @@ export default async function MemberDetailPage({
               </Link>
             ) : null}
             {canDelete ? (
-              <DeleteMemberButton id={member.id} name={member.fullName} />
+              <DeleteMemberButton
+                id={member.id}
+                name={member.fullName}
+                deleteMember={deleteMember}
+              />
             ) : null}
           </div>
         ) : null}
@@ -403,12 +417,15 @@ export default async function MemberDetailPage({
                 ? {
                     enrolledAt: face.enrolledAt.toISOString(),
                     enrolledByName: face.enrolledByName,
+                    consentAt: face.consentAt.toISOString(),
+                    consentRecordedByName: face.consentRecordedByName,
                     // Versioned by enrolment time, so a replaced photo is
                     // fetched afresh rather than served from the cache.
                     photoUrl: `/members/${member.id}/face-photo?v=${face.enrolledAt.getTime()}`,
                   }
                 : null
             }
+            consentNotice={consentNotice}
             canEdit={canUpdate}
             enroll={enrollMemberFace.bind(null, member.id)}
             remove={removeMemberFace.bind(null, member.id)}

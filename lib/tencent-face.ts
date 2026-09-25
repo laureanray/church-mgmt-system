@@ -179,6 +179,21 @@ export async function ensureFaceGroup(): Promise<"created" | "exists"> {
   }
 }
 
+/**
+ * Delete this deployment's whole group, and every face in it — the purge for
+ * a church that stops using face check-in. Absent already is fine. A person
+ * who belonged to no other group is deleted along with it, per Tencent.
+ */
+export async function deleteFaceGroup(): Promise<void> {
+  const config = requireConfig();
+  try {
+    await call(config, "DeleteGroup", { GroupId: config.groupId });
+  } catch (error) {
+    if (hasCode(error, "GroupIdNotExist")) return;
+    throw error;
+  }
+}
+
 /** Remove a member from this deployment's group; absent already is fine. */
 export async function removeFacePerson(personId: string): Promise<void> {
   const config = requireConfig();

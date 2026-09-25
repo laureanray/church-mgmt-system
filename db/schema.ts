@@ -200,6 +200,17 @@ export const memberFaces = pgTable("member_faces", {
   enrolledBy: text("enrolled_by").references(() => users.id, {
     onDelete: "set null",
   }),
+  // Consent is a condition of the row existing: enrolment refuses without it
+  // (server/faces.ts), and removing the face deletes it with the rest. Kept
+  // across a replaced photo — consent is per member, not per photo.
+  consentAt: timestamp("consent_at", { withTimezone: true }).notNull(),
+  // The staff member who recorded it, on the member's behalf.
+  consentRecordedBy: text("consent_recorded_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  // The notice as worded when they agreed. The church can reword it in
+  // Settings; this is what this member was actually shown.
+  consentNotice: text("consent_notice").notNull(),
 });
 
 // ---------------------------------------------------------------------------
@@ -516,6 +527,9 @@ export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey().default("singleton"),
   sheetsWebhookUrl: text("sheets_webhook_url"),
   sheetsWebhookSecret: text("sheets_webhook_secret"),
+  // The consent notice shown before a face is enrolled. NULL means the
+  // built-in wording, DEFAULT_FACE_CONSENT_NOTICE in lib/face-consent.ts.
+  faceConsentNotice: text("face_consent_notice"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -619,6 +633,12 @@ export const memberFacesRelations = relations(memberFaces, ({ one }) => ({
   enrolledByUser: one(users, {
     fields: [memberFaces.enrolledBy],
     references: [users.id],
+    relationName: "faceEnrolledBy",
+  }),
+  consentRecordedByUser: one(users, {
+    fields: [memberFaces.consentRecordedBy],
+    references: [users.id],
+    relationName: "faceConsentRecordedBy",
   }),
 }));
 
