@@ -131,6 +131,18 @@ When check-in records someone lapsed, `ReactivateMemberDialog`
 stood — the usher at the door is never blocked on a records question. It is
 offered only to staff who can edit members.
 
+### Check-in by name
+
+`/scan` always shows `NameSearchPanel` (`components/scan/`) beside the camera:
+the check-in path that works whatever the camera is doing. It searches once two
+letters are typed (debounced, at most ten matches), and each match carries its
+cell group and birth year, because two members sharing a name is the case it
+exists for. It is an ARIA combobox with an inline listbox — the arrow keys move,
+Enter checks in, Escape clears — and after a check-in the box empties with focus
+kept, so the next name can be typed without touching the screen. Lapsed members
+are listed with their `MemberStatusBadge`, not hidden. Stories cover matches, a
+returning member, no match, searching, a failed search and a check-in in flight.
+
 ### Date entry
 
 Use `DatePicker` from `components/form/date-picker.tsx` inside `Field` for

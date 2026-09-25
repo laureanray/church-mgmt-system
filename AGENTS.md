@@ -165,7 +165,7 @@ Pages and server actions import the service **directly**; the HTTP API under
 `app/api/v1/` wraps the same service with `apiRoute` from `server/http.ts`. The
 web app does not `fetch` its own API — that is an extra round trip per page for
 nothing. `docs/api.md` is the full account; `server/members.ts` is the
-reference, and so far the only module migrated.
+reference. Check-in (`server/attendance.ts`) is the only other module migrated.
 
 - The API authenticates with `Authorization: Bearer <Supabase access token>`
   (`userFromAuthorizationHeader` in `lib/session-user.ts`), never the session
@@ -317,8 +317,11 @@ matter while editing:
 
 ## Invariants to preserve
 
-- Attendance is unique per `(memberId, serviceId)`. `recordAttendance` detects
-  a duplicate check-in by an empty `returning()` after `onConflictDoNothing()`.
+- Attendance is unique per `(memberId, serviceId)`.
+  `recordAttendanceForMember` in `server/attendance.ts` detects a duplicate
+  check-in by an empty `returning()` after `onConflictDoNothing()`. Every way
+  of identifying someone at the door ends in that one function, so a new check-in
+  path resolves a member id and calls it rather than inserting attendance itself.
 - Generated services are unique per `(scheduleId, scheduledAt)` — that
   constraint is what makes `generateForSchedule` idempotent.
 - `topUpAllSchedules()` is called from the `/services` and `/scan` page loads.
@@ -435,7 +438,7 @@ repair is used. `bun run test:irm` checks the manager and terminal renderer.
   4. Add an integration test in `tests/integration/audit-log.test.ts` (or the
      feature's own file) asserting the entry, and that a failed validation
      writes none.
-  Reads, check-ins recorded by `recordAttendance` (attendance already carries
+  Reads, check-ins recorded by `recordAttendanceForMember` (attendance already carries
   `recordedBy`), and system-generated rows (schedule top-ups) are the only
   exemptions; say so in the PR if you rely on one.
 

@@ -1,5 +1,11 @@
 import { asc, desc, eq, gte, lt } from "drizzle-orm";
 
+import { reactivateMember } from "@/app/(app)/members/actions";
+import {
+  checkInMember,
+  recordAttendance,
+  searchMembersForCheckIn,
+} from "@/app/(app)/scan/actions";
 import { db } from "@/db";
 import { services } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
@@ -74,12 +80,16 @@ export default async function ScanPage({
     <PageContainer>
       <PageHeader
         title="Scan Attendance"
-        description="Point the camera at a member's QR code to record their attendance."
+        description="Scan a member's QR code, or search for them by name, to record their attendance."
       />
       <ScannerPanel
         services={rows}
         initialServiceId={initialServiceId}
         canReactivate={hasPermission(user, "members.update")}
+        recordScan={recordAttendance}
+        checkIn={checkInMember}
+        searchMembers={searchMembersForCheckIn}
+        reactivate={reactivateMember}
       />
     </PageContainer>
   );

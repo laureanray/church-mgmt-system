@@ -12,10 +12,11 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { reactivateMember } from "@/app/(app)/members/actions";
-import { recordAttendance, type ScanResult } from "@/app/(app)/scan/actions";
+import type { ReactivateResult } from "@/app/(app)/members/actions";
+import type { CheckInResult, ScanResult } from "@/app/(app)/scan/actions";
 import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { EmptyState } from "@/components/patterns/empty-state";
+import { NameSearchPanel } from "@/components/scan/name-search-panel";
 import {
   ReactivateMemberDialog,
   type LapsedCheckIn,
@@ -41,6 +42,7 @@ import {
 import { isLapsed, type MemberStatus } from "@/lib/constants";
 import { formatDateTime, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { CheckInCandidate } from "@/server/attendance";
 
 // Camera scanner is browser-only — load it without SSR.
 const Scanner = dynamic(
@@ -103,11 +105,21 @@ export function ScannerPanel({
   services,
   initialServiceId,
   canReactivate = false,
+  recordScan,
+  checkIn,
+  searchMembers,
+  reactivate,
 }: {
   services: ServiceOption[];
   initialServiceId?: string;
   /** Whether this user may edit members, and so answer the reactivate prompt. */
   canReactivate?: boolean;
+  /** Check in whoever a scanned or typed QR code belongs to. */
+  recordScan: (serviceId: string, scannedText: string) => Promise<ScanResult>;
+  /** Check in a member picked by name. */
+  checkIn: (serviceId: string, memberId: string) => Promise<CheckInResult>;
+  searchMembers: (query: string) => Promise<CheckInCandidate[]>;
+  reactivate: (memberId: string) => Promise<ReactivateResult>;
 }) {
   const [serviceId, setServiceId] = useState(initialServiceId ?? "");
   const [feed, setFeed] = useState<Feed[]>([]);
@@ -150,7 +162,9 @@ export function ScannerPanel({
         setCheckedInCount((c) => c + 1);
         break;
       case "duplicate":
-        toast.warning(`${res.memberName} was already checked in`);
+        toast.warning(
+          `${res.memberName} was already checked in at ${formatTime(res.at)}`,
+        );
         pushFeed(res.memberName, "duplicate", {
           id: res.memberId,
           status: res.memberStatus,
@@ -198,12 +212,27 @@ export function ScannerPanel({
     if (busyRef.current) return;
     busyRef.current = true;
     try {
-      const res = await recordAttendance(serviceId, value);
+      const res = await recordScan(serviceId, value);
       handleResult(res);
     } catch {
       toast.error("Something went wrong recording attendance");
     } finally {
       busyRef.current = false;
+    }
+  }
+
+  async function checkInByName(member: CheckInCandidate) {
+    if (!serviceId) {
+      toast.error("Select a service first");
+      return false;
+    }
+    try {
+      const res = await checkIn(serviceId, member.id);
+      handleResult(res);
+      return res.status === "ok" || res.status === "duplicate";
+    } catch {
+      toast.error("Something went wrong recording attendance");
+      return false;
     }
   }
 
@@ -312,6 +341,8 @@ export function ScannerPanel({
           )}
         </div>
 
+        <NameSearchPanel search={searchMembers} onSelect={checkInByName} />
+
         {/* Manual / USB scanner entry */}
         <Card>
           <CardContent>
@@ -388,7 +419,7 @@ export function ScannerPanel({
 
       <ReactivateMemberDialog
         checkIn={lapsed}
-        reactivate={reactivateMember}
+        reactivate={reactivate}
         onReactivated={(memberId) =>
           setFeed((prev) =>
             prev.map((entry) =>
