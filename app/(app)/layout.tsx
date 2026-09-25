@@ -8,7 +8,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { ThemeSwitcher } from "@/components/theme-menu";
 
 export default async function AppLayout({
   children,
@@ -42,7 +42,7 @@ export default async function AppLayout({
             IRM Ministries
           </span>
           <div className="ml-auto">
-            <ThemeToggle />
+            <ThemeSwitcher />
           </div>
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
