@@ -83,3 +83,20 @@ describe("datetime-local values", () => {
     });
   });
 });
+
+describe("parseChurchDateTime refuses what the calendar does not have", () => {
+  it.each([
+    ["30 February", "2026-02-30T09:00"],
+    ["month 13", "2026-13-01T09:00"],
+    ["hour 25", "2026-01-01T25:00"],
+    ["minute 61", "2026-01-01T09:61"],
+    ["day 0", "2026-01-00T09:00"],
+  ])("%s", (_label, value) => {
+    expect(parseChurchDateTime(value)).toBeNull();
+  });
+
+  it("still reads a real date, a leap day included, in church time", () => {
+    expect(parseChurchDateTime("2028-02-29T09:00")?.toISOString()).toBe("2028-02-29T01:00:00.000Z");
+    expect(parseChurchDateTime("2026-12-31T23:59")?.toISOString()).toBe("2026-12-31T15:59:00.000Z");
+  });
+});

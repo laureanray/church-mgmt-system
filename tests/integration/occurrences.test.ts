@@ -72,3 +72,17 @@ it("does not top up paused schedules", async () => {
   expect(await topUpAllSchedules()).toBe(0);
   expect(await database.db.select().from(services)).toHaveLength(0);
 });
+
+it("tops up every active schedule in one batch, and only fills gaps after that", async () => {
+  // Tomorrow's weekday on the church's calendar: exactly one occurrence each.
+  const dayOfWeek = (weekdayOf(todayIn()) + 1) % 7;
+  await database.db.insert(serviceSchedules).values([
+    { name: 'Sunday', dayOfWeek, timeOfDay: '09:00' },
+    { name: 'Midweek', dayOfWeek, timeOfDay: '19:00' },
+    { name: 'Paused', dayOfWeek, timeOfDay: '12:00', active: false },
+  ]);
+  expect(await topUpAllSchedules()).toBe(2);
+  expect(await topUpAllSchedules()).toBe(0);
+  const names = (await database.db.select().from(services)).map((s) => s.name).sort();
+  expect(names).toEqual(['Midweek', 'Sunday']);
+});

@@ -51,7 +51,36 @@ jobs:
           bun-version-file: .bun-version
       - run: bun install --frozen-lockfile
       - run: bun run test:coverage
+      # Each suite writes coverage/lcov.info; keep this one before the next
+      # suite overwrites it. The report merges them.
+      - name: Keep unit coverage
+        if: always()
+        run: if [ -f coverage/lcov.info ]; then mv coverage/lcov.info coverage/unit.lcov; fi
+      # Needs neither Docker nor a database, so it runs ahead of the slow steps
+      # and a broken component fails the job in seconds rather than minutes.
+      - run: bun run test:ui
+      - name: Start test database
+        # Anonymous image pulls share a per-IP quota with every other runner, so
+        # `toomanyrequests: Rate exceeded` is a transient registry response
+        # rather than a broken compose file. Back off and try again.
+        run: |
+          for attempt in 1 2 3; do
+            if bun run test:db:up; then exit 0; fi
+            echo "::warning::test:db:up failed (attempt $attempt/3); retrying"
+            bun run test:db:down || true
+            sleep $((attempt * 30))
+          done
+          exit 1
+      # With coverage: database code — services, queries, the auth checks — is
+      # only reachable here, so the unit suite alone reports it as untested.
+      - run: bun run test:integration:coverage
+      - name: Keep integration coverage
+        if: always()
+        run: if [ -f coverage/lcov.info ]; then mv coverage/lcov.info coverage/integration.lcov; fi
+      # `always()`, so a failing suite above still gets its coverage comment —
+      # the report says which suite's data is missing.
       - name: Build coverage report
+        if: always()
         run: |
           bun scripts/coverage-report.mjs > coverage/report.md
           cat coverage/report.md >> "$GITHUB_STEP_SUMMARY"
@@ -59,6 +88,7 @@ jobs:
         # Fork pull requests get a read-only token, so skip rather than fail the
         # job.
         if: >-
+          always() &&
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v8
@@ -80,24 +110,6 @@ jobs:
             } else {
               await github.rest.issues.createComment({ owner, repo, issue_number, body })
             }
-      # Needs neither Docker nor a database, so it runs ahead of the slow steps
-      # and a broken component fails the job in seconds rather than minutes. It
-      # stays below the coverage comment, which must land before anything else
-      # can fail the job.
-      - run: bun run test:ui
-      - name: Start test database
-        # Anonymous image pulls share a per-IP quota with every other runner, so
-        # `toomanyrequests: Rate exceeded` is a transient registry response
-        # rather than a broken compose file. Back off and try again.
-        run: |
-          for attempt in 1 2 3; do
-            if bun run test:db:up; then exit 0; fi
-            echo "::warning::test:db:up failed (attempt $attempt/3); retrying"
-            bun run test:db:down || true
-            sleep $((attempt * 30))
-          done
-          exit 1
-      - run: bun run test:integration
       - run: bunx playwright install --with-deps chromium
       - run: bun run test:e2e
       - uses: actions/upload-artifact@v4

@@ -118,3 +118,16 @@ describe("retentionCutoff", () => {
     ).toBe("2024-09-25T00:00:00.000Z");
   });
 });
+
+describe("snapshot of nested and unusual values", () => {
+  test("keeps nested objects and arrays as JSON, dates inside them included", () => {
+    const at = new Date("2026-09-01T02:00:00.000Z");
+    expect(snapshot({ meta: { at, tags: ["a", 1, true, null] } })).toEqual({
+      meta: { at: "2026-09-01T02:00:00.000Z", tags: ["a", 1, true, null] },
+    });
+  });
+
+  test("writes anything else as its string", () => {
+    expect(snapshot({ big: BigInt(12), sym: Symbol("s") })).toEqual({ big: "12", sym: "Symbol(s)" });
+  });
+});

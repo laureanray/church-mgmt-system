@@ -29,6 +29,7 @@
     "coverage:report": "bun scripts/coverage-report.mjs",
     "test:ui": "bun test --preload ./tests/support/ui-setup.ts tests/ui",
     "test:integration": "bun test --isolate --preload ./tests/support/integration-setup.ts --timeout 30000 tests/integration",
+    "test:integration:coverage": "bun test --isolate --preload ./tests/support/integration-setup.ts --timeout 30000 --coverage --coverage-reporter=lcov tests/integration",
     "test:e2e": "playwright test",
     "test:all": "bun run test:unit && bun run test:ui && bun run test:integration && bun run test:e2e",
     "test:db:up": "docker compose -p church-mgmt-tests -f compose.test.yml up -d --wait",

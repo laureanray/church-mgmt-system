@@ -9,7 +9,12 @@
 import { toChurchDateTimeLocal } from "@/lib/church-time";
 import { CHURCH_TIME_ZONE, DAYS_OF_WEEK } from "@/lib/constants";
 
+// A "YYYY-MM-DD" value is a calendar date, not an instant: it is read as UTC
+// midnight and formatted in UTC, so no timezone can move it to another day.
+// (Parsing at the process's local noon and formatting with a zone fixed when
+// this module loaded disagreed as soon as the zone changed in between.)
 const DATE_FMT = new Intl.DateTimeFormat("en-PH", {
+  timeZone: "UTC",
   year: "numeric",
   month: "short",
   day: "numeric",
@@ -41,13 +46,13 @@ const TIME_OF_DAY_FMT = new Intl.DateTimeFormat("en-PH", {
 /** Format a "YYYY-MM-DD" date string for display. */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "—";
-  // Parse as local noon to avoid timezone rollover on date-only values.
-  const d = new Date(`${value}T12:00:00`);
+  const d = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return value;
   return DATE_FMT.format(d);
 }
 
 const MONTH_DAY_FMT = new Intl.DateTimeFormat("en-PH", {
+  timeZone: "UTC",
   weekday: "short",
   month: "short",
   day: "numeric",
@@ -56,7 +61,7 @@ const MONTH_DAY_FMT = new Intl.DateTimeFormat("en-PH", {
 /** "Sat, Jan 2" from a "YYYY-MM-DD" string — a date whose year goes without saying. */
 export function formatMonthDay(value: string | null | undefined): string {
   if (!value) return "—";
-  const d = new Date(`${value}T12:00:00`);
+  const d = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return value;
   return MONTH_DAY_FMT.format(d);
 }
