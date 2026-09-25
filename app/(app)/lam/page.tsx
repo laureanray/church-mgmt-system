@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { services } from "@/db/schema";
 import { DataTable, type DataTableColumn } from "@/components/patterns/data-table";
 import { LinkTabs } from "@/components/patterns/link-tabs";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { requirePermission } from "@/lib/auth-helpers";
@@ -167,7 +168,7 @@ export default async function LineupsPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Line-ups"
         description="Songs and serving team for each service."
@@ -197,6 +198,6 @@ export default async function LineupsPage({
         }}
         emptyFiltered={{ icon: CalendarDays, title: "No services match your search" }}
       />
-    </>
+    </PageContainer>
   );
 }

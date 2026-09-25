@@ -23,6 +23,7 @@ import {
   toAuditRow,
 } from "@/components/audit/audit-log-table";
 import { BackLink } from "@/components/patterns/back-link";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 const SORT_COLUMNS = {
@@ -86,7 +87,7 @@ export default async function AuditLogPage({
   if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <PageContainer>
       <BackLink href="/settings" label="Back to settings" />
       <PageHeader
         title="Audit Log"
@@ -97,6 +98,6 @@ export default async function AuditLogPage({
         rows={rows.map(toAuditRow)}
         total={matching}
       />
-    </div>
+    </PageContainer>
   );
 }

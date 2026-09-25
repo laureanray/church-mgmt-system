@@ -78,6 +78,13 @@ Three layers: **tokens** in `app/globals.css`, **primitives** in
 - Before hand-rolling a placeholder, a stat card, a bordered table or a back
   link, check `components/patterns/` — each of those already exists there, and
   each was extracted from several near-identical copies.
+- **Every page renders through `PageContainer`** (`components/patterns/page-container.tsx`).
+  Lists, the dashboard and record views use the default `full` width; create
+  and edit screens use `width="form"`, which caps them at `max-w-3xl` without
+  centring them. A page never sets its own `max-w-*` or `mx-auto`: a record
+  view in a centred, narrower column shifts the title and shrinks the content
+  when someone opens it from its list. `tests/ui/page-width.test.ts` enforces
+  this.
 - **Every table is `DataTable`.** `components/ui/table.tsx` is the primitive it
   is built from, and nothing else imports it. See the section below.
 - `Field` wires `aria-describedby` and `aria-invalid` onto the control it wraps,

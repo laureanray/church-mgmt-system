@@ -6,6 +6,7 @@ import { cellGroups } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { MemberForm } from "@/components/members/member-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function NewMemberPage() {
@@ -18,7 +19,7 @@ export default async function NewMemberPage() {
   const cellOptions = cellRows.map((c) => ({ value: c.id, label: c.name }));
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageContainer width="form">
       <BackLink href="/members" label="Back to members" />
       <PageHeader
         title="Add Member"
@@ -29,6 +30,6 @@ export default async function NewMemberPage() {
         cellOptions={cellOptions}
         submitLabel="Create member"
       />
-    </div>
+    </PageContainer>
   );
 }

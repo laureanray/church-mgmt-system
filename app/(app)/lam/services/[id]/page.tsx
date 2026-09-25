@@ -23,6 +23,7 @@ import { SetlistEditor } from "@/components/lam/setlist-editor";
 import { TeamEditor } from "@/components/lam/team-editor";
 import { BackLink } from "@/components/patterns/back-link";
 import { InfoTile } from "@/components/patterns/info-tile";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -92,7 +93,7 @@ export default async function ServiceLineupPage({
   team.sort((a, b) => partOrder.get(a.part)! - partOrder.get(b.part)!);
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <PageContainer>
       <BackLink href="/lam" label="Back to line-ups" />
       <PageHeader title={service.name} description="Line-up">
         {hasPermission(user, "services.view") ? (
@@ -147,6 +148,6 @@ export default async function ServiceLineupPage({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }

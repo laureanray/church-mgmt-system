@@ -5,6 +5,7 @@ import { services } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { topUpAllSchedules } from "@/lib/occurrences";
 import { selectScanServices } from "@/lib/scan-selection";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { ScannerPanel } from "@/components/scan/scanner-panel";
 
@@ -70,7 +71,7 @@ export default async function ScanPage({
   );
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Scan Attendance"
         description="Point the camera at a member's QR code to record their attendance."
@@ -80,6 +81,6 @@ export default async function ScanPage({
         initialServiceId={initialServiceId}
         canReactivate={hasPermission(user, "members.update")}
       />
-    </>
+    </PageContainer>
   );
 }

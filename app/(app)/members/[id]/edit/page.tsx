@@ -7,6 +7,7 @@ import { cellGroups, members } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { MemberForm } from "@/components/members/member-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function EditMemberPage({
@@ -31,7 +32,7 @@ export default async function EditMemberPage({
   const cellOptions = cellRows.map((c) => ({ value: c.id, label: c.name }));
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageContainer width="form">
       <BackLink href={`/members/${member.id}`} label="Back to member" />
       <PageHeader
         title="Edit Member"
@@ -43,6 +44,6 @@ export default async function EditMemberPage({
         cellOptions={cellOptions}
         submitLabel="Save changes"
       />
-    </div>
+    </PageContainer>
   );
 }

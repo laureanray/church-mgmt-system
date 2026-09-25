@@ -7,6 +7,7 @@ import { cellGroups, members } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { BackLink } from "@/components/patterns/back-link";
 import { CellGroupForm } from "@/components/cell-groups/cell-group-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 
 export default async function EditCellGroupPage({
@@ -39,7 +40,7 @@ export default async function EditCellGroupPage({
   const action = updateCellGroup.bind(null, cellGroup.id);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageContainer width="form">
       <BackLink href={`/cell-groups/${cellGroup.id}`} label="Back to cell group" />
       <PageHeader title="Edit Cell Group" description={`Update ${cellGroup.name}.`} />
       <CellGroupForm
@@ -49,6 +50,6 @@ export default async function EditCellGroupPage({
         cellOptions={cellOptions}
         submitLabel="Save changes"
       />
-    </div>
+    </PageContainer>
   );
 }

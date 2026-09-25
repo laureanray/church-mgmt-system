@@ -7,6 +7,7 @@ import {
 import { celebrationsIn } from "@/lib/celebrations-query";
 import { tableContext, type RawSearchParams } from "@/lib/data-table";
 import { todayIn } from "@/lib/dates";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { CelebrationRangeTabs } from "@/components/celebrations/celebration-range-tabs";
 import { CelebrationsTable } from "@/components/celebrations/celebrations-table";
@@ -28,7 +29,7 @@ export default async function CelebrationsPage({
   const label = CELEBRATION_RANGE_LABELS[range].toLowerCase();
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Celebrations"
         description="Birthdays, spiritual birthdays and wedding anniversaries."
@@ -43,6 +44,6 @@ export default async function CelebrationsPage({
           emptyDescription="Birthdays and anniversaries appear here once members have them on record."
         />
       </CelebrationRangeTabs>
-    </>
+    </PageContainer>
   );
 }

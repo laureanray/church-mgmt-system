@@ -10,6 +10,7 @@ import { permissionSources } from "@/lib/ministry-access";
 import { AccessSummary } from "@/components/ministries/access-summary";
 import { BackLink } from "@/components/patterns/back-link";
 import { UserForm } from "@/components/users/user-form";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import {
   Card,
@@ -51,7 +52,7 @@ export default async function EditUserPage({
   );
 
   return (
-    <div className="mx-auto max-w-2xl">
+    <PageContainer width="form">
       <BackLink href="/users" label="Back to staff" />
       <PageHeader title="Edit Staff User" description={`Update ${user.name}.`} />
       <UserForm
@@ -78,6 +79,6 @@ export default async function EditUserPage({
           />
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

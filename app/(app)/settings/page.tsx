@@ -6,6 +6,7 @@ import { getSettings, saveSheetsConfig } from "@/lib/sheets";
 import { CodeBlock } from "@/components/integrations/code-block";
 import { SheetsSettingsForm } from "@/components/integrations/sheets-settings-form";
 import { SyncAllButton } from "@/components/integrations/sync-buttons";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -80,7 +81,7 @@ export default async function SettingsPage() {
   const connected = Boolean(url && secret);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <PageContainer width="form">
       <PageHeader
         title="Settings"
         description="Connect external services to your church system."
@@ -173,6 +174,6 @@ export default async function SettingsPage() {
           </p>
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

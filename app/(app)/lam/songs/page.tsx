@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { lineupSongs, songs } from "@/db/schema";
 import { DataTable, type DataTableColumn } from "@/components/patterns/data-table";
 import { ConfirmDeleteButton } from "@/components/patterns/confirm-delete-button";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
@@ -182,7 +183,7 @@ export default async function SongLibraryPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader title="Song Library" description="Every song LAM can put in a line-up.">
         {canCreate ? addSong : null}
       </PageHeader>
@@ -202,6 +203,6 @@ export default async function SongLibraryPage({
         }}
         emptyFiltered={{ icon: ListMusic, title: "No songs match your search" }}
       />
-    </>
+    </PageContainer>
   );
 }

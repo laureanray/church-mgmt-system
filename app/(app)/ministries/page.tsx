@@ -24,6 +24,7 @@ import {
 import { deleteMinistry } from "./actions";
 import { DataTable, type DataTableColumn } from "@/components/patterns/data-table";
 import { ConfirmDeleteButton } from "@/components/patterns/confirm-delete-button";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -228,7 +229,7 @@ export default async function MinistriesPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title={seesAll ? "Ministries" : "My Ministries"}
         description="Where members serve. A ministry adds its access to the role of every rostered member who has a staff login."
@@ -261,6 +262,6 @@ export default async function MinistriesPage({
         }}
         emptyFiltered={{ icon: HandHeart, title: "No ministries match your search" }}
       />
-    </>
+    </PageContainer>
   );
 }

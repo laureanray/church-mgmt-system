@@ -28,6 +28,7 @@ import {
 } from "@/server/members";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -148,7 +149,7 @@ export default async function MembersPage({
   ];
 
   return (
-    <>
+    <PageContainer>
       <PageHeader
         title="Members"
         description={`${total} member${total === 1 ? "" : "s"} in your church directory.`}
@@ -223,6 +224,6 @@ export default async function MembersPage({
           title: "No members match your search",
         }}
       />
-    </>
+    </PageContainer>
   );
 }

@@ -6,6 +6,7 @@ import * as cardStories from "@/components/ui/card.stories";
 import * as backLinkStories from "@/components/patterns/back-link.stories";
 import * as detailListStories from "@/components/patterns/detail-list.stories";
 import * as infoTileStories from "@/components/patterns/info-tile.stories";
+import * as pageContainerStories from "@/components/patterns/page-container.stories";
 import * as pageHeaderStories from "@/components/patterns/page-header.stories";
 import * as statCardStories from "@/components/patterns/stat-card.stories";
 import * as tableCardStories from "@/components/patterns/table-card.stories";
@@ -19,6 +20,27 @@ describe("BackLink", () => {
     expect(
       screen.getByRole("link", { name: "Back to members" }),
     ).toHaveAttribute("href", "/members");
+  });
+});
+
+describe("PageContainer", () => {
+  const { Record, Form } = composeStories(pageContainerStories);
+
+  test("gives a record the full width a list has", () => {
+    const { container } = render(<Record />);
+
+    const frame = container.querySelector('[data-slot="page-container"]');
+    expect(frame).toHaveAttribute("data-width", "full");
+    expect(frame?.className).not.toMatch(/max-w-/);
+  });
+
+  test("caps a form's width without centring it", () => {
+    const { container } = render(<Form />);
+
+    const frame = container.querySelector('[data-slot="page-container"]');
+    expect(frame).toHaveAttribute("data-width", "form");
+    expect(frame?.className).toMatch(/\bmax-w-3xl\b/);
+    expect(frame?.className).not.toMatch(/\bmx-auto\b/);
   });
 });
 

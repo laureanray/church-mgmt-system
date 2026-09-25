@@ -5,6 +5,7 @@ import { updateMinistry } from "../../actions";
 import { db } from "@/db";
 import { ministries, ministryPermissions } from "@/db/schema";
 import { BackLink } from "@/components/patterns/back-link";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { MinistryForm } from "@/components/ministries/ministry-form";
 import { requirePermission } from "@/lib/auth-helpers";
@@ -27,7 +28,7 @@ export default async function EditMinistryPage({
   if (!ministry) notFound();
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <PageContainer>
       <BackLink href={`/ministries/${ministry.id}`} label={`Back to ${ministry.name}`} />
       <PageHeader title="Edit Ministry" description={`Update ${ministry.name} and the access it grants.`} />
       <MinistryForm
@@ -36,6 +37,6 @@ export default async function EditMinistryPage({
         selectedPermissions={grants.map(({ key }) => key).filter(isMinistryGrantable)}
         cancelHref={`/ministries/${ministry.id}`}
       />
-    </div>
+    </PageContainer>
   );
 }

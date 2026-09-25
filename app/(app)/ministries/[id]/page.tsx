@@ -17,6 +17,7 @@ import { RosterRowActions } from "@/components/ministries/roster-row-actions";
 import { BackLink } from "@/components/patterns/back-link";
 import { ConfirmDeleteButton } from "@/components/patterns/confirm-delete-button";
 import { DataTable, type DataTableColumn } from "@/components/patterns/data-table";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -237,7 +238,7 @@ export default async function MinistryDetailPage({
     .map((permission) => ({ permission }));
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <PageContainer>
       <BackLink href="/ministries" label="Back to ministries" />
       <PageHeader title={ministry.name} description={ministry.description ?? undefined}>
         {ministry.id === LAM_MINISTRY_ID && hasPermission(user, "lam.view") ? (
@@ -330,6 +331,6 @@ export default async function MinistryDetailPage({
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageContainer>
   );
 }

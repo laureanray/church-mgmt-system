@@ -23,6 +23,7 @@ import type { DataTableColumn } from "@/components/patterns/data-table";
 import { InfoTile } from "@/components/patterns/info-tile";
 import { SyncServiceButton } from "@/components/integrations/sync-buttons";
 import { DeleteServiceButton } from "@/components/services/delete-service-button";
+import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -146,7 +147,7 @@ export default async function ServiceDetailPage({
   ];
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <PageContainer>
       <BackLink href="/services" label="Back to services" />
 
       <PageHeader title={service.name}>
@@ -244,6 +245,6 @@ export default async function ServiceDetailPage({
           />
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }
