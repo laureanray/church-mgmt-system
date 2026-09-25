@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   AnyPgColumn,
   boolean,
+  customType,
   date,
   index,
   integer,
@@ -169,6 +170,48 @@ export const members = pgTable(
     index("members_status_idx").on(t.status),
   ],
 );
+
+// Postgres `bytea`, which Drizzle 0.45 has no built-in column for. postgres-js
+// reads it as a Buffer and writes a Buffer as-is.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+// ---------------------------------------------------------------------------
+// Member faces — the photo a member was enrolled for face check-in with. The
+// face itself lives in Tencent Cloud's face group (lib/tencent-face.ts, keyed
+// by members.id); this row is the local record that they are enrolled, and
+// the photo staff see when deciding whether to replace it.
+//
+// A table of its own rather than a column on `members`, because the directory
+// selects every member column, and a photo per row would ride along on every
+// list page. Scan frames are never stored anywhere.
+// ---------------------------------------------------------------------------
+
+export const memberFaces = pgTable("member_faces", {
+  memberId: text("member_id")
+    .primaryKey()
+    .references(() => members.id, { onDelete: "cascade" }),
+  // The enrolment photo as sent to Tencent: a JPEG, at most 800px on its long side.
+  photo: bytea("photo").notNull(),
+  enrolledAt: timestamp("enrolled_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  enrolledBy: text("enrolled_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  // Consent is a condition of the row existing: enrolment refuses without it
+  // (server/faces.ts), and removing the face deletes it with the rest. Kept
+  // across a replaced photo — consent is per member, not per photo.
+  consentAt: timestamp("consent_at", { withTimezone: true }).notNull(),
+  // The staff member who recorded it, on the member's behalf.
+  consentRecordedBy: text("consent_recorded_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  // The notice as worded when they agreed. The church can reword it in
+  // Settings; this is what this member was actually shown.
+  consentNotice: text("consent_notice").notNull(),
+});
 
 // ---------------------------------------------------------------------------
 // Cell groups — discipleship cells. A cell has a leader (a member) and may sit
@@ -484,6 +527,9 @@ export const appSettings = pgTable("app_settings", {
   id: text("id").primaryKey().default("singleton"),
   sheetsWebhookUrl: text("sheets_webhook_url"),
   sheetsWebhookSecret: text("sheets_webhook_secret"),
+  // The consent notice shown before a face is enrolled. NULL means the
+  // built-in wording, DEFAULT_FACE_CONSENT_NOTICE in lib/face-consent.ts.
+  faceConsentNotice: text("face_consent_notice"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -576,6 +622,24 @@ export const membersRelations = relations(members, ({ one, many }) => ({
   }),
   ledCellGroups: many(cellGroups, { relationName: "cellLeader" }),
   ministryMemberships: many(ministryMembers),
+  face: one(memberFaces),
+}));
+
+export const memberFacesRelations = relations(memberFaces, ({ one }) => ({
+  member: one(members, {
+    fields: [memberFaces.memberId],
+    references: [members.id],
+  }),
+  enrolledByUser: one(users, {
+    fields: [memberFaces.enrolledBy],
+    references: [users.id],
+    relationName: "faceEnrolledBy",
+  }),
+  consentRecordedByUser: one(users, {
+    fields: [memberFaces.consentRecordedBy],
+    references: [users.id],
+    relationName: "faceConsentRecordedBy",
+  }),
 }));
 
 export const cellGroupsRelations = relations(cellGroups, ({ one, many }) => ({

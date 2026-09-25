@@ -165,7 +165,7 @@ Pages and server actions import the service **directly**; the HTTP API under
 `app/api/v1/` wraps the same service with `apiRoute` from `server/http.ts`. The
 web app does not `fetch` its own API — that is an extra round trip per page for
 nothing. `docs/api.md` is the full account; `server/members.ts` is the
-reference, and so far the only module migrated.
+reference. Check-in (`server/attendance.ts`) is the only other module migrated.
 
 - The API authenticates with `Authorization: Bearer <Supabase access token>`
   (`userFromAuthorizationHeader` in `lib/session-user.ts`), never the session
@@ -327,8 +327,11 @@ matter while editing:
 
 ## Invariants to preserve
 
-- Attendance is unique per `(memberId, serviceId)`. `recordAttendance` detects
-  a duplicate check-in by an empty `returning()` after `onConflictDoNothing()`.
+- Attendance is unique per `(memberId, serviceId)`.
+  `recordAttendanceForMember` in `server/attendance.ts` detects a duplicate
+  check-in by an empty `returning()` after `onConflictDoNothing()`. Every way
+  of identifying someone at the door ends in that one function, so a new check-in
+  path resolves a member id and calls it rather than inserting attendance itself.
 - Generated services are unique per `(scheduleId, scheduledAt)` — that
   constraint is what makes `generateForSchedule` idempotent.
 - `topUpAllSchedules()` is called from the `/services` and `/scan` page loads.
@@ -349,6 +352,33 @@ matter while editing:
   secret/password/token), so pass whole rows rather than picking fields.
 - The LAM ministry is built in with the stable id `lam`: its roster is who may
   be scheduled on a service line-up, and the line-up actions check it.
+- Face check-in (Tencent Cloud IAI; README "Face check-in") keeps to these:
+  - **One face group per deployment**, named by `FACE_GROUP_ID`. Development
+    uses its own group; nothing local ever points at the production one.
+  - **PersonId = `members.id`**, and PersonName is the same id — no name or
+    other personal detail is sent. PersonIds are unique across the whole Tencent
+    account, so removal is always `DeletePersonFromGroup` for our group, never
+    `DeletePerson`, which would reach other deployments' groups too.
+  - **Frames are never stored.** Only the enrolment photo is kept, in
+    `member_faces` — never on `members`, whose every column the directory
+    selects. Its audit entries record when and by whom, never the photo, so
+    `server/faces.ts` passes picked fields to `recordAudit`, not the row.
+  - **No face is a quiet no-op.** `NoFaceInPhoto` is what an empty doorway
+    returns; the scan loop shows nothing for it.
+  - **The Tencent client is server-only.** `lib/tencent-face.ts` imports
+    `server-only`; the key never reaches the browser, and recognition runs
+    through `server/faces.ts`, which ends in `recordAttendanceForMember`.
+  - **No face without consent.** `enrollMemberFace` refuses a first enrolment
+    without it, whatever the form sent. The consent (when, who recorded it, and
+    the notice as worded then) lives on the `member_faces` row, so every removal
+    takes it too. Removal always goes to Tencent **before** the local delete,
+    and member deletion waits if Tencent cannot be reached. `docs/privacy.md` is
+    the policy; keep it in step.
+  - A member created **with** a face (the new-member form, or adding a visitor
+    on `/scan`) is enrolled with Tencent **before** the row exists, under an id
+    generated for them (`server/new-members.ts`). A refused photo then creates
+    nobody, and a failed insert takes the face back out.
+  - Unset, face is off and `/scan` scans QR codes as before.
 
 ## Working here
 
@@ -445,7 +475,7 @@ repair is used. `bun run test:irm` checks the manager and terminal renderer.
   4. Add an integration test in `tests/integration/audit-log.test.ts` (or the
      feature's own file) asserting the entry, and that a failed validation
      writes none.
-  Reads, check-ins recorded by `recordAttendance` (attendance already carries
+  Reads, check-ins recorded by `recordAttendanceForMember` (attendance already carries
   `recordedBy`), and system-generated rows (schedule top-ups) are the only
   exemptions; say so in the PR if you rely on one.
 

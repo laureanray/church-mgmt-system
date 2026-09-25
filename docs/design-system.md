@@ -92,6 +92,10 @@ them with a working example:
   looks correct and does nothing, since `flex-row` sets a direction on an
   element that is not a flex container. See *UI/Card → WithAction*.
 
+`Checkbox` is shadcn's Base UI checkbox. Give it an `id` and a
+`<label htmlFor>` so the sentence beside it is part of the click target and its
+accessible name. See *UI/Checkbox*.
+
 `Badge` carries the semantic variants (`success`, `warning`, `info`, `brand`)
 and a `size` scale, so a status pill never has to be hand-rolled from utility
 classes.
@@ -130,6 +134,69 @@ When check-in records someone lapsed, `ReactivateMemberDialog`
 (`components/scan/`) asks "Mark as active again?" *after* the check-in has
 stood — the usher at the door is never blocked on a records question. It is
 offered only to staff who can edit members.
+
+### Check-in by name
+
+`/scan` always shows `NameSearchPanel` (`components/scan/`) beside the camera:
+the check-in path that works whatever the camera is doing. It searches once two
+letters are typed (debounced, at most ten matches), and each match carries its
+cell group and birth year, because two members sharing a name is the case it
+exists for. It is an ARIA combobox with an inline listbox — the arrow keys move,
+Enter checks in, Escape clears — and after a check-in the box empties with focus
+kept, so the next name can be typed without touching the screen. Lapsed members
+are listed with their `MemberStatusBadge`, not hidden. Stories cover matches, a
+returning member, no match, searching, a failed search and a check-in in flight.
+
+### Face check-in
+
+Three components, all Storybook-first with every state drawn from props, so no
+story needs a camera, a key or a server:
+
+- `FaceScanner` (`components/scan/face-scanner.tsx`) replaces the QR camera on
+  `/scan` when face recognition is configured. `FaceScannerView` is the
+  picture and its overlays — idle, starting, ready, recognising, a welcome by
+  first name, "already checked in at …", a confirm prompt for a likely match
+  ("Is this …?" with *Yes, check in* / *No*), not recognised (pointing to the
+  name search), a hint the person can act on ("step closer"), a problem for an
+  administrator, and a blocked camera. `FaceScanner` adds the camera and the
+  loop. Overlays sit on the picture in a `popover` card, so they read the same
+  in both themes over a black video; the guidance chips are `bg-black/60`
+  over the video itself. "One person at a time" is always shown while live.
+  The loop is a motion check on a 32×24 grayscale sample (`FaceScanGate` in
+  `lib/face-policy.ts`), **not** a face detector.
+- `FaceEnrollmentCard` (`components/members/`) sits on the member page:
+  not configured, not enrolled, enrolled (photo, date, who enrolled them, and
+  the consent on record), a read-only variant, busy, and a refusal explained in
+  Tencent's terms made plain. A first enrolment shows the consent notice in a
+  scrolling muted panel with a `Checkbox`, and Take photo / Upload photo stay
+  disabled until it is ticked. Replace keeps the consent; Remove confirms first
+  and clears it.
+- `FaceConsentNotice` (`components/members/`) is the notice with its consent
+  checkbox, shared by every place a face can be added. Given a `name`, the tick
+  is submitted with the surrounding form.
+- `FacePhotoField` (`components/members/`) is the optional face step inside a
+  form that creates someone: consent, then Take photo (via
+  `FaceCaptureDialog`) or Upload photo, with a preview and Remove. The photo
+  travels with the form's own submit, in a hidden file input. It follows a
+  form reset, so it never shows a photo the form would not send. Forms that
+  hold it submit through `onSubmit` + `startTransition`, not `action`, because
+  React resets an `action` form on every result, errors included.
+- `AddVisitorDialog` (`components/scan/`) adds a first-time visitor on
+  `/scan`: first and last name, an optional number, and — when face check-in
+  is on — a `FacePhotoField`. It tells the usher to search by name first, since
+  adding someone already in the directory makes a duplicate. The face camera
+  on `/scan` pauses while it is open, so the photo can use the camera.
+- `FaceSettingsCard` (`components/settings/`) is Settings' face check-in card:
+  on or off, how many are enrolled, a link to `docs/privacy.md`, the editable
+  consent notice (read-only without `settings.update`), and **Purge all face
+  data** behind a dialog whose button stays disabled until the phrase is typed.
+- `FaceCaptureDialog` (`components/members/`) takes the enrolment photo with
+  the front camera: starting, live (an oval guide), captured, enrolling,
+  refused, camera blocked and no camera. The live preview is mirrored; the
+  photo is not.
+
+Story photos come from `face-photo.fixture.ts`, a drawn silhouette, so no real
+face ships in the repository.
 
 ### Date entry
 
