@@ -9,9 +9,16 @@ const database = connectTestDatabase();
 const requirePermission = mock();
 const revalidatePath = mock();
 await mock.module("@/db", () => ({ db: database.db }));
-await mock.module("@/lib/auth-helpers", () => ({ requirePermission }));
+// Only requirePermission is replaced. bun keeps a module mock for the rest of
+// the run, so dropping the other exports would leave requireUser undefined for
+// whichever file happens to run next (require-user.test.ts).
+const realAuthHelpers = await import("@/lib/auth-helpers");
+await mock.module("@/lib/auth-helpers", () => ({
+  ...realAuthHelpers,
+  requirePermission,
+}));
 await mock.module("next/cache", () => ({ revalidatePath }));
-await mock.module("next/navigation", () => ({ redirect: mock() }));
+await mock.module("next/navigation", () => ({ redirect: mock(), notFound: mock() }));
 const { reactivateMember, updateMember } = await import(
   "../../app/(app)/members/actions"
 );

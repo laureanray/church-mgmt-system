@@ -1,5 +1,11 @@
 // Shared label maps and option lists for enums, used across forms and tables.
 
+/**
+ * The church keeps Philippine time, so "today" means today in Manila — not on
+ * the server, which on Vercel is UTC and eight hours behind.
+ */
+export const CHURCH_TIME_ZONE = "Asia/Manila";
+
 export const GENDERS = ["male", "female"] as const;
 export type Gender = (typeof GENDERS)[number];
 
@@ -110,3 +116,73 @@ export const MEETING_DAY_OPTIONS = DAYS_OF_WEEK.map((label, i) => ({
   value: String(i),
   label,
 }));
+
+/**
+ * What the audit log records. The value is stored in `audit_log.action`, so
+ * treat these like permission keys: add freely, never rename.
+ */
+export const AUDIT_ACTIONS = [
+  "member.create",
+  "member.update",
+  "member.status_change",
+  "member.delete",
+  "member.cell_group_change",
+  "cell_group.create",
+  "cell_group.update",
+  "cell_group.delete",
+  "service.delete",
+  "user.create",
+  "user.update",
+  "user.role_change",
+  "user.password_reset",
+  "user.delete",
+  "role.create",
+  "role.update",
+  "role.delete",
+  "settings.update",
+] as const;
+export type AuditAction = (typeof AUDIT_ACTIONS)[number];
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  "member.create": "Member created",
+  "member.update": "Member edited",
+  "member.status_change": "Member status changed",
+  "member.delete": "Member deleted",
+  "member.cell_group_change": "Cell group membership changed",
+  "cell_group.create": "Cell group created",
+  "cell_group.update": "Cell group edited",
+  "cell_group.delete": "Cell group deleted",
+  "service.delete": "Service deleted",
+  "user.create": "Staff user created",
+  "user.update": "Staff user edited",
+  "user.role_change": "Staff role changed",
+  "user.password_reset": "Password reset",
+  "user.delete": "Staff user deleted",
+  "role.create": "Role created",
+  "role.update": "Role edited",
+  "role.delete": "Role deleted",
+  "settings.update": "Settings changed",
+};
+
+/** The kind of record an audit entry is about — `audit_log.entity`. */
+export const AUDIT_ENTITIES = [
+  "member",
+  "cell_group",
+  "service",
+  "user",
+  "role",
+  "settings",
+] as const;
+export type AuditEntity = (typeof AUDIT_ENTITIES)[number];
+
+export const AUDIT_ENTITY_LABELS: Record<AuditEntity, string> = {
+  member: "Member",
+  cell_group: "Cell group",
+  service: "Service",
+  user: "Staff user",
+  role: "Role",
+  settings: "Settings",
+};
+
+// How long audit entries are kept before `bun run audit:prune` removes them.
+export const AUDIT_RETENTION_MONTHS = 24;

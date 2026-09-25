@@ -12,14 +12,18 @@ import {
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
+import { celebrationWindow } from "@/lib/celebrations";
+import { celebrationsIn } from "@/lib/celebrations-query";
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@/lib/constants";
 import { tableContext } from "@/lib/data-table";
+import { todayIn } from "@/lib/dates";
 import { formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
+import { CelebrationsTable } from "@/components/celebrations/celebrations-table";
 import { StatCard } from "@/components/patterns/stat-card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -44,9 +48,19 @@ export default async function DashboardPage() {
   // This async Server Component reads the clock after request-bound authentication.
   // eslint-disable-next-line react-hooks/purity
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const today = todayIn();
+  // Celebrations come from the member records, so the card follows the
+  // directory's permission rather than the dashboard's.
+  const showCelebrations = hasPermission(user, "members.view");
 
-  const [membersCount, servicesCount, attendanceCount, weekCheckins, recent] =
-    await Promise.all([
+  const [
+    membersCount,
+    servicesCount,
+    attendanceCount,
+    weekCheckins,
+    recent,
+    celebrations,
+  ] = await Promise.all([
       // Visitors, lapsed and departed members are on record but not in the
       // congregation this tile describes.
       db.$count(members, eq(members.status, "active")),
@@ -71,6 +85,9 @@ export default async function DashboardPage() {
         .from(services)
         .orderBy(desc(services.scheduledAt))
         .limit(5),
+      showCelebrations
+        ? celebrationsIn(celebrationWindow("week", today))
+        : Promise.resolve(null),
     ]);
 
   const manage = hasPermission(user, "members.create");
@@ -78,6 +95,7 @@ export default async function DashboardPage() {
   // A fixed five-row summary: no state to read, but the same table so the
   // dashboard's rows look and behave like every other list in the app.
   const recentCtx = tableContext("/dashboard", {});
+  const upcomingCelebrations = celebrations?.slice(0, 5) ?? [];
 
   const recentColumns: DataTableColumn<RecentServiceRow>[] = [
     {
@@ -156,6 +174,34 @@ export default async function DashboardPage() {
             Add Service
           </Link>
         </div>
+      ) : null}
+
+      {celebrations ? (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-base">Celebrations this week</CardTitle>
+            <CardAction>
+              <Link
+                href="/celebrations?range=week"
+                className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+              >
+                {celebrations.length > upcomingCelebrations.length
+                  ? `View all ${celebrations.length}`
+                  : "View all"}
+              </Link>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            <CelebrationsTable
+              ctx={recentCtx}
+              rows={upcomingCelebrations}
+              today={today}
+              caption="Celebrations in the next 7 days"
+              emptyTitle="Nothing to celebrate in the next 7 days"
+              compact
+            />
+          </CardContent>
+        </Card>
       ) : null}
 
       <Card className="mt-6">

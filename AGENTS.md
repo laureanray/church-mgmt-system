@@ -150,6 +150,26 @@ is built.
 action: someone whose *search* missed is one click from creating a duplicate of
 the record they were looking for.
 
+## Business logic lives in `server/`; the web app and the API are adapters
+
+`server/<module>.ts` holds a module's rules: each function takes an `Actor`,
+calls `authorize(actor, "module.action")`, parses its input with the zod
+schema via `parseInput`, and returns data or throws a `ServiceError`. It never
+touches cookies, `Request`, `FormData`, `redirect` or `revalidatePath`.
+
+Pages and server actions import the service **directly**; the HTTP API under
+`app/api/v1/` wraps the same service with `apiRoute` from `server/http.ts`. The
+web app does not `fetch` its own API — that is an extra round trip per page for
+nothing. `docs/api.md` is the full account; `server/members.ts` is the
+reference, and so far the only module migrated.
+
+- The API authenticates with `Authorization: Bearer <Supabase access token>`
+  (`userFromAuthorizationHeader` in `lib/session-user.ts`), never the session
+  cookie, and `proxy.ts` excludes `/api/` so it answers 401 rather than
+  redirecting.
+- A route handler that grows past a few lines is hiding a rule that belongs
+  in the service.
+
 ## Forms are server actions over FormData
 
 There is no form library. Every form follows one shape — `service-form.tsx` plus
@@ -159,13 +179,17 @@ There is no form library. Every form follows one shape — `service-form.tsx` pl
    `(prev: XFormState, formData: FormData) => Promise<XFormState>`.
 2. The action calls `requirePermission("module.action")` first, then parses `FormData` with a
    zod schema from `lib/validators.ts`, returning
-   `{ errors: fieldErrors(parsed.error), message }` when parsing fails.
+   `{ errors: fieldErrors(parsed.error), message }` when parsing fails. In a
+   module migrated to `server/` (members), the action passes the FormData
+   fields to the service instead, and turns its `invalid` error into that
+   same form state — `app/(app)/members/actions.ts`.
 3. On success: mutate, `revalidatePath()` each affected route, then `redirect()`.
 4. The client component drives it with `useActionState(action, undefined)` and
    wraps each input in `<Field label htmlFor error>` from `components/form/field.tsx`.
 
-Validators normalise empty strings to `null` (`emptyToNull`), so optional
-columns stay nullable rather than filling with `""`.
+Validators normalise empty strings — and absent fields, which is how a JSON
+body leaves one out — to `null` (`emptyToNull`), so optional columns stay
+nullable rather than filling with `""`.
 
 ## Auth
 
@@ -264,6 +288,24 @@ Migrations are versioned and committed: `bun run db:generate`, then
 disabled so that `db/migrations` stays the single schema history; `db:push`
 would desync it, so reach for generate + migrate instead.
 
+## Performance
+
+Pages render in ~15ms of their own work; the cost users feel is round trips.
+`docs/performance.md` has the checklist and the measuring tool — the rules that
+matter while editing:
+
+- After `requirePermission`, a page makes **one** `Promise.all` batch of
+  queries. A second sequential `await db…` is a second trip; fold it into SQL.
+- `next.config.ts` sets `staleTimes` so visited and intent-prefetched pages are
+  reused briefly. Server actions must keep ending in `revalidatePath` or
+  `redirect` — that is what purges those caches after a write.
+- Primary navigation uses `IntentLink` (`components/patterns/`), which fully
+  prefetches a page on hover, focus or touch. In-content links stay `<Link>`.
+- Heavy client libraries load lazily in the one component that needs them,
+  never in the shared layout.
+- `bun run perf:probe` times routes against a local production build; put
+  before/after numbers in PRs that add or reshape a page.
+
 ## Invariants to preserve
 
 - Attendance is unique per `(memberId, serviceId)`. `recordAttendance` detects
@@ -278,6 +320,12 @@ would desync it, so reach for generate + migrate instead.
   occurrences. Past and already-attended services survive.
 - `app_settings` is a single row keyed `"singleton"`; write it with
   `onConflictDoUpdate`.
+- Every mutation of members, cell groups (and their membership), services,
+  staff users, roles and settings calls `recordAudit()` from `lib/audit.ts`
+  **inside the same transaction**, after the write — a rolled-back change
+  leaves no entry, and a failed entry undoes the change.
+  `recordAudit` diffs and redacts on its own (any key matching
+  secret/password/token), so pass whole rows rather than picking fields.
 
 ## Working here
 
@@ -356,6 +404,27 @@ worktrees share the database. No Supabase migration runner, reset, or history
 repair is used. `bun run test:irm` checks the manager and terminal renderer.
 
 ### Project conventions
+
+- **Every feature that changes data is audited — no exceptions.** A new
+  entity, a new server action, or a new way of mutating an existing record
+  ships with its audit logging in the same PR, not as a follow-up:
+  1. Add its values to `AUDIT_ACTIONS` / `AUDIT_ACTION_LABELS` (and, for a new
+     kind of record, `AUDIT_ENTITIES` / `AUDIT_ENTITY_LABELS`) in
+     `lib/constants.ts`. These are stored, so never rename one.
+  2. Wrap the write in `db.transaction` and call `recordAudit(tx, …)` after it,
+     with the acting user as `actorId`, the row before and/or after, and a
+     one-line human summary. Where the entity has a service in `server/`
+     (members does), the audit call lives **in the service**, not the server
+     action, so writes through the HTTP API under `app/api/v1` are logged too.
+  3. Name any sensitive column so the redaction catches it (…`Secret`,
+     …`Password`, …`Token`), or strip it before passing the row. Never put a
+     secret in `summary`.
+  4. Add an integration test in `tests/integration/audit-log.test.ts` (or the
+     feature's own file) asserting the entry, and that a failed validation
+     writes none.
+  Reads, check-ins recorded by `recordAttendance` (attendance already carries
+  `recordedBy`), and system-generated rows (schedule top-ups) are the only
+  exemptions; say so in the PR if you rely on one.
 
 - `bun test lib` (the `test` script) runs the unit suite over `lib/**/*.test.ts`.
   Put pure logic in `lib/` so it is testable there — `lib/cell-graph.ts` with

@@ -1,6 +1,7 @@
-import { CheckCircle2, ExternalLink, Sheet } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, ExternalLink, History, Sheet } from "lucide-react";
 
-import { requirePermission } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { getSettings, saveSheetsConfig } from "@/lib/sheets";
 import { CodeBlock } from "@/components/integrations/code-block";
 import { SheetsSettingsForm } from "@/components/integrations/sheets-settings-form";
@@ -8,6 +9,7 @@ import { SyncAllButton } from "@/components/integrations/sync-buttons";
 import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -64,7 +66,7 @@ function doPost(e) {
 }
 
 export default async function SettingsPage() {
-  await requirePermission("settings.view");
+  const user = await requirePermission("settings.view");
 
   // Ensure a stable secret exists so the snippet and form always match.
   let settings = await getSettings();
@@ -83,7 +85,17 @@ export default async function SettingsPage() {
       <PageHeader
         title="Settings"
         description="Connect external services to your church system."
-      />
+      >
+        {hasPermission(user, "audit.view") ? (
+          <Link
+            href="/settings/audit"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            <History className="size-4" />
+            Audit log
+          </Link>
+        ) : null}
+      </PageHeader>
 
       <Card>
         <CardHeader>

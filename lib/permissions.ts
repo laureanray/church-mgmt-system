@@ -46,6 +46,11 @@ export const APP_MODULES = [
     label: "Settings",
     description: "Application and integration settings.",
   },
+  {
+    key: "audit",
+    label: "Audit Log",
+    description: "The record of who changed members, staff, and settings.",
+  },
 ] as const;
 
 export type AppModuleKey = (typeof APP_MODULES)[number]["key"];
@@ -78,6 +83,7 @@ export const PERMISSIONS = [
   permission("roles.delete", "roles", "Delete roles", "Delete unused custom roles."),
   permission("settings.view", "settings", "View settings", "Open application settings."),
   permission("settings.update", "settings", "Update settings", "Change application and integration settings."),
+  permission("audit.view", "audit", "View audit log", "Read the audit log and each member's change history."),
 ] as const;
 
 function permission<

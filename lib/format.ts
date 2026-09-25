@@ -31,6 +31,20 @@ export function formatDate(value: string | null | undefined): string {
   return DATE_FMT.format(d);
 }
 
+const MONTH_DAY_FMT = new Intl.DateTimeFormat("en-PH", {
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+
+/** "Sat, Jan 2" from a "YYYY-MM-DD" string — a date whose year goes without saying. */
+export function formatMonthDay(value: string | null | undefined): string {
+  if (!value) return "—";
+  const d = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return value;
+  return MONTH_DAY_FMT.format(d);
+}
+
 export function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;

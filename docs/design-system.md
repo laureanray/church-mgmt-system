@@ -85,7 +85,8 @@ tiers.
 [AGENTS.md](../AGENTS.md); two are worth repeating because Storybook documents
 them with a working example:
 
-- Composition is **`render`**, not `asChild` — see *UI/Badge → AsLink*.
+- Composition is **`render`**, not `asChild` — see *UI/Badge → AsLink*, and
+  *UI/Tabs → AsLinks* for tabs whose selection lives in the URL.
 - `CardHeader` is a **grid**. Trailing header content must be a `CardAction`, or
   it drops under the title. `<CardHeader className="flex-row justify-between">`
   looks correct and does nothing, since `flex-row` sets a direction on an
@@ -146,6 +147,27 @@ focus to the editable field. Both components have isolated Storybook examples,
 including validation and a native FormData/reset demonstration. Datetime fields
 continue to use their existing datetime control.
 
+### Celebrations
+
+`/celebrations` lists birthdays, spiritual birthdays and wedding anniversaries
+for the next seven days or the current month; the dashboard shows the first five
+of the week. The rules live in `lib/celebrations.ts`: only month and day are
+compared, 29 February is celebrated on the 28th in a common year, the week may
+cross New Year, and "today" is the date in Manila rather than on the server.
+The calendar arithmetic beneath them — on `"YYYY-MM-DD"` strings, never local
+`Date`s — is the reusable `lib/dates.ts`.
+Wedding anniversaries appear only for a spouse-relevant marital status, and
+transferred or deceased members never appear.
+
+`CelebrationKindBadge` gives each kind its own tone *and* icon (birthday
+`brand`, spiritual birthday `info`, anniversary `success`).
+`CelebrationRangeTabs` is the `Tabs` primitive with link triggers
+(`render={<Link />}` plus `nativeButton={false}`): the range lives in
+`?range=`, so only the selected panel is rendered and the server fills it.
+`CelebrationsTable` is a `DataTable` with a `compact` variant for the dashboard
+card, which drops the frame and the cell-group column. Stories use a fixed
+30 December so the week always spans the year boundary.
+
 ## Patterns
 
 | Component | Replaces |
@@ -153,6 +175,7 @@ continue to use their existing datetime control.
 | `PageContainer` | The outer frame of every page, and the only place a page width is set |
 | `PageHeader` | Title, description and actions above every page |
 | `BackLink` | The "← Back to members" ghost link, previously copied into 12 routes |
+| `IntentLink` | A `<Link>` that fully prefetches its page on hover, focus or touch — for primary navigation; see `docs/performance.md` |
 | `EmptyState` | The dashed placeholder *and* the muted line inside a Card (`variant="inline"`) |
 | `StatCard` | The dashboard's headline figures |
 | `InfoTile` | The icon-led attribute cards on a service |
@@ -160,6 +183,7 @@ continue to use their existing datetime control.
 | `TableCard` | The bordered, clipped frame around a full-width table |
 | `SearchField` | The list-page search box |
 | `DataTable` | Every table in the app: sorting, paging, search, facets, columns |
+| `LinkTabs` | Tabs whose selection is the URL (`?tab=history`), rendered as navigation links |
 
 ### Page width
 
@@ -185,6 +209,19 @@ authorization catalog by module and uses native named checkboxes so the role
 form submits ordinary `FormData`; `RoleForm` composes it with the shared Field,
 Card, Input, Textarea, and Button primitives. Their stories cover new, edited,
 empty, and protected states without requiring a database.
+
+### Audit log
+
+`AuditLogTable` (`components/audit/`) is the `DataTable` behind both
+`/settings/audit` and a member's History tab: `variant="log"` adds search and
+the Action/Record facets, `variant="record"` drops them along with the Record
+column. Each row's changes render through `AuditChanges` — an edit reads as the
+old value struck through beside the new one, while a create or delete, which
+stores the whole record, folds behind a native `<details>`. Deletions take the
+`destructive` badge; every other action is `outline`, so the log stays quiet
+until something was removed. The member page reaches History through
+`LinkTabs`, which are links in a `<nav>` rather than an ARIA tablist because
+each tab is its own URL.
 
 ### DataTable
 
