@@ -284,8 +284,9 @@ Column types worth knowing before you query:
 
 - Date-only fields (`birthdate`, `weddingAnniversary`, `spiritualBirthday`) are
   `date`, which Drizzle hands back as a `"YYYY-MM-DD"` **string**, not a `Date`.
-  Render them with `formatDate`, which parses at local noon to dodge timezone
-  rollover.
+  Render them with `formatDate`, which reads and formats them in UTC, so no
+  timezone — the server's, the browser's, or one changed mid-process — can
+  move them to another day.
 - Timestamps are `timestamp({ withTimezone: true })` and surface as `Date`.
   They are instants, read and written as the church's wall clock
   (`CHURCH_TIME_ZONE`, Manila): show them with `formatDateTime`/`formatTime`,
