@@ -1,41 +1,59 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
-import { db } from "@/db";
-import { members } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
-import { LAPSED_STATUSES } from "@/lib/constants";
-import { fieldErrors, memberSchema } from "@/lib/validators";
+import { isServiceError } from "@/server/errors";
+import * as membersService from "@/server/members";
+
+/*
+ * The web adapter for server/members.ts. The rules live in the service; this
+ * file only translates between it and the browser — FormData in, form state or
+ * a redirect out, and the revalidation the web app's routes need.
+ *
+ * `requirePermission` here is for the redirect to /no-access. The service
+ * authorizes again, and that is the check the HTTP API relies on.
+ */
 
 export type MemberFormState =
   | { errors?: Record<string, string>; message?: string }
   | undefined;
 
+const MEMBER_FIELDS = [
+  "firstName",
+  "middleName",
+  "lastName",
+  "birthdate",
+  "spiritualBirthday",
+  "memberSinceYear",
+  "gender",
+  "maritalStatus",
+  "status",
+  "spouseName",
+  "weddingAnniversary",
+  "contactNumber",
+  "homeAddress",
+  "motherName",
+  "fatherName",
+  "educationalLevel",
+  "occupation",
+  "cellGroupId",
+] as const;
+
 function readMemberForm(formData: FormData) {
-  return memberSchema.safeParse({
-    firstName: formData.get("firstName"),
-    middleName: formData.get("middleName"),
-    lastName: formData.get("lastName"),
-    birthdate: formData.get("birthdate"),
-    spiritualBirthday: formData.get("spiritualBirthday"),
-    memberSinceYear: formData.get("memberSinceYear"),
-    gender: formData.get("gender"),
-    maritalStatus: formData.get("maritalStatus"),
-    status: formData.get("status"),
-    spouseName: formData.get("spouseName"),
-    weddingAnniversary: formData.get("weddingAnniversary"),
-    contactNumber: formData.get("contactNumber"),
-    homeAddress: formData.get("homeAddress"),
-    motherName: formData.get("motherName"),
-    fatherName: formData.get("fatherName"),
-    educationalLevel: formData.get("educationalLevel"),
-    occupation: formData.get("occupation"),
-    cellGroupId: formData.get("cellGroupId"),
-  });
+  return Object.fromEntries(
+    MEMBER_FIELDS.map((field) => [field, formData.get(field)]),
+  );
+}
+
+/** A validation failure becomes form state; anything else is rethrown. */
+function toFormState(error: unknown): MemberFormState {
+  if (isServiceError(error) && error.code === "invalid") {
+    return { errors: error.fields, message: error.message };
+  }
+  if (isServiceError(error) && error.code === "not_found") notFound();
+  throw error;
 }
 
 /**
@@ -54,26 +72,20 @@ export async function createMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requirePermission("members.create");
+  const user = await requirePermission("members.create");
 
-  const parsed = readMemberForm(formData);
-  if (!parsed.success) {
-    return {
-      errors: fieldErrors(parsed.error),
-      message: "Please fix the highlighted fields.",
-    };
+  let member;
+  try {
+    member = await membersService.createMember(user, readMemberForm(formData));
+  } catch (error) {
+    return toFormState(error);
   }
-
-  const [row] = await db
-    .insert(members)
-    .values({ qrToken: nanoid(16), ...parsed.data })
-    .returning({ id: members.id });
 
   revalidatePath("/members");
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
-  revalidateCellGroups(parsed.data.cellGroupId);
-  redirect(`/members/${row.id}`);
+  revalidateCellGroups(member.cellGroupId);
+  redirect(`/members/${member.id}`);
 }
 
 export async function updateMember(
@@ -81,46 +93,43 @@ export async function updateMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  await requirePermission("members.update");
+  const user = await requirePermission("members.update");
 
-  const parsed = readMemberForm(formData);
-  if (!parsed.success) {
-    return {
-      errors: fieldErrors(parsed.error),
-      message: "Please fix the highlighted fields.",
-    };
+  let result;
+  try {
+    result = await membersService.updateMember(
+      user,
+      id,
+      readMemberForm(formData),
+    );
+  } catch (error) {
+    return toFormState(error);
   }
-
-  const previous = await db.query.members.findFirst({
-    where: eq(members.id, id),
-    columns: { cellGroupId: true },
-  });
-
-  const [updated] = await db
-    .update(members)
-    .set({ ...parsed.data, updatedAt: new Date() })
-    .where(eq(members.id, id))
-    .returning({ cellGroupId: members.cellGroupId });
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
-  // `previous` may differ from the new value when the member was moved.
-  revalidateCellGroups(previous?.cellGroupId, updated?.cellGroupId);
+  // The previous group differs from the new one when the member was moved.
+  revalidateCellGroups(result.previousCellGroupId, result.member.cellGroupId);
   redirect(`/members/${id}`);
 }
 
 export async function deleteMember(id: string) {
-  await requirePermission("members.delete");
-  const [deleted] = await db
-    .delete(members)
-    .where(eq(members.id, id))
-    .returning({ cellGroupId: members.cellGroupId });
+  const user = await requirePermission("members.delete");
+
+  let cellGroupId: string | null = null;
+  try {
+    ({ cellGroupId } = await membersService.deleteMember(user, id));
+  } catch (error) {
+    // Already gone — a double click, or someone else got there first.
+    if (!isServiceError(error) || error.code !== "not_found") throw error;
+  }
+
   revalidatePath("/members");
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
-  revalidateCellGroups(deleted?.cellGroupId);
+  revalidateCellGroups(cellGroupId);
   redirect("/members");
 }
 
@@ -128,27 +137,19 @@ export type ReactivateResult =
   | { status: "ok" }
   | { status: "error"; message: string };
 
-/**
- * Mark a lapsed member active again — what check-in offers when someone who
- * had stopped attending walks back in. Only a lapsed status is replaced, so a
- * stale prompt cannot flip a member someone has since edited.
- */
+/** See `reactivateMember` in server/members.ts for the rule. */
 export async function reactivateMember(
   memberId: string,
 ): Promise<ReactivateResult> {
-  await requirePermission("members.update");
+  const user = await requirePermission("members.update");
 
-  const [updated] = await db
-    .update(members)
-    .set({ status: "active", updatedAt: new Date() })
-    .where(and(eq(members.id, memberId), inArray(members.status, LAPSED_STATUSES)))
-    .returning({ id: members.id });
-
-  if (!updated) {
-    return {
-      status: "error",
-      message: "This member’s status has already changed.",
-    };
+  try {
+    await membersService.reactivateMember(user, memberId);
+  } catch (error) {
+    if (isServiceError(error) && error.code === "conflict") {
+      return { status: "error", message: error.message };
+    }
+    throw error;
   }
 
   revalidatePath("/members");

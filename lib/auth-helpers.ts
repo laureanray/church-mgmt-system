@@ -1,24 +1,14 @@
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
-import { db } from "@/db";
-import { rolePermissions, roles, users } from "@/db/schema";
 import type { PermissionKey } from "@/lib/permissions";
+import { loadSessionUser, type SessionUser } from "@/lib/session-user";
 import { createClient } from "@/lib/supabase/server";
 import { verifiedUserId } from "@/lib/supabase/verify";
 
-/** The signed-in staff member: Supabase identity joined to their profile row. */
-export type SessionUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: { id: string; name: string };
-  permissions: PermissionKey[];
-  mustChangePassword: boolean;
-};
+export type { SessionUser };
 
 /**
  * Returns the signed-in user, or redirects to /login if there is none.
@@ -40,32 +30,7 @@ export const requireUser = cache(async function requireUser(): Promise<SessionUs
     redirect("/login");
   }
 
-  // One round trip, not two. The permissions ride along as an array rather
-  // than being fetched once the role is known, because this runs before every
-  // page and every action: a second sequential query here was a second
-  // sequential query everywhere.
-  const [profile] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      mustChangePassword: users.mustChangePassword,
-      roleId: roles.id,
-      roleName: roles.name,
-      // The FILTER keeps a role with no permissions at `{}`; a bare array_agg
-      // over the left join's lone NULL row would return `{NULL}`.
-      permissions: sql<string[]>`coalesce(
-        array_agg(${rolePermissions.permissionKey})
-          filter (where ${rolePermissions.permissionKey} is not null),
-        '{}'
-      )`,
-    })
-    .from(users)
-    .innerJoin(roles, eq(users.roleId, roles.id))
-    .leftJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
-    .where(eq(users.id, userId))
-    .groupBy(users.id, roles.id)
-    .limit(1);
+  const user = await loadSessionUser(userId);
 
   // Authenticated in Supabase but with no profile row — an account created
   // outside the admin screens. Refuse rather than guess a role, since role is
@@ -74,18 +39,11 @@ export const requireUser = cache(async function requireUser(): Promise<SessionUs
   // Not /login: proxy.ts bounces authenticated users off that route to
   // /dashboard, which calls this again and loops. /no-access is a terminal page
   // that never calls requireUser and offers a client-side sign-out.
-  if (!profile) {
+  if (!user) {
     redirect("/no-access");
   }
 
-  return {
-    id: profile.id,
-    name: profile.name,
-    email: profile.email,
-    role: { id: profile.roleId, name: profile.roleName },
-    permissions: profile.permissions as PermissionKey[],
-    mustChangePassword: profile.mustChangePassword,
-  };
+  return user;
 });
 
 /**

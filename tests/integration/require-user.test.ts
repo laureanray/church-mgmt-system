@@ -14,6 +14,7 @@ await mock.module("@/db", () => ({ db: database.db }));
 await mock.module("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 await mock.module("@/lib/supabase/verify", () => ({
   verifiedUserId: async () => signedInAs,
+  verifyAccessToken: async () => null,
 }));
 await mock.module("next/navigation", () => ({
   redirect: (path: string) => {

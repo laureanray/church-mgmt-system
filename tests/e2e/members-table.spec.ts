@@ -137,6 +137,17 @@ test.describe('members table', () => {
     await expect(page.getByText(`Showing 21–${COUNT} of ${COUNT} rows`)).toBeVisible();
   });
 
+  test('a search longer than the service accepts still renders the table', async ({
+    page,
+  }) => {
+    await signIn(page);
+    // The service rejects a search over 200 characters; the page trims a
+    // pasted URL to fit rather than falling through to the error boundary.
+    await page.goto(`/members?q=${encodeURIComponent(PREFIX + ' ' + 'x'.repeat(250))}`);
+
+    await expect(page.getByText('No members match your search')).toBeVisible();
+  });
+
   test('hiding a column is recorded in the URL and survives a reload', async ({
     page,
   }) => {

@@ -64,8 +64,10 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all routes except Next internals and static assets.
+  // Run on all routes except Next internals, static assets and the HTTP API.
+  // /api authenticates each request by bearer token (server/http.ts) and must
+  // answer 401, not redirect a native client to a sign-in page.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)",
+    "/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)",
   ],
 };

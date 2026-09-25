@@ -143,6 +143,26 @@ is built.
 action: someone whose *search* missed is one click from creating a duplicate of
 the record they were looking for.
 
+## Business logic lives in `server/`; the web app and the API are adapters
+
+`server/<module>.ts` holds a module's rules: each function takes an `Actor`,
+calls `authorize(actor, "module.action")`, parses its input with the zod
+schema via `parseInput`, and returns data or throws a `ServiceError`. It never
+touches cookies, `Request`, `FormData`, `redirect` or `revalidatePath`.
+
+Pages and server actions import the service **directly**; the HTTP API under
+`app/api/v1/` wraps the same service with `apiRoute` from `server/http.ts`. The
+web app does not `fetch` its own API — that is an extra round trip per page for
+nothing. `docs/api.md` is the full account; `server/members.ts` is the
+reference, and so far the only module migrated.
+
+- The API authenticates with `Authorization: Bearer <Supabase access token>`
+  (`userFromAuthorizationHeader` in `lib/session-user.ts`), never the session
+  cookie, and `proxy.ts` excludes `/api/` so it answers 401 rather than
+  redirecting.
+- A route handler that grows past a few lines is hiding a rule that belongs
+  in the service.
+
 ## Forms are server actions over FormData
 
 There is no form library. Every form follows one shape — `service-form.tsx` plus
@@ -152,13 +172,17 @@ There is no form library. Every form follows one shape — `service-form.tsx` pl
    `(prev: XFormState, formData: FormData) => Promise<XFormState>`.
 2. The action calls `requirePermission("module.action")` first, then parses `FormData` with a
    zod schema from `lib/validators.ts`, returning
-   `{ errors: fieldErrors(parsed.error), message }` when parsing fails.
+   `{ errors: fieldErrors(parsed.error), message }` when parsing fails. In a
+   module migrated to `server/` (members), the action passes the FormData
+   fields to the service instead, and turns its `invalid` error into that
+   same form state — `app/(app)/members/actions.ts`.
 3. On success: mutate, `revalidatePath()` each affected route, then `redirect()`.
 4. The client component drives it with `useActionState(action, undefined)` and
    wraps each input in `<Field label htmlFor error>` from `components/form/field.tsx`.
 
-Validators normalise empty strings to `null` (`emptyToNull`), so optional
-columns stay nullable rather than filling with `""`.
+Validators normalise empty strings — and absent fields, which is how a JSON
+body leaves one out — to `null` (`emptyToNull`), so optional columns stay
+nullable rather than filling with `""`.
 
 ## Auth
 
