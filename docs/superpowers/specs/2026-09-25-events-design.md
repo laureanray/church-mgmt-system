@@ -4,6 +4,7 @@
 **Status:** Draft, awaiting review
 **Implementation plan:** `docs/superpowers/plans/2026-09-25-events.md`
 **Revision 3:** events are single-day and have their own attendance; sessions-as-services is dropped (§3.1).
+**Revision 4:** built from scratch on the current `main`, which has the `server/` services, the audit log, and ministry grants (§3.7). The unused `special_event` service type is removed.
 
 ## 1. Purpose
 
@@ -22,8 +23,10 @@ a fellowship night, or an anniversary celebration. Running one means:
 5. **Taking attendance** on the day, through the `/scan` page, recorded
    against the event itself.
 
-Today the only related concept is `services.type = "special_event"`. It is a
-single timestamp with no category, no end date, and nothing attached to it.
+Events are **new**, and nothing in production depends on an earlier version.
+The only related concept is the `special_event` value of `services.type`,
+which is unused. Phase 1 removes it, so special occasions are always events
+and never a kind of service.
 
 This design builds all five pieces **specifically for events**. Pure logic
 (Manila time, money, balances, due-date shifting) lives in `lib/`. Generic UI
@@ -128,8 +131,8 @@ the status facet already filters by it.
   actor, the time, and a reason. It never overwrites the history.
 - Payments are **never updated or deleted**. A mistake is **voided**, which
   records who voided it, when, and why, and is then re-entered. Volunteers
-  handle cash, and the ledger has to be auditable without a general audit log
-  (#30). Any payment row, **voided or not**, makes its registration and its
+  handle cash, so the ledger itself must show every entry to the people who
+  work the desk, beyond the admin-only audit log (§3.7). Any payment row, **voided or not**, makes its registration and its
   event undeletable.
 - **The charge is not the same as what is currently owed.** What a person owes
   right now is the **effective amount due**, derived from the registration
@@ -179,6 +182,31 @@ hours off. Events do not inherit this. `lib/manila-time.ts` converts between
 `datetime-local` / `YYYY-MM-DD` strings and instants **explicitly in
 `Asia/Manila`**, and every event form, program item, and task due date goes
 through it. The same bug in services should be filed and fixed separately.
+
+### 3.7 Built on the current architecture
+
+Events follow the conventions `main` has today:
+
+- **Rules live in `server/`.** Each events module is a `server/` service in
+  the shape of `server/members.ts`: it takes an `Actor`, calls `authorize`
+  and `parseInput`, and throws `ServiceError`. Server actions and pages are
+  adapters. No HTTP API routes ship in v1, but adding them later is only
+  wiring through `apiRoute`.
+- **Every mutation is audited** with `recordAudit(tx, …)` inside the same
+  transaction, under new `event*` audit entities and actions. The
+  domain-facing histories (the payment ledger and charge history) are
+  **still** tables of their own. The audit log is an admin-only
+  (`audit.view`) record of who did what. The ledger is what the registration
+  desk and treasurer read to know what is owed. **Event check-ins are
+  exempt**, as `recordAttendance` is, because `recorded_by` already says who.
+- **Permissions can come from ministries.** The `events` module is not role
+  only, so an active ministry (for example, an events committee or a finance
+  team) can grant `events.*` keys to the people on its roster. Every check
+  uses the merged `effectivePermissions`, so nothing event-specific is
+  needed.
+- **One query batch per page.** Counts, sums, and settlements are computed in
+  the page's single `Promise.all` batch with grouped SQL, and the sidebar
+  link is an `IntentLink` (`docs/performance.md`).
 
 ## 4. Data model
 
@@ -391,6 +419,9 @@ permission rows and grants, following `docs/authorization.md`.
 `attendance.record` checks someone in, whether the target is a service or an
 event. The same door staff do both, and a separate key would only let the
 two drift apart. Seeing an event's attendance list needs `events.view`.
+
+These are the **role** defaults seeded by the migration. A ministry can grant
+any of these keys as well (§3.7).
 
 Ushers staff the registration desk, so they can register people and take
 payments, but they cannot change a charge, keep a cancellation fee, refund,
@@ -643,8 +674,11 @@ Category colours are the token **names** `chart-1`…`chart-5`, which exist in
 
 ### 8.6 Outside `/events`
 
-- **Sidebar**: an "Events" item, gated on `events.view`, placed after
-  Services.
+- **Sidebar**: an "Events" `IntentLink` item, gated on `events.view`,
+  placed after Services.
+- **Services**: the `special_event` type is removed from the service form,
+  the schema enum, and the constants (phase 1). The migration refuses to run
+  if any row still uses it.
 - **`/scan`**: events appear in the target picker (§7.4).
 - **`/members/[id]`**: an "Events" card listing the member's registrations
   with their balance, and event check-ins added to the attendance history
@@ -734,6 +768,16 @@ integration test, and "E" an E2E test.
 | L5 | A task due 60 days before the event → accepted. A task due 15 days after the event → refused. | U |
 | L6 | An event with one check-in → delete is refused. | I |
 | L7 | An event whose end is on a different Manila day from its start → refused by the validator. So is an end before the start. | U |
+| M1 | A member with an event registration is deleted → a `ServiceError` explaining why, not a 500. The member and the registration remain. (Phase 2.) | I |
+
+**Platform (phase 1 onward)**
+
+| # | Given → when → then | Level |
+| --- | --- | --- |
+| AU1 | Each events mutation (per phase) → exactly one audit entry with the actor, entity, entity id, and summary. The same call failing validation → no entry. A write that rolls back → no entry. | I |
+| AU2 | An event check-in → an `event_attendance` row with `recorded_by`, and no audit entry (exempt, like service check-ins). | I |
+| SE1 | The service form no longer offers "Special Event". The migration's guard raises if a `services` or `service_schedules` row has `type = 'special_event'`, and passes on a clean database. | I |
+| P1 | A user whose role lacks `events.register` but who serves in an **active** ministry granting it → can register people. The same ministry set inactive → refused. | I |
 
 ## 10. Delivery
 
@@ -750,8 +794,9 @@ Phase 1 ships the shared `MemberPicker` and `MoneyInput`, so phases 2, 4, and
 phase 2.
 
 1. **Events core**: categories, events, event attendance and check-in from
-   `/scan` (§7.4), the shell and tabs, the list, and the shared
-   `MemberPicker` and `MoneyInput`.
+   `/scan` (§7.4), the shell and tabs, the list, the shared `MemberPicker`
+   and `MoneyInput`, `server/events.ts` with auditing, and removing
+   `special_event` from services.
 2. **Registration and fees**: fee tiers, registrations, charge history,
    inline visitors, and capacity/waitlist under the seat protocol.
 3. **Payments**: ledger, record/void/refund, balances, finance stats, and
@@ -761,7 +806,7 @@ phase 2.
 5. **Planning**: the task checklist, milestones, and copying from a past
    event.
 6. **Integration polish**: `/scan` registration hints, the member events card
-   and history, the dashboard card, and retiring `special_event` services.
+   and history, and the dashboard card.
 
 ## 11. Decisions made on the user's behalf
 
@@ -780,6 +825,11 @@ These can be changed in review. Each is marked in the text above.
    keys rather than new event-specific ones (§6).
 8. The system categories are Conference, Training, Outreach, Fellowship,
    Celebration, Baptism, and Other. Their names are editable (§4.1).
+9. The payment ledger and charge history stay as domain tables **in
+   addition to** audit entries, because the audit log is admin-only and the
+   desk needs the ledger (§3.7).
+10. `events.*` keys are ministry-grantable (§3.7).
+11. No `app/api/v1` routes for events in v1 (§3.7).
 
 ## 12. Candidate follow-ups (not planned)
 
@@ -788,7 +838,11 @@ These can be changed in review. Each is marked in the text above.
   result.
 - Custom registration fields per event (t-shirt size, allergies), as typed
   `event_registration_fields` plus answers.
-- Volunteer roles and rosters (`event_roles`, `event_volunteers`).
+- Volunteers per event, drawing from **ministry rosters** (which exist now)
+  rather than a new roster concept.
+- A worship line-up for an event, reusing the LAM line-up model that services
+  have.
+- `app/api/v1/events` routes over the `server/` services.
 - Audience targeting by cell-group network, feeding the absentee reports
   (#24).
 - A printable or shareable receipt per payment.
