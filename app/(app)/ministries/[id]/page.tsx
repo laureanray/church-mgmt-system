@@ -75,27 +75,25 @@ export default async function MinistryDetailPage({
   const { id } = await params;
   if (!canViewMinistry(user, id)) redirect("/no-access");
 
-  const ministry = await db.query.ministries.findFirst({
-    where: eq(ministries.id, id),
-  });
-  if (!ministry) notFound();
-
-  const ctx = tableContext(`/ministries/${ministry.id}`, await searchParams, {
+  const ctx = tableContext(`/ministries/${id}`, await searchParams, {
     sortKeys: Object.keys(SORT_COLUMNS),
     // "head" sorts before "member", so heads lead the roster.
     defaultSort: "position",
   });
   const { state } = ctx;
 
-  const onRoster = eq(ministryMembers.ministryId, ministry.id);
+  const onRoster = eq(ministryMembers.ministryId, id);
   const where = and(
     onRoster,
     state.query ? ilike(members.fullName, `%${state.query}%`) : undefined,
   );
   const direction = state.direction === "asc" ? asc : desc;
-  const manageRoster = canManageRoster(user, ministry.id);
+  const manageRoster = canManageRoster(user, id);
 
-  const [roster, [{ matching }], grants, candidates] = await Promise.all([
+  // Everything is keyed by the id from the URL, so the ministry itself joins
+  // the batch rather than going first; a missing one is a 404 afterwards.
+  const [ministry, roster, [{ matching }], grants, candidates] = await Promise.all([
+    db.query.ministries.findFirst({ where: eq(ministries.id, id) }),
     db
       .select({
         memberId: members.id,
@@ -122,7 +120,7 @@ export default async function MinistryDetailPage({
     db
       .select({ key: ministryPermissions.permissionKey })
       .from(ministryPermissions)
-      .where(eq(ministryPermissions.ministryId, ministry.id)),
+      .where(eq(ministryPermissions.ministryId, id)),
     manageRoster
       ? db
           .select({ value: members.id, label: members.fullName })
@@ -139,6 +137,8 @@ export default async function MinistryDetailPage({
           .orderBy(asc(members.fullName), asc(members.id))
       : Promise.resolve([]),
   ]);
+
+  if (!ministry) notFound();
 
   const clamped = overRunPage(state, matching);
   if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
