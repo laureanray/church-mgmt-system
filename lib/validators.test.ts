@@ -211,7 +211,7 @@ describe("ministrySchema", () => {
   });
 
   it("rejects a permission a ministry may not grant", () => {
-    for (const key of ["users.update", "roles.update", "ministries.update", "settings.update"]) {
+    for (const key of ["users.update", "roles.update", "ministries.update", "settings.update", "audit.view"]) {
       expect(
         ministrySchema.safeParse({
         name: "LAM",

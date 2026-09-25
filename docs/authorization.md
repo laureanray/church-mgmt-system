@@ -33,9 +33,9 @@ effective permissions = role permissions
 Ministries only add. Four rules keep that from becoming a route around roles:
 
 - **Role-only modules.** `ROLE_ONLY_MODULES` in `lib/permissions.ts` — staff
-  users, roles, ministries, settings — can never be granted by a ministry. The
-  ministry validator rejects them, and `effectivePermissions` ignores any such
-  row that reaches the database some other way.
+  users, roles, ministries, settings, the audit log — can never be granted by a
+  ministry. The ministry validator rejects them, and `effectivePermissions`
+  ignores any such row that reaches the database some other way.
 - **Heads manage their own roster, nothing more.** A roster member with
   position `head` can add and remove members of that ministry without any
   module permission (`canManageRoster`). Only `ministries.update` appoints
@@ -101,7 +101,8 @@ for its own authorization.
 
 `audit.view` (module `audit`) opens `/settings/audit` and the History tab on a
 member's page. Migration 0009 grants it to Admin only: the log names who
-changed staff accounts and roles, so give it to another role deliberately. The
+changed staff accounts and roles, so give it to another role deliberately. A
+ministry cannot grant it: `audit` is a role-only module. The
 log is append-only from the application's side — no action edits or deletes an
 entry; only `bun run audit:prune` removes expired ones.
 

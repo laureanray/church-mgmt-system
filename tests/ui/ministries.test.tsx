@@ -19,7 +19,7 @@ describe("PermissionMatrix", () => {
 
   test("offers a ministry only what it may grant", () => {
     render(<MinistryScope />);
-    for (const roleOnly of ["Staff Users", "Roles & Permissions", "Ministries", "Settings"]) {
+    for (const roleOnly of ["Staff Users", "Roles & Permissions", "Ministries", "Settings", "Audit Log"]) {
       expect(screen.queryByRole("group", { name: roleOnly })).toBeNull();
     }
     expect(screen.getByRole("group", { name: "LAM" })).toBeInTheDocument();

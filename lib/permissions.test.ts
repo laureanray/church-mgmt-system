@@ -47,6 +47,8 @@ describe("ministry-grantable permissions", () => {
     }
     expect(isMinistryGrantable("users.update")).toBe(false);
     expect(isMinistryGrantable("ministries.update")).toBe(false);
+    // The log names who changed staff accounts and roles.
+    expect(isMinistryGrantable("audit.view")).toBe(false);
     expect(isMinistryGrantable("lam.lineups_update")).toBe(true);
   });
 

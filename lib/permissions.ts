@@ -164,13 +164,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<
  * Modules a ministry may never grant. Ministry rosters are edited by ministry
  * heads, not only by administrators, so anything that confers control over
  * accounts, authorization, or ministries themselves would let a head escalate
- * a member past what an administrator chose. Those stay with roles.
+ * a member past what an administrator chose. Those stay with roles — as does
+ * the audit log, which names who changed staff accounts and roles.
  */
 export const ROLE_ONLY_MODULES = [
   "users",
   "roles",
   "ministries",
   "settings",
+  "audit",
 ] as const satisfies readonly AppModuleKey[];
 
 const roleOnlyModuleSet = new Set<string>(ROLE_ONLY_MODULES);
