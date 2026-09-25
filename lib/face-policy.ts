@@ -230,11 +230,21 @@ export function motionBetween(a: Uint8Array | null, b: Uint8Array): number {
  * happened; the decisions live here so they can be tested without a camera.
  */
 export class FaceScanGate {
-  private lastMotionAt = -Infinity;
-  private lastSentAt = -Infinity;
-  private pausedUntil = -Infinity;
-  private inFlight = false;
-  private readonly recent = new Map<string, number>();
+  private lastMotionAt: number;
+  private lastSentAt: number;
+  private pausedUntil: number;
+  private inFlight: boolean;
+  private readonly recent: Map<string, number>;
+
+  // Set here rather than as field initialisers: Bun's coverage counts those
+  // as a separate function it never marks as run, even when the class is.
+  constructor() {
+    this.lastMotionAt = -Infinity;
+    this.lastSentAt = -Infinity;
+    this.pausedUntil = -Infinity;
+    this.inFlight = false;
+    this.recent = new Map();
+  }
 
   /** Record the latest motion measurement; returns whether it counts. */
   observe(motion: number, now: number): boolean {

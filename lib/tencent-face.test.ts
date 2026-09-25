@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 import {
   deleteFaceGroup,
+  describeFaceGroup,
   enrollFacePerson,
   ensureFaceGroup,
   faceConfig,
+  isFaceConfigured,
+  isTencentFaceError,
   removeFacePerson,
   searchFace,
   TencentFaceError,
@@ -50,6 +53,16 @@ afterEach(() => {
 });
 
 describe("faceConfig", () => {
+  it("reads the environment for isFaceConfigured", () => {
+    expect(isFaceConfigured()).toBe(true);
+    delete process.env.TENCENTCLOUD_SECRET_KEY;
+    expect(isFaceConfigured()).toBe(false);
+  });
+
+  it("honours another region", () => {
+    expect(faceConfig({ ...ENV, TENCENTCLOUD_REGION: " ap-hongkong " })?.region).toBe("ap-hongkong");
+  });
+
   it("is off unless the keys and the group are all set", () => {
     expect(faceConfig({})).toBeNull();
     expect(faceConfig({ ...ENV, FACE_GROUP_ID: " " })).toBeNull();
@@ -200,5 +213,53 @@ describe("deleteFaceGroup", () => {
     expect(sent[0]).toMatchObject({ action: "DeleteGroup", body: { GroupId: "irm-test" } });
     tencent(failure("InvalidParameterValue.GroupIdNotExist"));
     await deleteFaceGroup();
+  });
+});
+
+describe("describeFaceGroup", () => {
+  it("counts the people and photos in this deployment's group", async () => {
+    tencent({ PersonNum: 3, FaceNum: 4 });
+    expect(await describeFaceGroup()).toEqual({ people: 3, faces: 4 });
+    expect(sent[0]).toMatchObject({ action: "GetPersonList", body: { GroupId: "irm-test", Limit: 1 } });
+    tencent({});
+    expect(await describeFaceGroup()).toEqual({ people: 0, faces: 0 });
+  });
+});
+
+describe("transport failures", () => {
+  function failWith(respond: () => Promise<Response>) {
+    globalThis.fetch = mock(respond) as unknown as typeof fetch;
+  }
+
+  it("reports a timeout as the app's own code", async () => {
+    failWith(async () => {
+      throw new DOMException("timed out", "TimeoutError");
+    });
+    await expect(searchFace(new Uint8Array([1]))).rejects.toMatchObject({ code: "ClientTimeout" });
+  });
+
+  it("reports an unreachable endpoint as a network error", async () => {
+    failWith(async () => {
+      throw new TypeError("fetch failed");
+    });
+    const error = await searchFace(new Uint8Array([1])).catch((e) => e);
+    expect(isTencentFaceError(error)).toBe(true);
+    expect(error).toMatchObject({ code: "ClientNetworkError", message: expect.stringContaining("fetch failed") });
+  });
+
+  it("refuses a reply that is not Tencent's JSON", async () => {
+    failWith(async () => new Response("<html>bad gateway</html>", { status: 502 }));
+    await expect(searchFace(new Uint8Array([1]))).rejects.toMatchObject({
+      code: "ClientNetworkError",
+      message: expect.stringContaining("HTTP 502"),
+    });
+    failWith(async () => Response.json({ nothing: true }));
+    await expect(searchFace(new Uint8Array([1]))).rejects.toMatchObject({
+      message: expect.stringContaining("no Response"),
+    });
+  });
+
+  it("is not mistaken for any other error", () => {
+    expect(isTencentFaceError(new Error("x"))).toBe(false);
   });
 });
