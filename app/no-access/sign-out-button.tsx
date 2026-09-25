@@ -22,6 +22,9 @@ export function SignOutButton() {
         setPending(true);
         await createClient().auth.signOut();
         // Full reload so proxy.ts re-evaluates without the session cookie.
+        // Deliberately not router.push: a hard navigation also drops the
+        // client router cache (staleTimes) of pages rendered for the session.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- see above
         window.location.href = "/login";
       }}
     >
