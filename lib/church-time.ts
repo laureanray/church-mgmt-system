@@ -96,12 +96,20 @@ const DATETIME_LOCAL = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/;
 /**
  * An `<input type="datetime-local">` value, read as church time. The input
  * carries no zone, so `new Date(value)` would read it in the server's.
+ *
+ * A value the calendar does not have — 30 February, month 13, 25:00 — is
+ * refused rather than rolled into another day: the date picker never sends
+ * one, but the HTTP API accepts whatever a client posts.
  */
 export function parseChurchDateTime(value: string): Date | null {
   const match = DATETIME_LOCAL.exec(value);
   if (!match) return null;
-  const instant = zonedInstant(match[1], match[2]);
-  return Number.isNaN(instant.getTime()) ? null : instant;
+  const [, date, time] = match;
+  // Four and two digits apiece, so the instant is always a real number; the
+  // read-back is what catches values out of range.
+  const instant = zonedInstant(date, time);
+  const readBack = wallClock(instant);
+  return readBack.date === date && readBack.time === time ? instant : null;
 }
 
 /** The `<input type="datetime-local">` value that shows `instant` in church time. */

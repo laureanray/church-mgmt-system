@@ -321,3 +321,15 @@ describe("serviceSchema", () => {
     expect(parsed.success).toBe(false);
   });
 });
+
+describe("serviceSchema impossible dates", () => {
+  it("refuses a date and time the calendar does not have", () => {
+    const parsed = serviceSchema.safeParse({
+      name: "Sunday Service",
+      type: "sunday_service",
+      scheduledAt: "2026-02-30T09:00",
+    });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toBe("Pick a valid date and time");
+  });
+});
