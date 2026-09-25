@@ -73,6 +73,7 @@ maps `ServiceError` codes to status codes:
 | `not_found` | 404 |
 | `conflict` | 409 |
 | `invalid` | 422, with `fields` |
+| `unavailable` | 503 — an outside service (face recognition) is off or not answering |
 | anything else | 500, logged, body carries no detail |
 
 Errors are always `{ "error": { "code", "message", "fields"? } }`.

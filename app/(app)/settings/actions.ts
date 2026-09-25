@@ -15,6 +15,8 @@ import {
   saveSheetsConfig,
   type SyncResult,
 } from "@/lib/sheets";
+import { isServiceError } from "@/server/errors";
+import * as facesService from "@/server/faces";
 
 export type SaveSettingsState =
   | { ok?: boolean; error?: string; message?: string }
@@ -72,4 +74,52 @@ export async function syncServiceAttendance(
   await requirePermission("services.sync");
   const rows = await buildRowsForService(serviceId);
   return pushRows(rows);
+}
+
+export type FaceConsentNoticeState =
+  | { ok?: boolean; errors?: Record<string, string>; message?: string }
+  | undefined;
+
+/** Reword the consent notice shown before a face is enrolled. */
+export async function saveFaceConsentNotice(
+  _prev: FaceConsentNoticeState,
+  formData: FormData,
+): Promise<FaceConsentNoticeState> {
+  const actor = await requirePermission("settings.update");
+  try {
+    await facesService.saveFaceConsentNotice(actor, formData.get("notice"));
+  } catch (error) {
+    if (isServiceError(error) && error.code === "invalid") {
+      // The schema validates a bare string, so its message has no field key.
+      const message = Object.values(error.fields ?? {})[0] ?? error.message;
+      return { errors: { notice: message }, message };
+    }
+    throw error;
+  }
+  revalidatePath("/settings");
+  return { ok: true, message: "Consent notice saved." };
+}
+
+export type FacePurgeResult =
+  | { status: "ok"; removed: number }
+  | { status: "error"; message: string };
+
+/** Delete every enrolled face, here and in Tencent. See purgeAllFaceData. */
+export async function purgeFaceData(confirmation: string): Promise<FacePurgeResult> {
+  const actor = await requirePermission("settings.update");
+  let removed: number;
+  try {
+    ({ removed } = await facesService.purgeAllFaceData(actor, confirmation));
+  } catch (error) {
+    if (
+      isServiceError(error) &&
+      (error.code === "invalid" || error.code === "unavailable")
+    ) {
+      return { status: "error", message: error.message };
+    }
+    throw error;
+  }
+  revalidatePath("/settings");
+  revalidatePath("/members", "layout");
+  return { status: "ok", removed };
 }

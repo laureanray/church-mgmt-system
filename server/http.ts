@@ -18,6 +18,7 @@ const STATUS: Record<ServiceErrorCode, number> = {
   not_found: 404,
   invalid: 422,
   conflict: 409,
+  unavailable: 503,
 };
 
 export type ApiErrorBody = {

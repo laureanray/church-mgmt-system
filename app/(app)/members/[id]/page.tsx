@@ -4,6 +4,11 @@ import { notFound, redirect } from "next/navigation";
 import { CalendarCheck, Pencil } from "lucide-react";
 
 import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
+import {
+  deleteMember,
+  enrollMemberFace,
+  removeMemberFace,
+} from "@/app/(app)/members/actions";
 import { db } from "@/db";
 import {
   attendance,
@@ -41,6 +46,7 @@ import { PageContainer } from "@/components/patterns/page-container";
 import { FormSelect } from "@/components/form/form-select";
 import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
+import { FaceEnrollmentCard } from "@/components/members/face-enrollment-card";
 import { MemberMinistries } from "@/components/ministries/member-ministries";
 import { canViewMinistry } from "@/lib/ministry-access";
 import { MemberQr } from "@/components/members/member-qr";
@@ -55,6 +61,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  faceCheckInEnabled,
+  getFaceConsentNotice,
+  getFaceEnrollment,
+} from "@/server/faces";
 
 type HistoryRow = {
   id: string;
@@ -132,6 +143,8 @@ export default async function MemberDetailPage({
     auditCount,
     memberMinistries,
     login,
+    face,
+    consentNotice,
   ] =
     await Promise.all([
       generateQrDataUrl(member.qrToken),
@@ -203,6 +216,8 @@ export default async function MemberDetailPage({
             columns: { id: true, email: true },
           })
         : Promise.resolve(undefined),
+      getFaceEnrollment(user, member.id),
+      getFaceConsentNotice(user),
     ]);
 
   const clampedHistoryPage = overRunPage(historyState, attendedCount);
@@ -305,7 +320,11 @@ export default async function MemberDetailPage({
               </Link>
             ) : null}
             {canDelete ? (
-              <DeleteMemberButton id={member.id} name={member.fullName} />
+              <DeleteMemberButton
+                id={member.id}
+                name={member.fullName}
+                deleteMember={deleteMember}
+              />
             ) : null}
           </div>
         ) : null}
@@ -388,6 +407,29 @@ export default async function MemberDetailPage({
               </p>
             </CardContent>
           </Card>
+
+          <FaceEnrollmentCard
+            className="mt-6"
+            memberName={member.fullName}
+            configured={faceCheckInEnabled()}
+            enrollment={
+              face
+                ? {
+                    enrolledAt: face.enrolledAt.toISOString(),
+                    enrolledByName: face.enrolledByName,
+                    consentAt: face.consentAt.toISOString(),
+                    consentRecordedByName: face.consentRecordedByName,
+                    // Versioned by enrolment time, so a replaced photo is
+                    // fetched afresh rather than served from the cache.
+                    photoUrl: `/members/${member.id}/face-photo?v=${face.enrolledAt.getTime()}`,
+                  }
+                : null
+            }
+            consentNotice={consentNotice}
+            canEdit={canUpdate}
+            enroll={enrollMemberFace.bind(null, member.id)}
+            remove={removeMemberFace.bind(null, member.id)}
+          />
 
           <Card className="mt-6">
             <CardHeader>

@@ -1,7 +1,8 @@
 import type { ComponentProps } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-import type { CheckInResult, ScanResult } from "@/app/(app)/scan/actions";
+import type { AddVisitorState, CheckInResult, FaceScanResult, ScanResult } from "@/app/(app)/scan/actions";
+import { DEFAULT_FACE_CONSENT_NOTICE } from "@/lib/face-consent";
 import { Toaster } from "@/components/ui/sonner";
 import type { CheckInCandidate } from "@/server/attendance";
 import { ScannerPanel } from "./scanner-panel";
@@ -104,4 +105,53 @@ export const Scanning: Story = {
 
 export const NoServices: Story = {
   render: () => <Preview services={[]} />,
+};
+
+/**
+ * With face recognition configured, the camera looks for faces instead of QR
+ * codes. The fake recogniser checks Ana in, then keeps finding her again —
+ * which the screen does not repeat — so move in front of the camera to try it.
+ */
+export const FaceCheckIn: Story = {
+  render: () => {
+    const actions = fakeActions();
+    return (
+      <Preview
+        initialServiceId="sunday"
+        canReactivate
+        {...actions}
+        checkInByFace={async (serviceId): Promise<FaceScanResult> => {
+          const result = await actions.checkIn(serviceId, "ana");
+          if (result.status === "error") return { status: "no_match" };
+          return { status: "checked_in", checkIn: result, score: 97.4 };
+        }}
+      />
+    );
+  },
+};
+
+/**
+ * Staff who may add members get "Add a visitor" below the name search. With
+ * face check-in on, the visitor can be photographed as they are added.
+ */
+export const AddVisitor: Story = {
+  render: () => {
+    const actions = fakeActions();
+    return (
+      <Preview
+        initialServiceId="sunday"
+        {...actions}
+        consentNotice={DEFAULT_FACE_CONSENT_NOTICE}
+        addVisitor={async (_serviceId, _prev, formData): Promise<AddVisitorState> => {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          const name = `${formData.get("firstName") ?? ""} ${formData.get("lastName") ?? ""}`.trim();
+          if (!name) return { status: "error", message: "Please fix the highlighted fields.", errors: { firstName: "First name is required" } };
+          return {
+            status: "ok",
+            checkIn: { status: "ok", memberId: `visitor-${name}`, memberName: name, memberStatus: "visitor", at: new Date().toISOString() },
+          };
+        }}
+      />
+    );
+  },
 };

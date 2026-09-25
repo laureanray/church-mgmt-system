@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
 import { requirePermission } from "@/lib/auth-helpers";
+import { readFaceFields } from "@/lib/face-form";
 import { isServiceError } from "@/server/errors";
+import * as facesService from "@/server/faces";
 import * as membersService from "@/server/members";
+import * as newMembersService from "@/server/new-members";
 
 /*
  * The web adapter for server/members.ts. The rules live in the service; this
@@ -52,6 +55,11 @@ function toFormState(error: unknown): MemberFormState {
   if (isServiceError(error) && error.code === "invalid") {
     return { errors: error.fields, message: error.message };
   }
+  // Face recognition down while enrolling a new member's photo: nothing was
+  // created, and the form keeps what was typed.
+  if (isServiceError(error) && error.code === "unavailable") {
+    return { message: error.message };
+  }
   if (isServiceError(error) && error.code === "not_found") notFound();
   throw error;
 }
@@ -76,7 +84,13 @@ export async function createMember(
 
   let member;
   try {
-    member = await membersService.createMember(user, readMemberForm(formData));
+    // With a photo of their face (and consent) the member is created and
+    // enrolled together; without one this is a plain create.
+    member = await newMembersService.createMemberWithFace(
+      user,
+      readMemberForm(formData),
+      await readFaceFields(formData),
+    );
   } catch (error) {
     return toFormState(error);
   }
@@ -115,13 +129,19 @@ export async function updateMember(
   redirect(`/members/${id}`);
 }
 
-export async function deleteMember(id: string) {
+export type DeleteMemberResult = { error: string } | undefined;
+
+export async function deleteMember(id: string): Promise<DeleteMemberResult> {
   const user = await requirePermission("members.delete");
 
   let cellGroupId: string | null = null;
   try {
     ({ cellGroupId } = await membersService.deleteMember(user, id));
   } catch (error) {
+    // Their face could not be removed from Tencent, so nothing was deleted.
+    if (isServiceError(error) && error.code === "unavailable") {
+      return { error: error.message };
+    }
     // Already gone — a double click, or someone else got there first.
     if (!isServiceError(error) || error.code !== "not_found") throw error;
   }
@@ -155,5 +175,79 @@ export async function reactivateMember(
   revalidatePath("/members");
   revalidatePath(`/members/${memberId}`);
   revalidatePath("/dashboard");
+  return { status: "ok" };
+}
+
+export type FaceEnrollResult =
+  | {
+      status: "ok";
+      enrolledAt: string;
+      enrolledByName: string | null;
+      consentAt: string;
+      consentRecordedByName: string | null;
+    }
+  | { status: "error"; message: string };
+
+export type FaceRemoveResult = { status: "ok" } | { status: "error"; message: string };
+
+/** A refused photo or an unreachable Tencent becomes a message; the rest rethrows. */
+function toFaceError(error: unknown): { status: "error"; message: string } {
+  if (
+    isServiceError(error) &&
+    (error.code === "invalid" ||
+      error.code === "unavailable" ||
+      error.code === "not_found")
+  ) {
+    return { status: "error", message: error.message };
+  }
+  throw error;
+}
+
+/**
+ * Enrol the photo in `formData` ("photo", a JPEG the browser has already
+ * scaled down) as the member's face for check-in.
+ */
+export async function enrollMemberFace(
+  memberId: string,
+  formData: FormData,
+): Promise<FaceEnrollResult> {
+  const user = await requirePermission("members.update");
+
+  const file = formData.get("photo");
+  const photo =
+    file instanceof Blob ? new Uint8Array(await file.arrayBuffer()) : null;
+
+  let enrollment;
+  try {
+    enrollment = await facesService.enrollMemberFace(
+      user,
+      memberId,
+      photo,
+      formData.get("consent"),
+    );
+  } catch (error) {
+    return toFaceError(error);
+  }
+
+  revalidatePath(`/members/${memberId}`);
+  return {
+    status: "ok",
+    enrolledAt: enrollment.enrolledAt.toISOString(),
+    enrolledByName: enrollment.enrolledByName,
+    consentAt: enrollment.consentAt.toISOString(),
+    consentRecordedByName: enrollment.consentRecordedByName,
+  };
+}
+
+export async function removeMemberFace(
+  memberId: string,
+): Promise<FaceRemoveResult> {
+  const user = await requirePermission("members.update");
+  try {
+    await facesService.removeMemberFace(user, memberId);
+  } catch (error) {
+    return toFaceError(error);
+  }
+  revalidatePath(`/members/${memberId}`);
   return { status: "ok" };
 }

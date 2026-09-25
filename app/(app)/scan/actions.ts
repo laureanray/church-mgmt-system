@@ -11,16 +11,24 @@ import { extractToken } from "@/lib/qr";
 import * as attendanceService from "@/server/attendance";
 import type { CheckIn, CheckInCandidate } from "@/server/attendance";
 import { isServiceError } from "@/server/errors";
+import * as facesService from "@/server/faces";
+import * as newMembersService from "@/server/new-members";
+import { readFaceFields } from "@/lib/face-form";
+import type { FaceIdentification } from "@/server/faces";
 
 /*
- * The web adapter for server/attendance.ts: the check-in screen's actions.
- * Each way of identifying someone ends in the same service call, so a check-in
- * by name and one by QR code report duplicates identically.
+ * The web adapter for server/attendance.ts and server/faces.ts: the check-in
+ * screen's actions. Each way of identifying someone ends in the same service
+ * call, so a check-in by name, by face and by QR code report duplicates
+ * identically.
  */
 
 export type CheckInResult = CheckIn | { status: "error"; message: string };
 
 export type ScanResult = CheckInResult | { status: "not_found"; token: string };
+
+/** A face scan's outcome; `checked_in` carries the same `CheckIn` a name check-in returns. */
+export type FaceScanResult = FaceIdentification;
 
 async function checkIn(
   user: SessionUser,
@@ -104,4 +112,87 @@ export async function recordAttendance(
   }
 
   return checkIn(user, serviceId, member.id);
+}
+
+/**
+ * Look for an enrolled member in one camera frame ("frame" in `formData`, a
+ * small JPEG) and check them in to `serviceId` when the match is strong. See
+ * `identifyFace` in server/faces.ts. The frame is not kept.
+ */
+export async function checkInByFace(
+  serviceId: string,
+  formData: FormData,
+): Promise<FaceScanResult> {
+  const user = await requirePermission("attendance.record");
+
+  const file = formData.get("frame");
+  const frame =
+    file instanceof Blob ? new Uint8Array(await file.arrayBuffer()) : null;
+
+  let result: FaceScanResult;
+  try {
+    result = await facesService.identifyFace(user, serviceId, frame);
+  } catch (error) {
+    if (
+      isServiceError(error) &&
+      (error.code === "invalid" ||
+        error.code === "not_found" ||
+        error.code === "unavailable")
+    ) {
+      return { status: "problem", kind: "unavailable", message: error.message };
+    }
+    throw error;
+  }
+
+  if (result.status === "checked_in" && result.checkIn.status === "ok") {
+    revalidatePath(`/services/${serviceId}`);
+    revalidatePath("/dashboard");
+  }
+  return result;
+}
+
+export type AddVisitorState =
+  | { status: "ok"; checkIn: CheckIn }
+  | { status: "error"; message: string; errors?: Record<string, string> }
+  | undefined;
+
+/**
+ * Add a first-time visitor at the door and check them in to `serviceId`,
+ * with a photo of their face if they consented. See addVisitorAndCheckIn.
+ */
+export async function addVisitor(
+  serviceId: string,
+  _prev: AddVisitorState,
+  formData: FormData,
+): Promise<AddVisitorState> {
+  const user = await requirePermission("members.create");
+
+  let result;
+  try {
+    result = await newMembersService.addVisitorAndCheckIn(
+      user,
+      serviceId,
+      {
+        firstName: formData.get("firstName"),
+        lastName: formData.get("lastName"),
+        contactNumber: formData.get("contactNumber"),
+      },
+      await readFaceFields(formData),
+    );
+  } catch (error) {
+    if (
+      isServiceError(error) &&
+      (error.code === "invalid" ||
+        error.code === "unavailable" ||
+        error.code === "not_found")
+    ) {
+      return { status: "error", message: error.message, errors: error.fields };
+    }
+    throw error;
+  }
+
+  revalidatePath("/members");
+  revalidatePath(`/services/${serviceId}`);
+  revalidatePath("/dashboard");
+  return { status: "ok", checkIn: result.checkIn };
 }

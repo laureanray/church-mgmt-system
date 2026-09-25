@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 import type { Member } from "@/db/schema";
+import { DEFAULT_FACE_CONSENT_NOTICE } from "@/lib/face-consent";
 import { MemberForm } from "./member-form";
 
 const meta: Meta<typeof MemberForm> = {
@@ -56,4 +57,14 @@ export const InactiveMember: Story = {
 /** A rejected status is reported on the select, like every other field. */
 export const StatusError: Story = {
   render: () => <div className="mx-auto max-w-4xl p-6"><MemberForm member={member} cellOptions={[]} action={async () => ({ errors: { status: "Choose a valid status" }, message: "Please fix the highlighted fields." })} /></div>,
+};
+
+/** Face check-in on: a new member can be photographed as they are added, with their consent. */
+export const NewMemberWithPhoto: Story = {
+  render: () => <div className="mx-auto max-w-4xl p-6"><MemberForm cellOptions={[]} face={{ notice: DEFAULT_FACE_CONSENT_NOTICE }} action={async () => ({ message: "Preview only — no member was saved." })} /></div>,
+};
+
+/** Face recognition refused the photo: the member was not created, and the form keeps its values. */
+export const NewMemberPhotoRefused: Story = {
+  render: () => <div className="mx-auto max-w-4xl p-6"><MemberForm cellOptions={[]} face={{ notice: DEFAULT_FACE_CONSENT_NOTICE }} action={async () => ({ errors: { facePhoto: "The face is too small. Step closer to the camera." }, message: "The face is too small. Step closer to the camera." })} /></div>,
 };

@@ -1,15 +1,22 @@
 import Link from "next/link";
 import { CheckCircle2, ExternalLink, History, Sheet } from "lucide-react";
 
+import { purgeFaceData, saveFaceConsentNotice } from "@/app/(app)/settings/actions";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { getSettings, saveSheetsConfig } from "@/lib/sheets";
 import { CodeBlock } from "@/components/integrations/code-block";
 import { SheetsSettingsForm } from "@/components/integrations/sheets-settings-form";
 import { SyncAllButton } from "@/components/integrations/sync-buttons";
+import { FaceSettingsCard } from "@/components/settings/face-settings-card";
 import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import {
+  countEnrolledFaces,
+  faceCheckInEnabled,
+  getFaceConsentNotice,
+} from "@/server/faces";
 import {
   Card,
   CardContent,
@@ -75,6 +82,11 @@ export default async function SettingsPage() {
     await saveSheetsConfig(settings?.sheetsWebhookUrl ?? null, secret);
     settings = await getSettings();
   }
+
+  const [enrolledFaces, consentNotice] = await Promise.all([
+    countEnrolledFaces(user),
+    getFaceConsentNotice(user),
+  ]);
 
   const url = settings?.sheetsWebhookUrl ?? "";
   const secret = settings?.sheetsWebhookSecret ?? "";
@@ -174,6 +186,17 @@ export default async function SettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      <div className="mt-6">
+        <FaceSettingsCard
+          configured={faceCheckInEnabled()}
+          enrolledCount={enrolledFaces}
+          notice={consentNotice}
+          canEdit={hasPermission(user, "settings.update")}
+          saveNotice={saveFaceConsentNotice}
+          purge={purgeFaceData}
+        />
+      </div>
     </PageContainer>
   );
 }

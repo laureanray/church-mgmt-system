@@ -14,7 +14,9 @@ export type ServiceErrorCode =
   | "forbidden"
   | "not_found"
   | "invalid"
-  | "conflict";
+  | "conflict"
+  /** A service this depends on is switched off or not answering. */
+  | "unavailable";
 
 export class ServiceError extends Error {
   readonly code: ServiceErrorCode;
