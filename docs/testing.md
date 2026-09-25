@@ -88,17 +88,33 @@ query string alone.
 fails on any colour that bypasses the design tokens. See
 [design-system.md](./design-system.md).
 
-Coverage is `bun test --coverage`, reported as text plus `coverage/lcov.info` —
-there is no HTML report, and only files a test actually loads appear, so
-untouched `lib/` modules are absent rather than listed at 0%.
+Coverage comes from two suites. The unit suite (`bun run test:coverage`)
+cannot reach code that talks to the database. The integration suite
+(`bun run test:integration:coverage`) runs services, queries and the auth checks
+against Postgres and the test GoTrue. Each writes `coverage/lcov.info`; there is
+no HTML report, and only files a test actually loads appear. `bunfig.toml` pins
+the output directory, and `--coverage-dir` does not override it, so rename each
+suite's file before running the next: CI keeps them as `coverage/unit.lcov` and
+`coverage/integration.lcov`.
 
-`scripts/coverage-report.mjs` turns that `lcov.info` into markdown for CI (see
-below). Two things about its totals: it aggregates hits across files
-(`lines hit / lines found`), whereas bun's text reporter prints the unweighted
-mean of the per-file percentages, so the two headline numbers differ slightly on
-purpose. And because bun's report is silent about files no test loads, the
-script walks `lib/` itself and lists the absent ones, so the percentage is not
-mistaken for whole-directory coverage.
+`scripts/coverage-report.mjs` merges them into the markdown CI posts, covering
+`lib/` and `server/`. The parsing and merging live in `lib/lcov.ts`, which has
+unit tests. Things to know about the numbers:
+
+- A line counts as covered when **either** suite ran it. The two runs cannot be
+  unioned blindly: for a function it never ran, Bun lists every line of the body
+  as uncovered, blank lines and comments included, while a run that did execute
+  it lists only real code. So a line counts only when every suite that loaded
+  the file lists it, or when any suite ran it.
+- Functions are the best single suite's count. Bun's lcov says how many
+  functions ran, not which.
+- Class field initialisers count as a function Bun never marks as run, so a
+  fully tested class can read 1 short. Set fields in the constructor instead.
+- Totals are `lines hit / lines found` across files, whereas bun's text
+  reporter prints the unweighted mean of per-file percentages, so the headline
+  numbers differ on purpose.
+- The script walks `lib/` and `server/` itself and lists files no test loads,
+  so the percentage is not mistaken for whole-directory coverage.
 
 ## Local commands
 
@@ -107,8 +123,9 @@ bun install
 bun test lib                       # fast unit suite; no Docker or env needed
 bun run test:watch
 bun run test:ui                    # component suite via happy-dom; no Docker either
-bun run test:coverage              # text + coverage/lcov.info; loaded lib/ files
-bun run coverage:report            # the markdown CI posts, from the last lcov run
+bun run test:coverage              # unit coverage → coverage/lcov.info (rename to unit.lcov)
+bun run test:integration:coverage  # integration coverage → coverage/lcov.info (rename to integration.lcov)
+bun run coverage:report            # the merged markdown CI posts
 bun run test:db:up                 # dedicated, disposable Postgres via Docker
 bun run test:integration           # applies committed Drizzle migrations
 bunx playwright install chromium   # once, and after browser upgrades
@@ -162,9 +179,8 @@ No development seed data or external integration credentials are needed.
 
 Integration tests stub the session boundary and Next cache invalidation, but
 execute the actual application functions against migrated Postgres. E2E tests
-verify the real session path. Coverage currently reports unit execution only;
-zero coverage on server modules does not account for integration/E2E execution.
-No arbitrary global coverage threshold is enforced yet, so the pull request
+verify the real session path. The coverage report merges the unit and
+integration suites; UI and E2E runs are not measured. No arbitrary global coverage threshold is enforced yet, so the pull request
 report informs review rather than gating the merge.
 
 ## CI and next priorities
@@ -185,9 +201,10 @@ transient rather than a compose problem.
 Every run writes the coverage markdown to the job summary, and pull requests
 additionally get it as a comment that later pushes **edit in place** rather than
 append (`gh pr comment --edit-last --create-if-none`, using the built-in
-`GITHUB_TOKEN`; the job therefore asks for `pull-requests: write`). The comment
-step runs directly after the unit suite, so a failure further down the job still
-leaves the report on the pull request. Pull requests opened from a fork are
+`GITHUB_TOKEN`; the job therefore asks for `pull-requests: write`). The report
+and comment steps run after the integration suite with `if: always()`, so a
+failing suite still leaves a report on the pull request, one that names the
+suite whose coverage is missing. E2E runs after the comment. Pull requests opened from a fork are
 skipped by design: their token is read-only, and attempting the comment would
 fail the job.
 

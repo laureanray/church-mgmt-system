@@ -432,10 +432,14 @@ never the element carrying it. **Check every new story in both themes**; that is
 the cheapest way to catch a colour that only works in one.
 
 The application uses the same class-based contract through `next-themes`. It
-starts from the device preference, stores an explicit light or dark choice in
-the browser, and applies the class before paint. The header's `ThemeToggle`
-changes that preference; keep theme-aware components on semantic tokens so the
-switch remains a single root-class change rather than component-local logic.
+starts from the device preference, stores the choice in the browser, and
+applies the class before paint. The header's `ThemeSwitcher` (the `ThemeMenu`
+pattern bound to next-themes) offers **Light**, **Dark** and **System**; System
+follows the device setting and tracks it live, so choosing it after an explicit
+light or dark is how someone returns to the default. The trigger's icon comes
+from the root `dark` class rather than from JavaScript, so it is right on first
+paint. Keep theme-aware components on semantic tokens so the switch remains a
+single root-class change rather than component-local logic.
 
 Storybook builds with Vite while the app builds with Turbopack, so
 `.storybook/main.ts` wires Tailwind up a second time through

@@ -1,11 +1,18 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "bun:test";
+import { z } from "zod";
+import { inEachProcessTimeZone } from "../tests/support/time-zones";
 import {
   cellGroupSchema,
+  changePasswordSchema,
   createUserSchema,
+  fieldErrors,
   lineupAssignmentSchema,
   ministrySchema,
   promoteSchema,
   roleSchema,
+  scheduleSchema,
+  serviceSchema,
   songSchema,
 } from "./validators";
 
@@ -95,7 +102,7 @@ describe("promoteSchema", () => {
   });
 });
 
-import { memberSchema, fieldErrors } from "./validators";
+import { memberSchema } from "./validators";
 
 const memberInput = {
   firstName: " Juan Miguel ", middleName: " Reyes ", lastName: " Dela Cruz ",
@@ -298,5 +305,102 @@ describe("createUserSchema", () => {
         memberId: "",
       }).memberId,
     ).toBeNull();
+  });
+});
+
+describe("serviceSchema", () => {
+  const service = (scheduledAt: string) =>
+    serviceSchema.safeParse({ name: "Sunday Service", type: "sunday_service", scheduledAt });
+
+  it("reads the date and time as church time, whatever zone the server is in", () => {
+    inEachProcessTimeZone(() => {
+      const parsed = service("2026-09-27T09:00");
+      expect(parsed.success && parsed.data.scheduledAt.toISOString()).toBe(
+        "2026-09-27T01:00:00.000Z",
+      );
+    });
+  });
+
+  it("rejects a value that is not a date and time", () => {
+    const parsed = service("2026-09-27");
+    expect(parsed.success).toBe(false);
+  });
+});
+
+describe("serviceSchema impossible dates", () => {
+  it("refuses a date and time the calendar does not have", () => {
+    const parsed = serviceSchema.safeParse({
+      name: "Sunday Service",
+      type: "sunday_service",
+      scheduledAt: "2026-02-30T09:00",
+    });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toBe("Pick a valid date and time");
+  });
+});
+
+describe("scheduleSchema", () => {
+  const schedule = (fields: Record<string, unknown>) =>
+    scheduleSchema.safeParse({ name: "Sunday", type: "sunday_service", timeOfDay: "09:00", ...fields });
+
+  it("reads the day of the week from a form's string", () => {
+    const parsed = schedule({ dayOfWeek: "0", location: "" });
+    expect(parsed.success && parsed.data).toMatchObject({ dayOfWeek: 0, location: null });
+  });
+
+  it("refuses a missing or out-of-range day, and a malformed time", () => {
+    expect(schedule({ dayOfWeek: "" }).success).toBe(false);
+    expect(schedule({ dayOfWeek: "7" }).success).toBe(false);
+    expect(schedule({ dayOfWeek: 1, timeOfDay: "9am" }).success).toBe(false);
+  });
+});
+
+describe("changePasswordSchema", () => {
+  it("accepts a long enough password typed twice", () => {
+    expect(changePasswordSchema.safeParse({ password: "hunter22!", confirmPassword: "hunter22!" }).success).toBe(true);
+  });
+
+  it("points a mismatch at the confirmation field", () => {
+    const parsed = changePasswordSchema.safeParse({ password: "hunter22!", confirmPassword: "hunter23!" });
+    expect(parsed.success).toBe(false);
+    expect(fieldErrors(parsed.error!)).toEqual({ confirmPassword: "Passwords do not match" });
+  });
+
+  it("stays in step with Supabase's minimum_password_length", () => {
+    const config = readFileSync("supabase/config.toml", "utf8");
+    const minimum = Number(/minimum_password_length\s*=\s*(\d+)/.exec(config)?.[1]);
+    const short = "x".repeat(minimum - 1);
+    const exact = "x".repeat(minimum);
+    expect(changePasswordSchema.safeParse({ password: short, confirmPassword: short }).success).toBe(false);
+    expect(changePasswordSchema.safeParse({ password: exact, confirmPassword: exact }).success).toBe(true);
+  });
+});
+
+describe("fieldErrors", () => {
+  it("files an error with no field under 'form'", () => {
+    expect(fieldErrors(z.string().safeParse(5).error!)).toEqual({
+      form: expect.stringContaining("string"),
+    });
+  });
+
+  it("keeps the first message when one field fails twice", () => {
+    const schema = z.object({ code: z.string().min(3, "Too short").regex(/^x/, "Must start with x") });
+    expect(fieldErrors(schema.safeParse({ code: "ab" }).error!)).toEqual({ code: "Too short" });
+  });
+});
+
+describe("cellGroupSchema active checkbox", () => {
+  const active = (value: unknown) => cellGroupSchema.parse({ name: "Joshua Cell", active: value }).active;
+
+  it("reads a ticked box, and treats an absent one as still active", () => {
+    expect(active("on")).toBe(true);
+    expect(active("true")).toBe(true);
+    expect(active(true)).toBe(true);
+    expect(active(null)).toBe(true);
+  });
+
+  it("reads anything else as paused", () => {
+    expect(active("false")).toBe(false);
+    expect(active("")).toBe(false);
   });
 });

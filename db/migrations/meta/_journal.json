@@ -82,15 +82,15 @@
     {
       "idx": 11,
       "version": "7",
-      "when": 1790313795020,
-      "tag": "0011_member_faces",
+      "when": 1790311147981,
+      "tag": "0011_church_time_services",
       "breakpoints": true
     },
     {
       "idx": 12,
       "version": "7",
-      "when": 1790315115179,
-      "tag": "0012_face_consent",
+      "when": 1790330192652,
+      "tag": "0012_face_check_in",
       "breakpoints": true
     }
   ]

@@ -3,9 +3,10 @@
 # `server-only` throws. Stub it for every suite before any test file loads.
 preload = ["./tests/support/bun-preload.ts"]
 
-# bun's coverage only counts files a test actually loads, so this reports on
-# exercised lib/ code rather than the whole directory. lcov feeds CI artifacts;
-# there is no HTML reporter.
+# bun's coverage only counts files a test actually loads. The unit and
+# integration suites each write lcov here, and scripts/coverage-report.mjs
+# merges them for CI; there is no HTML reporter. `--coverage-dir` on the
+# command line does not override this, so CI renames each suite's file instead.
 coverageReporter = ["text", "lcov"]
 coverageDir = "coverage"
 coverageSkipTestFiles = true
