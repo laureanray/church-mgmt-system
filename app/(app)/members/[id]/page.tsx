@@ -103,38 +103,6 @@ export default async function MemberDetailPage({
   const attended = eq(attendance.memberId, member.id);
   const historyDirection = historyState.direction === "asc" ? asc : desc;
 
-  const [qrDataUrl, history, attendedCount] = await Promise.all([
-    generateQrDataUrl(member.qrToken),
-    showAudit
-      ? []
-      : db
-          .select({
-            id: attendance.id,
-            serviceId: services.id,
-            serviceName: services.name,
-            checkedInAt: attendance.checkedInAt,
-          })
-          .from(attendance)
-          .leftJoin(services, eq(services.id, attendance.serviceId))
-          .where(attended)
-          .orderBy(
-            historyDirection(
-              HISTORY_SORT_COLUMNS[
-                historyState.sort as keyof typeof HISTORY_SORT_COLUMNS
-              ],
-            ),
-            asc(attendance.id),
-          )
-          .limit(historyState.perPage)
-          .offset(tableOffset(historyState)),
-    db.$count(attendance, attended),
-  ]);
-
-  const clampedHistoryPage = overRunPage(historyState, attendedCount);
-  if (!showAudit && clampedHistoryPage !== null) {
-    redirect(tableHref(historyCtx, { page: clampedHistoryPage }));
-  }
-
   const auditCtx = tableContext(`/members/${member.id}`, query, {
     prefix: "log",
     sortKeys: [...AUDIT_SORT_KEYS],
@@ -148,38 +116,68 @@ export default async function MemberDetailPage({
     eq(auditLog.entityId, member.id),
   );
   const auditDirection = auditState.direction === "asc" ? asc : desc;
-  const [auditRows, auditCount] = canViewAudit
-    ? await Promise.all([
-        showAudit
-          ? db
-              .select({
-                id: auditLog.id,
-                at: auditLog.at,
-                actorName: users.name,
-                action: auditLog.action,
-                entity: auditLog.entity,
-                summary: auditLog.summary,
-                before: auditLog.before,
-                after: auditLog.after,
-              })
-              .from(auditLog)
-              .leftJoin(users, eq(users.id, auditLog.actorId))
-              .where(aboutMember)
-              .orderBy(
-                auditDirection(
-                  AUDIT_SORT_COLUMNS[
-                    auditState.sort as keyof typeof AUDIT_SORT_COLUMNS
-                  ],
-                ),
-                desc(auditLog.at),
-                asc(auditLog.id),
-              )
-              .limit(auditState.perPage)
-              .offset(tableOffset(auditState))
-          : [],
-        db.$count(auditLog, aboutMember),
-      ])
-    : [[], 0];
+  // One batch: the audit count feeds the History tab's badge even while the
+  // attendance tab is showing, and only the visible panel's rows are fetched.
+  const [qrDataUrl, history, attendedCount, auditRows, auditCount] =
+    await Promise.all([
+      generateQrDataUrl(member.qrToken),
+      showAudit
+        ? []
+        : db
+            .select({
+              id: attendance.id,
+              serviceId: services.id,
+              serviceName: services.name,
+              checkedInAt: attendance.checkedInAt,
+            })
+            .from(attendance)
+            .leftJoin(services, eq(services.id, attendance.serviceId))
+            .where(attended)
+            .orderBy(
+              historyDirection(
+                HISTORY_SORT_COLUMNS[
+                  historyState.sort as keyof typeof HISTORY_SORT_COLUMNS
+                ],
+              ),
+              asc(attendance.id),
+            )
+            .limit(historyState.perPage)
+            .offset(tableOffset(historyState)),
+      db.$count(attendance, attended),
+      showAudit
+        ? db
+            .select({
+              id: auditLog.id,
+              at: auditLog.at,
+              actorName: users.name,
+              action: auditLog.action,
+              entity: auditLog.entity,
+              summary: auditLog.summary,
+              before: auditLog.before,
+              after: auditLog.after,
+            })
+            .from(auditLog)
+            .leftJoin(users, eq(users.id, auditLog.actorId))
+            .where(aboutMember)
+            .orderBy(
+              auditDirection(
+                AUDIT_SORT_COLUMNS[
+                  auditState.sort as keyof typeof AUDIT_SORT_COLUMNS
+                ],
+              ),
+              desc(auditLog.at),
+              asc(auditLog.id),
+            )
+            .limit(auditState.perPage)
+            .offset(tableOffset(auditState))
+        : [],
+      canViewAudit ? db.$count(auditLog, aboutMember) : 0,
+    ]);
+
+  const clampedHistoryPage = overRunPage(historyState, attendedCount);
+  if (!showAudit && clampedHistoryPage !== null) {
+    redirect(tableHref(historyCtx, { page: clampedHistoryPage }));
+  }
 
   const clampedAuditPage = showAudit ? overRunPage(auditState, auditCount) : null;
   if (clampedAuditPage !== null) {

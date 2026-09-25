@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { formatDate, formatDateTime, formatMeeting, initials, toDateTimeLocal } from './format';
+import { formatDate, formatDateTime, formatMonthDay, formatMeeting, initials, toDateTimeLocal } from './format';
 
 it('preserves calendar dates across year and leap-day boundaries', () => {
   expect(formatDate('2024-02-29')).toBe('Feb 29, 2024');
@@ -16,4 +16,8 @@ it('renders optional meeting details and handles empty names', () => {
   expect(formatMeeting(null, null, null)).toBe('—');
   expect(initials(' Ana  Santos ')).toBe('AS');
   expect(initials(' ')).toBe('?');
+});
+it('formats a celebration day with its weekday and no year', () => {
+  expect(formatMonthDay('2027-01-02')).toBe('Sat, Jan 2');
+  expect(formatMonthDay(null)).toBe('—');
 });

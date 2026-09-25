@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import { auditLog, members, users } from "../../db/schema";
+import { PERMISSION_KEYS } from "../../lib/permissions";
 
 const database = connectTestDatabase();
 // Registered before the actions are imported: bun's mock.module is not hoisted.
@@ -10,7 +11,7 @@ const requirePermission = mock();
 await mock.module("@/db", () => ({ db: database.db }));
 await mock.module("@/lib/auth-helpers", () => ({ requirePermission }));
 await mock.module("next/cache", () => ({ revalidatePath: mock() }));
-await mock.module("next/navigation", () => ({ redirect: mock() }));
+await mock.module("next/navigation", () => ({ redirect: mock(), notFound: mock() }));
 const { updateMember, createMember, deleteMember } = await import(
   "../../app/(app)/members/actions"
 );
@@ -26,7 +27,9 @@ function signedInAs(id: string) {
     name: "Admin",
     email: `${id}@example.test`,
     role: { id: "admin", name: "Admin" },
-    permissions: [],
+    // The member service authorizes again on its own, so the actor needs real
+    // permissions, not just a passing requirePermission mock.
+    permissions: PERMISSION_KEYS,
     mustChangePassword: false,
   });
 }

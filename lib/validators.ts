@@ -10,9 +10,13 @@ import { PERMISSION_KEYS } from "./permissions";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Trim strings and turn empty ones into null. */
+/**
+ * Turn empty strings — and absent fields — into null. `FormData.get` reports a
+ * missing field as null already; a JSON body from the API simply omits it, so
+ * undefined has to mean the same thing or every optional field is required.
+ */
 const emptyToNull = (v: unknown) =>
-  typeof v === "string" && v.trim() === "" ? null : v;
+  v === undefined || (typeof v === "string" && v.trim() === "") ? null : v;
 
 const optionalText = z.preprocess(
   emptyToNull,

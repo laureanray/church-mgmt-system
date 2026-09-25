@@ -1,5 +1,11 @@
 // Shared label maps and option lists for enums, used across forms and tables.
 
+/**
+ * The church keeps Philippine time, so "today" means today in Manila — not on
+ * the server, which on Vercel is UTC and eight hours behind.
+ */
+export const CHURCH_TIME_ZONE = "Asia/Manila";
+
 export const GENDERS = ["male", "female"] as const;
 export type Gender = (typeof GENDERS)[number];
 
@@ -110,9 +116,6 @@ export const MEETING_DAY_OPTIONS = DAYS_OF_WEEK.map((label, i) => ({
   value: String(i),
   label,
 }));
-
-// How many weeks of upcoming occurrences to keep generated per schedule.
-export const OCCURRENCE_WEEKS_AHEAD = 8;
 
 /**
  * What the audit log records. The value is stored in `audit_log.action`, so

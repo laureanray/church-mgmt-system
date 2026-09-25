@@ -1,43 +1,59 @@
 "use server";
 
-import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
-import { db } from "@/db";
-import { members } from "@/db/schema";
-import { recordAudit } from "@/lib/audit";
-import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
-import { isLapsed, MEMBER_STATUS_LABELS } from "@/lib/constants";
-import { fieldErrors, memberSchema } from "@/lib/validators";
+import { isServiceError } from "@/server/errors";
+import * as membersService from "@/server/members";
+
+/*
+ * The web adapter for server/members.ts. The rules live in the service; this
+ * file only translates between it and the browser — FormData in, form state or
+ * a redirect out, and the revalidation the web app's routes need.
+ *
+ * `requirePermission` here is for the redirect to /no-access. The service
+ * authorizes again, and that is the check the HTTP API relies on.
+ */
 
 export type MemberFormState =
   | { errors?: Record<string, string>; message?: string }
   | undefined;
 
+const MEMBER_FIELDS = [
+  "firstName",
+  "middleName",
+  "lastName",
+  "birthdate",
+  "spiritualBirthday",
+  "memberSinceYear",
+  "gender",
+  "maritalStatus",
+  "status",
+  "spouseName",
+  "weddingAnniversary",
+  "contactNumber",
+  "homeAddress",
+  "motherName",
+  "fatherName",
+  "educationalLevel",
+  "occupation",
+  "cellGroupId",
+] as const;
+
 function readMemberForm(formData: FormData) {
-  return memberSchema.safeParse({
-    firstName: formData.get("firstName"),
-    middleName: formData.get("middleName"),
-    lastName: formData.get("lastName"),
-    birthdate: formData.get("birthdate"),
-    spiritualBirthday: formData.get("spiritualBirthday"),
-    memberSinceYear: formData.get("memberSinceYear"),
-    gender: formData.get("gender"),
-    maritalStatus: formData.get("maritalStatus"),
-    status: formData.get("status"),
-    spouseName: formData.get("spouseName"),
-    weddingAnniversary: formData.get("weddingAnniversary"),
-    contactNumber: formData.get("contactNumber"),
-    homeAddress: formData.get("homeAddress"),
-    motherName: formData.get("motherName"),
-    fatherName: formData.get("fatherName"),
-    educationalLevel: formData.get("educationalLevel"),
-    occupation: formData.get("occupation"),
-    cellGroupId: formData.get("cellGroupId"),
-  });
+  return Object.fromEntries(
+    MEMBER_FIELDS.map((field) => [field, formData.get(field)]),
+  );
+}
+
+/** A validation failure becomes form state; anything else is rethrown. */
+function toFormState(error: unknown): MemberFormState {
+  if (isServiceError(error) && error.code === "invalid") {
+    return { errors: error.fields, message: error.message };
+  }
+  if (isServiceError(error) && error.code === "not_found") notFound();
+  throw error;
 }
 
 /**
@@ -56,37 +72,20 @@ export async function createMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  const actor = await requirePermission("members.create");
+  const user = await requirePermission("members.create");
 
-  const parsed = readMemberForm(formData);
-  if (!parsed.success) {
-    return {
-      errors: fieldErrors(parsed.error),
-      message: "Please fix the highlighted fields.",
-    };
+  let member;
+  try {
+    member = await membersService.createMember(user, readMemberForm(formData));
+  } catch (error) {
+    return toFormState(error);
   }
-
-  const row = await db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(members)
-      .values({ qrToken: nanoid(16), ...parsed.data })
-      .returning();
-    await recordAudit(tx, {
-      actorId: actor.id,
-      action: "member.create",
-      entity: "member",
-      entityId: row.id,
-      after: row,
-      summary: `Added ${row.fullName}`,
-    });
-    return row;
-  });
 
   revalidatePath("/members");
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
-  revalidateCellGroups(parsed.data.cellGroupId);
-  redirect(`/members/${row.id}`);
+  revalidateCellGroups(member.cellGroupId);
+  redirect(`/members/${member.id}`);
 }
 
 export async function updateMember(
@@ -94,78 +93,43 @@ export async function updateMember(
   _prev: MemberFormState,
   formData: FormData,
 ): Promise<MemberFormState> {
-  const actor = await requirePermission("members.update");
+  const user = await requirePermission("members.update");
 
-  const parsed = readMemberForm(formData);
-  if (!parsed.success) {
-    return {
-      errors: fieldErrors(parsed.error),
-      message: "Please fix the highlighted fields.",
-    };
+  let result;
+  try {
+    result = await membersService.updateMember(
+      user,
+      id,
+      readMemberForm(formData),
+    );
+  } catch (error) {
+    return toFormState(error);
   }
-
-  const { previous, updated } = await db.transaction(async (tx) => {
-    // Locked so the "before" in the log is the row this update replaced, not
-    // one a concurrent edit has already moved on from.
-    const [previous] = await tx
-      .select()
-      .from(members)
-      .where(eq(members.id, id))
-      .for("update");
-    if (!previous) return { previous: undefined, updated: undefined };
-
-    const [updated] = await tx
-      .update(members)
-      .set({ ...parsed.data, updatedAt: new Date() })
-      .where(eq(members.id, id))
-      .returning();
-    await recordAudit(tx, {
-      actorId: actor.id,
-      action:
-        previous.status === updated.status
-          ? "member.update"
-          : "member.status_change",
-      entity: "member",
-      entityId: id,
-      before: previous,
-      after: updated,
-      summary: (fields) => `Edited ${updated.fullName}: ${describeFields(fields)}`,
-    });
-    return { previous, updated };
-  });
 
   revalidatePath("/members");
   revalidatePath(`/members/${id}`);
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
-  // `previous` may differ from the new value when the member was moved.
-  revalidateCellGroups(previous?.cellGroupId, updated?.cellGroupId);
+  // The previous group differs from the new one when the member was moved.
+  revalidateCellGroups(result.previousCellGroupId, result.member.cellGroupId);
   redirect(`/members/${id}`);
 }
 
 export async function deleteMember(id: string) {
-  const actor = await requirePermission("members.delete");
-  const deleted = await db.transaction(async (tx) => {
-    const [deleted] = await tx
-      .delete(members)
-      .where(eq(members.id, id))
-      .returning();
-    if (deleted) {
-      await recordAudit(tx, {
-        actorId: actor.id,
-        action: "member.delete",
-        entity: "member",
-        entityId: id,
-        before: deleted,
-        summary: `Deleted ${deleted.fullName}`,
-      });
-    }
-    return deleted;
-  });
+  const user = await requirePermission("members.delete");
+
+  let cellGroupId: string | null = null;
+  try {
+    ({ cellGroupId } = await membersService.deleteMember(user, id));
+  } catch (error) {
+    // Already gone — a double click, or someone else got there first.
+    if (!isServiceError(error) || error.code !== "not_found") throw error;
+  }
+
   revalidatePath("/members");
   // The dashboard's Active Members tile counts on status.
   revalidatePath("/dashboard");
-  revalidateCellGroups(deleted?.cellGroupId);
+  revalidateCellGroups(cellGroupId);
   redirect("/members");
 }
 
@@ -173,46 +137,19 @@ export type ReactivateResult =
   | { status: "ok" }
   | { status: "error"; message: string };
 
-/**
- * Mark a lapsed member active again — what check-in offers when someone who
- * had stopped attending walks back in. Only a lapsed status is replaced, so a
- * stale prompt cannot flip a member someone has since edited.
- */
+/** See `reactivateMember` in server/members.ts for the rule. */
 export async function reactivateMember(
   memberId: string,
 ): Promise<ReactivateResult> {
-  const actor = await requirePermission("members.update");
+  const user = await requirePermission("members.update");
 
-  const updated = await db.transaction(async (tx) => {
-    const [previous] = await tx
-      .select()
-      .from(members)
-      .where(eq(members.id, memberId))
-      .for("update");
-    if (!previous || !isLapsed(previous.status)) return null;
-
-    const [updated] = await tx
-      .update(members)
-      .set({ status: "active", updatedAt: new Date() })
-      .where(eq(members.id, memberId))
-      .returning();
-    await recordAudit(tx, {
-      actorId: actor.id,
-      action: "member.status_change",
-      entity: "member",
-      entityId: memberId,
-      before: previous,
-      after: updated,
-      summary: `Marked ${updated.fullName} active at check-in (was ${MEMBER_STATUS_LABELS[previous.status].toLowerCase()})`,
-    });
-    return updated;
-  });
-
-  if (!updated) {
-    return {
-      status: "error",
-      message: "This member’s status has already changed.",
-    };
+  try {
+    await membersService.reactivateMember(user, memberId);
+  } catch (error) {
+    if (isServiceError(error) && error.code === "conflict") {
+      return { status: "error", message: error.message };
+    }
+    throw error;
   }
 
   revalidatePath("/members");

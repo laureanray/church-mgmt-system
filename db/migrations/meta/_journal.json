@@ -61,8 +61,15 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1790267550235,
-      "tag": "0008_audit_log",
+      "when": 1790267864785,
+      "tag": "0008_prune_far_occurrences",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790296959240,
+      "tag": "0009_audit_log",
       "breakpoints": true
     }
   ]

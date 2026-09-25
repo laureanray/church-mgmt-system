@@ -9,10 +9,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # IRM Ministries — church management
 
-A members directory where every member carries a QR code; scanning that code
-records attendance against a service. Staff sign in with their **email** and
-receive module permissions through a database-backed role. Filipino church context — expect Taglish domain
-terms in the schema and `en-PH` formatting throughout.
+A members directory with attendance recorded against each service. Staff sign
+in with their **email** and receive module permissions through a
+database-backed role. Filipino church context — expect Taglish domain terms in
+the schema and `en-PH` formatting throughout.
 
 Stack: Next.js 16 App Router (route protection lives in `proxy.ts`, the
 successor to `middleware.ts`) · React 19 · Drizzle ORM on Supabase Postgres ·
@@ -143,23 +143,46 @@ is built.
 action: someone whose *search* missed is one click from creating a duplicate of
 the record they were looking for.
 
+## Business logic lives in `server/`; the web app and the API are adapters
+
+`server/<module>.ts` holds a module's rules: each function takes an `Actor`,
+calls `authorize(actor, "module.action")`, parses its input with the zod
+schema via `parseInput`, and returns data or throws a `ServiceError`. It never
+touches cookies, `Request`, `FormData`, `redirect` or `revalidatePath`.
+
+Pages and server actions import the service **directly**; the HTTP API under
+`app/api/v1/` wraps the same service with `apiRoute` from `server/http.ts`. The
+web app does not `fetch` its own API — that is an extra round trip per page for
+nothing. `docs/api.md` is the full account; `server/members.ts` is the
+reference, and so far the only module migrated.
+
+- The API authenticates with `Authorization: Bearer <Supabase access token>`
+  (`userFromAuthorizationHeader` in `lib/session-user.ts`), never the session
+  cookie, and `proxy.ts` excludes `/api/` so it answers 401 rather than
+  redirecting.
+- A route handler that grows past a few lines is hiding a rule that belongs
+  in the service.
+
 ## Forms are server actions over FormData
 
-`react-hook-form` and `@hookform/resolvers` are listed in `package.json` but
-nothing imports them. Every form follows one shape — `service-form.tsx` plus
+There is no form library. Every form follows one shape — `service-form.tsx` plus
 `app/(app)/services/actions.ts` is the reference pair:
 
 1. A `"use server"` action in the route's `actions.ts`, typed
    `(prev: XFormState, formData: FormData) => Promise<XFormState>`.
 2. The action calls `requirePermission("module.action")` first, then parses `FormData` with a
    zod schema from `lib/validators.ts`, returning
-   `{ errors: fieldErrors(parsed.error), message }` when parsing fails.
+   `{ errors: fieldErrors(parsed.error), message }` when parsing fails. In a
+   module migrated to `server/` (members), the action passes the FormData
+   fields to the service instead, and turns its `invalid` error into that
+   same form state — `app/(app)/members/actions.ts`.
 3. On success: mutate, `revalidatePath()` each affected route, then `redirect()`.
 4. The client component drives it with `useActionState(action, undefined)` and
    wraps each input in `<Field label htmlFor error>` from `components/form/field.tsx`.
 
-Validators normalise empty strings to `null` (`emptyToNull`), so optional
-columns stay nullable rather than filling with `""`.
+Validators normalise empty strings — and absent fields, which is how a JSON
+body leaves one out — to `null` (`emptyToNull`), so optional columns stay
+nullable rather than filling with `""`.
 
 ## Auth
 
@@ -198,8 +221,10 @@ password. Supabase owns credentials — this codebase never hashes a password.
 - Creating or deleting staff writes to **both** Supabase Auth and the profile
   table; `app/(app)/users/actions.ts` rolls the auth user back if the profile
   insert fails, so neither half is left orphaned.
-- `canManage(role)` covers admin + leader (members, services, cell groups).
-  Admin-only routes gate on `requireRole(["admin"])` directly.
+- Authorization is by permission key, never by role name. Gate a page with
+  `requirePermission`, and use `hasPermission` / `hasAnyPermission` to decide
+  what the UI shows. Keys are registered in `lib/permissions.ts` and seeded by a
+  migration, and they are persisted, so never rename one casually.
 
 Two config traps in `supabase/config.toml`:
 
@@ -213,7 +238,7 @@ Two config traps in `supabase/config.toml`:
 
 Postgres on Supabase, reached **only through Drizzle** — no `supabase-js` query
 ever touches application data, and there are no RLS policies, so a missing
-`requireRole` is a real hole rather than a second line of defence. Storage,
+`requirePermission` is a real hole rather than a second line of defence. Storage,
 Realtime and PostgREST stay switched off in `supabase/config.toml`; the API
 gateway and Auth are on solely because Supabase Auth signs staff in.
 
@@ -256,19 +281,36 @@ Migrations are versioned and committed: `bun run db:generate`, then
 disabled so that `db/migrations` stays the single schema history; `db:push`
 would desync it, so reach for generate + migrate instead.
 
+## Performance
+
+Pages render in ~15ms of their own work; the cost users feel is round trips.
+`docs/performance.md` has the checklist and the measuring tool — the rules that
+matter while editing:
+
+- After `requirePermission`, a page makes **one** `Promise.all` batch of
+  queries. A second sequential `await db…` is a second trip; fold it into SQL.
+- `next.config.ts` sets `staleTimes` so visited and intent-prefetched pages are
+  reused briefly. Server actions must keep ending in `revalidatePath` or
+  `redirect` — that is what purges those caches after a write.
+- Primary navigation uses `IntentLink` (`components/patterns/`), which fully
+  prefetches a page on hover, focus or touch. In-content links stay `<Link>`.
+- Heavy client libraries load lazily in the one component that needs them,
+  never in the shared layout.
+- `bun run perf:probe` times routes against a local production build; put
+  before/after numbers in PRs that add or reshape a page.
+
 ## Invariants to preserve
 
 - Attendance is unique per `(memberId, serviceId)`. `recordAttendance` detects
-  a duplicate scan by an empty `returning()` after `onConflictDoNothing()`.
+  a duplicate check-in by an empty `returning()` after `onConflictDoNothing()`.
 - Generated services are unique per `(scheduleId, scheduledAt)` — that
   constraint is what makes `generateForSchedule` idempotent.
 - `topUpAllSchedules()` is called from the `/services` and `/scan` page loads.
-  There is no cron; occurrences appear because someone opened a page.
+  There is no cron; occurrences appear because someone opened a page. Each
+  schedule keeps only its next occurrence (plus today's, on a meeting day) —
+  not weeks of empty future services.
 - Editing or pausing a schedule rebuilds only *future, un-attended*
-  occurrences. Past and already-scanned services survive.
-- QR codes encode the bare `qrToken` (nanoid), never a URL, so scanning works
-  offline and independent of the deployed host. `extractToken` additionally
-  accepts a `?token=` URL for forward compatibility.
+  occurrences. Past and already-attended services survive.
 - `app_settings` is a single row keyed `"singleton"`; write it with
   `onConflictDoUpdate`.
 - Every mutation of members, cell groups (and their membership), services,
@@ -316,7 +358,7 @@ Every task that changes repository files must end with a pull request against
 generated files, and changes to this `AGENTS.md`. After reviewing the diff and
 running relevant checks, commit the intended files, push the task branch, and
 open a ready-for-review PR before reporting the task complete. Keep follow-up
-fixes for that task on the same branch and PR. Link each PR to the current Codex
+fixes for that task on the same branch and PR. Link each PR to the current agent
 thread when that capability is available, and include its URL in the handoff.
 
 The PR is also the handoff for background Codex Code Review. Check the PR for
@@ -354,22 +396,6 @@ against the selected project's local Supabase only; review compatibility because
 worktrees share the database. No Supabase migration runner, reset, or history
 repair is used. `bun run test:irm` checks the manager and terminal renderer.
 
-### Delegating repetitive tasks
-
-Use a GPT-5.6 Luna sub-agent (`gpt-5.6-luna`) for routine, bounded work such as
-staging reviewed changes, creating conventional commits, pushing task branches,
-and creating or updating pull requests. Prefer this model for repetitive
-repository chores to reduce token costs; keep implementation decisions, ambiguous
-requirements, and complex debugging with the primary agent.
-
-Delegate only actions authorized by the current request. Give the sub-agent the
-exact branch/worktree, intended files, validation results, and requested outcome.
-Commit/push/PR follow-ups stay in the task's existing worktree. The sub-agent
-must preserve unrelated work, inspect the staged diff, exclude secrets and local
-artifacts, and report the commit, branch, PR URL, and any failed checks. The
-primary agent verifies the handoff. If Luna is unavailable or the task stops
-being routine, continue with the primary agent and explain the fallback briefly.
-
 ### Project conventions
 
 - **Every feature that changes data is audited — no exceptions.** A new
@@ -379,8 +405,10 @@ being routine, continue with the primary agent and explain the fallback briefly.
      kind of record, `AUDIT_ENTITIES` / `AUDIT_ENTITY_LABELS`) in
      `lib/constants.ts`. These are stored, so never rename one.
   2. Wrap the write in `db.transaction` and call `recordAudit(tx, …)` after it,
-     with the acting user from `requirePermission` as `actorId`, the row
-     before and/or after, and a one-line human summary.
+     with the acting user as `actorId`, the row before and/or after, and a
+     one-line human summary. Where the entity has a service in `server/`
+     (members does), the audit call lives **in the service**, not the server
+     action, so writes through the HTTP API under `app/api/v1` are logged too.
   3. Name any sensitive column so the redaction catches it (…`Secret`,
      …`Password`, …`Token`), or strip it before passing the row. Never put a
      secret in `summary`.
