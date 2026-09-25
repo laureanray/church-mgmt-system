@@ -1,6 +1,14 @@
 import { afterAll, beforeEach, expect, it, mock } from "bun:test";
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
-import { attendance, members, services, serviceSchedules } from "../../db/schema";
+import {
+  attendance,
+  lineupAssignments,
+  lineupSongs,
+  members,
+  services,
+  serviceSchedules,
+  songs,
+} from "../../db/schema";
 
 const database = connectTestDatabase();
 await mock.module("@/db", () => ({ db: database.db }));
@@ -37,6 +45,24 @@ it("preserves past and attended occurrences when rebuilding a schedule", async (
   await deleteFutureEmptyOccurrences(schedule.id);
   expect((await database.db.select().from(services)).map(s => s.id).sort()).toEqual(['attended', 'past', 'unrelated']);
   expect(await database.db.select().from(attendance)).toHaveLength(1);
+});
+
+it("preserves occurrences with a LAM line-up when rebuilding a schedule", async () => {
+  const [schedule] = await database.db.insert(serviceSchedules).values({ name: 'Sunday', dayOfWeek: 0, timeOfDay: '09:00' }).returning();
+  const inDays = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return d; };
+  await database.db.insert(services).values([
+    { id: 'with-songs', name: 'Songs', scheduledAt: inDays(7), scheduleId: schedule.id },
+    { id: 'with-team', name: 'Team', scheduledAt: inDays(14), scheduleId: schedule.id },
+    { id: 'unplanned', name: 'Unplanned', scheduledAt: inDays(21), scheduleId: schedule.id },
+  ]);
+  await database.db.insert(members).values({ id: 'member', fullName: 'Ana', qrToken: 'token' });
+  await database.db.insert(songs).values({ id: 'song', title: 'Way Maker' });
+  await database.db.insert(lineupSongs).values({ serviceId: 'with-songs', songId: 'song', position: 1 });
+  await database.db.insert(lineupAssignments).values({ serviceId: 'with-team', memberId: 'member', part: 'vocals' });
+  await deleteFutureEmptyOccurrences(schedule.id);
+  expect((await database.db.select().from(services)).map(s => s.id).sort()).toEqual(['with-songs', 'with-team']);
+  expect(await database.db.select().from(lineupSongs)).toHaveLength(1);
+  expect(await database.db.select().from(lineupAssignments)).toHaveLength(1);
 });
 
 it("does not top up paused schedules", async () => {

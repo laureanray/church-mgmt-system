@@ -3,6 +3,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 
+import { firstAccessibleHref } from "@/lib/navigation";
 import type { PermissionKey } from "@/lib/permissions";
 import { loadSessionUser, type SessionUser } from "@/lib/session-user";
 import { createClient } from "@/lib/supabase/server";
@@ -14,8 +15,9 @@ export type { SessionUser };
  * Returns the signed-in user, or redirects to /login if there is none.
  *
  * Identity comes from Supabase Auth; the role lives in our own `users` table,
- * so this reads both. The token is verified, not merely decoded — see
- * lib/supabase/verify.ts.
+ * and ministry grants arrive through the linked member record, so this reads
+ * all three — in one round trip, see lib/access.ts. The token is verified, not
+ * merely decoded — see lib/supabase/verify.ts.
  *
  * Memoised with React `cache()` for the duration of a request. The layout and
  * the page each call this, as does every server action, and without memoising
@@ -72,4 +74,19 @@ export function hasAnyPermission(
   permissions: readonly PermissionKey[],
 ) {
   return permissions.some((permission) => hasPermission(user, permission));
+}
+
+/**
+ * Where to send someone who signed in. proxy.ts always sends them to
+ * /dashboard, but a role can omit `dashboard.view` — a LAM volunteer whose
+ * access comes only from their ministry, say — and a redirect loop or a
+ * "no access" page is the wrong welcome for someone who does have access.
+ */
+export function homeFor(user: Pick<SessionUser, "permissions" | "ministries">) {
+  return (
+    firstAccessibleHref({
+      permissions: user.permissions,
+      ministryCount: user.ministries.length,
+    }) ?? "/no-access"
+  );
 }

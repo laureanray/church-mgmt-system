@@ -89,7 +89,8 @@ Authorization: Bearer <supabase access token>
 
 `userFromAuthorizationHeader` in `lib/session-user.ts` verifies it with the same
 JWKS check `verifiedUserId` uses for cookies, then loads the same profile, role
-and permissions — so a staff member has identical access through either door.
+and permissions, including what the linked member's ministries grant — so a
+staff member has identical access through either door.
 `proxy.ts` excludes `/api/` from its matcher: it redirects to `/login`, which is
 right for a browser and wrong for an API client that needs a 401.
 

@@ -1,9 +1,10 @@
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
-
-import { db } from "@/db";
-import { rolePermissions, roles, users } from "@/db/schema";
+import { loadUserAccess } from "@/lib/access";
+import {
+  effectivePermissions,
+  type MinistryMembership,
+} from "@/lib/ministry-access";
 import type { PermissionKey } from "@/lib/permissions";
 import { verifyAccessToken } from "@/lib/supabase/verify";
 
@@ -20,7 +21,11 @@ export type SessionUser = {
   name: string;
   email: string;
   role: { id: string; name: string };
+  /** The role's permissions plus every active ministry's grants. */
   permissions: PermissionKey[];
+  /** The member record this login is linked to, if any. */
+  memberId: string | null;
+  ministries: MinistryMembership[];
   mustChangePassword: boolean;
 };
 
@@ -41,45 +46,25 @@ export async function userFromAuthorizationHeader(
 }
 
 /**
- * Supabase identity joined to our profile, role and permissions. Null when the
- * profile row is missing, however the caller authenticated.
+ * Supabase identity joined to our profile, role and permissions — including
+ * what the linked member's active ministries grant, so a ministry's access is
+ * the same through the web app and the API. Null when the profile row is
+ * missing, however the caller authenticated. One round trip; see
+ * lib/access.ts.
  */
 export async function loadSessionUser(userId: string): Promise<SessionUser | null> {
-  // One round trip, not two. The permissions ride along as an array rather
-  // than being fetched once the role is known, because this runs before every
-  // page, every action and every API call: a second sequential query here was
-  // a second sequential query everywhere.
-  const [profile] = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      mustChangePassword: users.mustChangePassword,
-      roleId: roles.id,
-      roleName: roles.name,
-      // The FILTER keeps a role with no permissions at `{}`; a bare array_agg
-      // over the left join's lone NULL row would return `{NULL}`.
-      permissions: sql<string[]>`coalesce(
-        array_agg(${rolePermissions.permissionKey})
-          filter (where ${rolePermissions.permissionKey} is not null),
-        '{}'
-      )`,
-    })
-    .from(users)
-    .innerJoin(roles, eq(users.roleId, roles.id))
-    .leftJoin(rolePermissions, eq(rolePermissions.roleId, roles.id))
-    .where(eq(users.id, userId))
-    .groupBy(users.id, roles.id)
-    .limit(1);
+  const access = await loadUserAccess(userId);
+  if (!access) return null;
 
-  if (!profile) return null;
-
+  const { profile } = access;
   return {
     id: profile.id,
     name: profile.name,
     email: profile.email,
     role: { id: profile.roleId, name: profile.roleName },
-    permissions: profile.permissions as PermissionKey[],
+    permissions: effectivePermissions(access.rolePermissions, access.ministryGrants),
+    memberId: access.memberId,
+    ministries: access.ministries,
     mustChangePassword: profile.mustChangePassword,
   };
 }

@@ -182,13 +182,26 @@ card, which drops the frame and the cell-group column. Stories use a fixed
 | `TableCard` | The bordered, clipped frame around a full-width table |
 | `SearchField` | The list-page search box |
 | `DataTable` | Every table in the app: sorting, paging, search, facets, columns |
+| `ConfirmDeleteButton` | A destructive server action behind a confirmation dialog, as a row icon or a header button |
 | `LinkTabs` | Tabs whose selection is the URL (`?tab=history`), rendered as navigation links |
 
 Domain-specific editors follow the same layers. `PermissionMatrix` groups the
 authorization catalog by module and uses native named checkboxes so the role
 form submits ordinary `FormData`; `RoleForm` composes it with the shared Field,
 Card, Input, Textarea, and Button primitives. Their stories cover new, edited,
-empty, and protected states without requiring a database.
+empty, and protected states without requiring a database. `PermissionMatrix`
+takes `scope="ministry"` to offer only what a ministry may grant.
+
+Ministries and LAM follow the same approach. `MinistryForm` pairs ministry
+details with the ministry-scoped matrix; `AddRosterMemberForm` and
+`RosterRowActions` are a roster's controls, where appointing heads appears only
+for staff who may do it; `AccessSummary` lists permissions by module and, on a
+staff page, credits each to its role and ministries; `MemberMinistries` is the
+card on a member record. `SongForm`, `SetlistEditor` and `TeamEditor` make up
+the LAM line-up. The two editors' stories run against local state rather than
+server actions, so adding, reordering and removing can be tried in Storybook.
+Older delete dialogs predate `ConfirmDeleteButton`; move them onto it when you
+next touch them.
 
 ### Audit log
 
