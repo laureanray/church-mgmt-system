@@ -364,6 +364,10 @@ matter while editing:
     takes it too. Removal always goes to Tencent **before** the local delete,
     and member deletion waits if Tencent cannot be reached. `docs/privacy.md` is
     the policy; keep it in step.
+  - A member created **with** a face (the new-member form, or adding a visitor
+    on `/scan`) is enrolled with Tencent **before** the row exists, under an id
+    generated for them (`server/new-members.ts`). A refused photo then creates
+    nobody, and a failed insert takes the face back out.
   - Unset, face is off and `/scan` scans QR codes as before.
 
 ## Working here

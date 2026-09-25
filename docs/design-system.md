@@ -171,6 +171,21 @@ story needs a camera, a key or a server:
   scrolling muted panel with a `Checkbox`, and Take photo / Upload photo stay
   disabled until it is ticked. Replace keeps the consent; Remove confirms first
   and clears it.
+- `FaceConsentNotice` (`components/members/`) is the notice with its consent
+  checkbox, shared by every place a face can be added. Given a `name`, the tick
+  is submitted with the surrounding form.
+- `FacePhotoField` (`components/members/`) is the optional face step inside a
+  form that creates someone: consent, then Take photo (via
+  `FaceCaptureDialog`) or Upload photo, with a preview and Remove. The photo
+  travels with the form's own submit, in a hidden file input. It follows a
+  form reset, so it never shows a photo the form would not send. Forms that
+  hold it submit through `onSubmit` + `startTransition`, not `action`, because
+  React resets an `action` form on every result, errors included.
+- `AddVisitorDialog` (`components/scan/`) adds a first-time visitor on
+  `/scan`: first and last name, an optional number, and — when face check-in
+  is on — a `FacePhotoField`. It tells the usher to search by name first, since
+  adding someone already in the directory makes a duplicate. The face camera
+  on `/scan` pauses while it is open, so the photo can use the camera.
 - `FaceSettingsCard` (`components/settings/`) is Settings' face check-in card:
   on or off, how many are enrolled, a link to `docs/privacy.md`, the editable
   consent notice (read-only without `settings.update`), and **Purge all face

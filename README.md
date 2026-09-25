@@ -70,9 +70,14 @@ path. Have whoever handles the church's data privacy confirm the notice text
 
 ### How it works
 
-- **Enrolment** — on a member's page, staff with `members.update` record the
-  member's consent to the notice, then take a photo with the device camera or
-  upload one. Tencent must accept it (it rejects a
+- **Enrolment** — staff with `members.update` record the member's consent to
+  the notice, then take a photo with the device camera or upload one. This
+  can happen in three places:
+  - on an existing member's page;
+  - on **Members → New**, as the member is created;
+  - at the door on `/scan`, where **Add a visitor** (`members.create`) creates
+    a first-time visitor, checks them in, and can photograph them in the same
+    step. Tencent must accept it (it rejects a
   dark, blurred or half-hidden face); only then is the photo kept in
   `member_faces` and an audit entry written. The member is a "person" in the
   group whose id and name are both the member's id — no name or other detail

@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { db } from "@/db";
 import { members } from "@/db/schema";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, type DbExecutor } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
 import {
   DEFAULT_DIRECTORY_STATUSES,
@@ -125,28 +125,43 @@ export async function getMember(actor: Actor, id: string): Promise<Member> {
   return member;
 }
 
+export type MemberInput = z.output<typeof memberSchema>;
+
+/**
+ * Insert a member and its audit entry on `executor`, the caller's
+ * transaction. Shared by `createMember` and the paths that create a member
+ * together with something else — a face, a first check-in — so every new
+ * member is written and logged the same way. `id` is for a caller that needed
+ * it before the row existed (face enrolment keys the face by it).
+ */
+export async function insertMember(
+  executor: DbExecutor,
+  actor: Actor,
+  data: MemberInput,
+  id?: string,
+): Promise<Member> {
+  const [row] = await executor
+    .insert(members)
+    .values({ ...(id ? { id } : {}), qrToken: nanoid(16), ...data })
+    .returning();
+  await recordAudit(executor, {
+    actorId: actor.id,
+    action: "member.create",
+    entity: "member",
+    entityId: row.id,
+    after: row,
+    summary: `Added ${row.fullName}`,
+  });
+  return row;
+}
+
 export async function createMember(
   actor: Actor,
   input: unknown,
 ): Promise<Member> {
   authorize(actor, "members.create");
   const data = parseInput(memberSchema, input);
-
-  return db.transaction(async (tx) => {
-    const [row] = await tx
-      .insert(members)
-      .values({ qrToken: nanoid(16), ...data })
-      .returning();
-    await recordAudit(tx, {
-      actorId: actor.id,
-      action: "member.create",
-      entity: "member",
-      entityId: row.id,
-      after: row,
-      summary: `Added ${row.fullName}`,
-    });
-    return row;
-  });
+  return db.transaction((tx) => insertMember(tx, actor, data));
 }
 
 /**

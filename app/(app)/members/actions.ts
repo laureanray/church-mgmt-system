@@ -4,9 +4,11 @@ import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 
 import { requirePermission } from "@/lib/auth-helpers";
+import { readFaceFields } from "@/lib/face-form";
 import { isServiceError } from "@/server/errors";
 import * as facesService from "@/server/faces";
 import * as membersService from "@/server/members";
+import * as newMembersService from "@/server/new-members";
 
 /*
  * The web adapter for server/members.ts. The rules live in the service; this
@@ -53,6 +55,11 @@ function toFormState(error: unknown): MemberFormState {
   if (isServiceError(error) && error.code === "invalid") {
     return { errors: error.fields, message: error.message };
   }
+  // Face recognition down while enrolling a new member's photo: nothing was
+  // created, and the form keeps what was typed.
+  if (isServiceError(error) && error.code === "unavailable") {
+    return { message: error.message };
+  }
   if (isServiceError(error) && error.code === "not_found") notFound();
   throw error;
 }
@@ -77,7 +84,13 @@ export async function createMember(
 
   let member;
   try {
-    member = await membersService.createMember(user, readMemberForm(formData));
+    // With a photo of their face (and consent) the member is created and
+    // enrolled together; without one this is a plain create.
+    member = await newMembersService.createMemberWithFace(
+      user,
+      readMemberForm(formData),
+      await readFaceFields(formData),
+    );
   } catch (error) {
     return toFormState(error);
   }

@@ -5,7 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { db } from "@/db";
 import { appSettings, memberFaces, members, users } from "@/db/schema";
-import { recordAudit } from "@/lib/audit";
+import { recordAudit, type DbExecutor } from "@/lib/audit";
 import type { MemberStatus } from "@/lib/constants";
 import { isForeignKeyViolation } from "@/lib/db-errors";
 import {
@@ -328,6 +328,100 @@ export async function enrollMemberFace(
     }
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// A face for a member being created (server/new-members.ts)
+// ---------------------------------------------------------------------------
+
+/** A face Tencent has accepted for a member whose row is not written yet. */
+export type PreparedFace = {
+  memberId: string;
+  photo: Uint8Array;
+  notice: string;
+};
+
+/**
+ * Enrol a face with Tencent under a freshly generated member id, before the
+ * member exists: a refused photo then fails the whole form, and nothing is
+ * created. Errors carry `fields.facePhoto` / `fields.faceConsent`, so a form
+ * can show them beside the photo. Follow with `recordNewMemberFace` inside
+ * the transaction that inserts the member, or `abandonPreparedFace` if that
+ * transaction fails.
+ */
+export async function prepareNewMemberFace(
+  actor: Actor,
+  image: unknown,
+  consent: unknown,
+): Promise<PreparedFace> {
+  authorize(actor, "members.update");
+  if (!consentGiven(consent)) {
+    const message = "Record their consent before adding a photo of their face.";
+    throw new ServiceError("invalid", message, { faceConsent: message });
+  }
+  let photo: Uint8Array;
+  try {
+    photo = readImage(image);
+  } catch (error) {
+    if (error instanceof ServiceError) {
+      throw new ServiceError("invalid", error.message, { facePhoto: error.message });
+    }
+    throw error;
+  }
+  requireFace();
+
+  const memberId = crypto.randomUUID();
+  const notice = await readConsentNotice();
+  try {
+    await enrollFacePerson(memberId, photo);
+  } catch (error) {
+    try {
+      fromTencent(error);
+    } catch (refusal) {
+      if (refusal instanceof ServiceError && refusal.code === "invalid") {
+        throw new ServiceError("invalid", refusal.message, { facePhoto: refusal.message });
+      }
+      throw refusal;
+    }
+  }
+  return { memberId, photo, notice };
+}
+
+/** Write the face row and its audit entry, once the member row exists in `tx`. */
+export async function recordNewMemberFace(
+  tx: DbExecutor,
+  actor: Actor,
+  member: { id: string; fullName: string },
+  face: PreparedFace,
+): Promise<void> {
+  const now = new Date();
+  const values = {
+    enrolledAt: now,
+    enrolledBy: actor.id,
+    consentAt: now,
+    consentRecordedBy: actor.id,
+  };
+  await tx.insert(memberFaces).values({
+    memberId: member.id,
+    photo: Buffer.from(face.photo),
+    consentNotice: face.notice,
+    ...values,
+  });
+  await recordAudit(tx, {
+    actorId: actor.id,
+    action: "member.face_enroll",
+    entity: "member",
+    entityId: member.id,
+    after: values,
+    summary: `Enrolled ${member.fullName}’s face for check-in, with their consent`,
+  });
+}
+
+/** The member was never created: take the face back out of Tencent. */
+export async function abandonPreparedFace(face: PreparedFace): Promise<void> {
+  await removeFacePerson(face.memberId).catch((error) => {
+    console.error("Could not remove an abandoned face from Tencent", face.memberId, error);
+  });
 }
 
 /**

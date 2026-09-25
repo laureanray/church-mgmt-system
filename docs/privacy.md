@@ -30,10 +30,12 @@ Tencent's own terms, which the consent notice has to reflect:
 
 ## Consent
 
-- A member's face can only be enrolled with their consent. The member page
-  shows the consent notice, and the photo buttons stay disabled until staff tick
-  "…has read this notice, or had it read to them, and agrees". The server checks
-  it again, so bypassing the form does not skip it (`server/faces.ts`).
+- A member's face can only be enrolled with their consent. The notice and the
+  consent box appear wherever a face can be added: the member page, the
+  new-member form, and **Add a visitor** at the door. The photo buttons stay
+  disabled until staff tick "…has read this notice, or had it read to them, and
+  agrees". The server checks it again, so bypassing the form does not skip it
+  (`server/faces.ts`).
 - Consent is recorded per member, not per photo. A replaced photo keeps the
   consent already on record, and removing the face removes the consent with it,
   so enrolling again asks again.

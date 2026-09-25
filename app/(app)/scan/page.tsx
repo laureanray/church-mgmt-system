@@ -2,6 +2,7 @@ import { asc, desc, eq, gte, lt } from "drizzle-orm";
 
 import { reactivateMember } from "@/app/(app)/members/actions";
 import {
+  addVisitor,
   checkInByFace,
   checkInMember,
   recordAttendance,
@@ -15,7 +16,7 @@ import { selectScanServices } from "@/lib/scan-selection";
 import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { ScannerPanel } from "@/components/scan/scanner-panel";
-import { faceCheckInEnabled } from "@/server/faces";
+import { faceCheckInEnabled, getFaceConsentNotice } from "@/server/faces";
 
 /** How many services either side of now the picker offers. */
 const SCAN_WINDOW = 25;
@@ -54,7 +55,16 @@ export default async function ScanPage({
   // folded into the list, which also means a link naming a service that no
   // longer exists resolves to nothing and falls back, rather than selecting an
   // id the picker cannot show.
-  const [upcoming, past, requested] = await Promise.all([
+  // Until Tencent is configured the camera keeps scanning QR codes, so a
+  // deployment without the keys behaves exactly as it did before.
+  const face = faceCheckInEnabled();
+  const canAddVisitor = hasPermission(user, "members.create");
+  // A visitor's photo is taken as they are added only by someone who may
+  // enrol faces.
+  const offerVisitorFace =
+    face && canAddVisitor && hasPermission(user, "members.update");
+
+  const [upcoming, past, requested, consentNotice] = await Promise.all([
     db
       .select(columns)
       .from(services)
@@ -70,6 +80,7 @@ export default async function ScanPage({
     serviceParam
       ? db.select(columns).from(services).where(eq(services.id, serviceParam))
       : [],
+    offerVisitorFace ? getFaceConsentNotice(user) : undefined,
   ]);
 
   const { rows, initialServiceId } = selectScanServices(
@@ -77,10 +88,6 @@ export default async function ScanPage({
     requested.at(0),
     now.getTime(),
   );
-
-  // Until Tencent is configured the camera keeps scanning QR codes, so a
-  // deployment without the keys behaves exactly as it did before.
-  const face = faceCheckInEnabled();
 
   return (
     <PageContainer>
@@ -101,6 +108,8 @@ export default async function ScanPage({
         searchMembers={searchMembersForCheckIn}
         reactivate={reactivateMember}
         checkInByFace={face ? checkInByFace : undefined}
+        addVisitor={canAddVisitor ? addVisitor : undefined}
+        consentNotice={consentNotice}
       />
     </PageContainer>
   );

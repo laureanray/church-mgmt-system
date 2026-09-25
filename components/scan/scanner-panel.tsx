@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Keyboard,
   QrCode,
+  UserPlus,
   UserX,
   XCircle,
 } from "lucide-react";
@@ -14,12 +15,14 @@ import { toast } from "sonner";
 
 import type { ReactivateResult } from "@/app/(app)/members/actions";
 import type {
+  AddVisitorState,
   CheckInResult,
   FaceScanResult,
   ScanResult,
 } from "@/app/(app)/scan/actions";
 import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { EmptyState } from "@/components/patterns/empty-state";
+import { AddVisitorDialog } from "@/components/scan/add-visitor-dialog";
 import { FaceScanner } from "@/components/scan/face-scanner";
 import { NameSearchPanel } from "@/components/scan/name-search-panel";
 import {
@@ -115,6 +118,8 @@ export function ScannerPanel({
   searchMembers,
   reactivate,
   checkInByFace,
+  addVisitor,
+  consentNotice,
 }: {
   services: ServiceOption[];
   initialServiceId?: string;
@@ -134,6 +139,20 @@ export function ScannerPanel({
     serviceId: string,
     formData: FormData,
   ) => Promise<FaceScanResult>;
+  /**
+   * Add a first-time visitor and check them in. Given only to staff who may
+   * create members.
+   */
+  addVisitor?: (
+    serviceId: string,
+    prev: AddVisitorState,
+    formData: FormData,
+  ) => Promise<AddVisitorState>;
+  /**
+   * The consent notice, when a visitor's face can be enrolled as they are
+   * added: face recognition is on and this user may enrol faces.
+   */
+  consentNotice?: string;
 }) {
   const [serviceId, setServiceId] = useState(initialServiceId ?? "");
   const [feed, setFeed] = useState<Feed[]>([]);
@@ -141,6 +160,7 @@ export function ScannerPanel({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [manual, setManual] = useState("");
   const [lapsed, setLapsed] = useState<LapsedCheckIn | null>(null);
+  const [addingVisitor, setAddingVisitor] = useState(false);
 
   const busyRef = useRef(false);
   const lastRef = useRef<{ token: string; t: number }>({ token: "", t: 0 });
@@ -305,7 +325,8 @@ export function ScannerPanel({
         {/* Camera viewport: faces when recognition is set up, QR codes otherwise */}
         {checkInByFace ? (
           <FaceScanner
-            active={Boolean(serviceId)}
+            // Off while a visitor is being added: their photo needs the camera.
+            active={Boolean(serviceId) && !addingVisitor}
             identify={(form) => checkInByFace(serviceId, form)}
             confirm={(memberId) => checkIn(serviceId, memberId)}
             onCheckedIn={(result: CheckIn) => handleResult(result, { quiet: true })}
@@ -371,6 +392,33 @@ export function ScannerPanel({
         )}
 
         <NameSearchPanel search={searchMembers} onSelect={checkInByName} />
+
+        {addVisitor ? (
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm">
+                <p className="font-medium">First time here?</p>
+                <p className="text-muted-foreground">
+                  Add them as a visitor and check them in
+                  {consentNotice ? ", with a photo if they agree" : ""}.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!serviceId) {
+                    toast.error("Select a service first");
+                    return;
+                  }
+                  setAddingVisitor(true);
+                }}
+              >
+                <UserPlus className="size-4" />
+                Add a visitor
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
 
         {/* Manual / USB scanner entry */}
         <Card>
@@ -445,6 +493,23 @@ export function ScannerPanel({
           )}
         </CardContent>
       </Card>
+
+      {addVisitor ? (
+        <AddVisitorDialog
+          open={addingVisitor}
+          onOpenChange={setAddingVisitor}
+          action={(prev, formData) => addVisitor(serviceId, prev, formData)}
+          face={consentNotice ? { notice: consentNotice } : undefined}
+          onAdded={(checkIn) => {
+            toast.success(`${checkIn.memberName} added and checked in — welcome!`);
+            pushFeed(checkIn.memberName, checkIn.status, {
+              id: checkIn.memberId,
+              status: checkIn.memberStatus,
+            });
+            if (checkIn.status === "ok") setCheckedInCount((c) => c + 1);
+          }}
+        />
+      ) : null}
 
       <ReactivateMemberDialog
         checkIn={lapsed}

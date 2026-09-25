@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Camera,
   Loader2,
@@ -16,10 +16,10 @@ import type {
   FaceRemoveResult,
 } from "@/app/(app)/members/actions";
 import { FaceCaptureDialog } from "@/components/members/face-capture-dialog";
+import { FaceConsentNotice } from "@/components/members/face-consent-notice";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardAction,
@@ -169,7 +169,6 @@ export function FaceEnrollmentCard({
 
   // A replacement keeps the consent on record; a first enrolment needs it now.
   const blocked = busy || (!current && !consented);
-  const consentId = useId();
 
   const actions =
     configured && canEdit ? (
@@ -281,32 +280,13 @@ export function FaceEnrollmentCard({
         )}
 
         {configured && canEdit && !current ? (
-          <div className="space-y-2 rounded-md border bg-muted/40 p-3">
-            <p className="text-xs font-medium">Consent notice</p>
-            <div
-              className="max-h-40 overflow-y-auto text-xs whitespace-pre-line text-muted-foreground"
-              tabIndex={0}
-              aria-label="Consent notice"
-            >
-              {consentNotice}
-            </div>
-            <label
-              htmlFor={consentId}
-              className="flex items-start gap-2 border-t pt-2 text-sm"
-            >
-              <Checkbox
-                id={consentId}
-                checked={consented}
-                onCheckedChange={(checked) => setConsented(checked === true)}
-                disabled={busy}
-                className="mt-0.5"
-              />
-              <span>
-                {memberName} has read this notice, or had it read to them, and
-                agrees.
-              </span>
-            </label>
-          </div>
+          <FaceConsentNotice
+            notice={consentNotice}
+            subject={memberName}
+            checked={consented}
+            onCheckedChange={setConsented}
+            disabled={busy}
+          />
         ) : null}
 
         {error ? (

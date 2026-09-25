@@ -12,6 +12,8 @@ import * as attendanceService from "@/server/attendance";
 import type { CheckIn, CheckInCandidate } from "@/server/attendance";
 import { isServiceError } from "@/server/errors";
 import * as facesService from "@/server/faces";
+import * as newMembersService from "@/server/new-members";
+import { readFaceFields } from "@/lib/face-form";
 import type { FaceIdentification } from "@/server/faces";
 
 /*
@@ -147,4 +149,50 @@ export async function checkInByFace(
     revalidatePath("/dashboard");
   }
   return result;
+}
+
+export type AddVisitorState =
+  | { status: "ok"; checkIn: CheckIn }
+  | { status: "error"; message: string; errors?: Record<string, string> }
+  | undefined;
+
+/**
+ * Add a first-time visitor at the door and check them in to `serviceId`,
+ * with a photo of their face if they consented. See addVisitorAndCheckIn.
+ */
+export async function addVisitor(
+  serviceId: string,
+  _prev: AddVisitorState,
+  formData: FormData,
+): Promise<AddVisitorState> {
+  const user = await requirePermission("members.create");
+
+  let result;
+  try {
+    result = await newMembersService.addVisitorAndCheckIn(
+      user,
+      serviceId,
+      {
+        firstName: formData.get("firstName"),
+        lastName: formData.get("lastName"),
+        contactNumber: formData.get("contactNumber"),
+      },
+      await readFaceFields(formData),
+    );
+  } catch (error) {
+    if (
+      isServiceError(error) &&
+      (error.code === "invalid" ||
+        error.code === "unavailable" ||
+        error.code === "not_found")
+    ) {
+      return { status: "error", message: error.message, errors: error.fields };
+    }
+    throw error;
+  }
+
+  revalidatePath("/members");
+  revalidatePath(`/services/${serviceId}`);
+  revalidatePath("/dashboard");
+  return { status: "ok", checkIn: result.checkIn };
 }

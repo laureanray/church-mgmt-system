@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
 import type { MemberFormState } from "@/app/(app)/members/actions";
 import { Field } from "@/components/form/field";
 import { DatePicker } from "@/components/form/date-picker";
 import { FormSelect, type SelectOption } from "@/components/form/form-select";
+import { FacePhotoField } from "@/components/members/face-photo-field";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -50,11 +51,17 @@ export function MemberForm({
   member,
   cellOptions,
   submitLabel = "Save member",
+  face,
 }: {
   action: MemberAction;
   member?: Member;
   cellOptions: SelectOption[];
   submitLabel?: string;
+  /**
+   * Offer a photo for face check-in, with the consent notice. Only when
+   * adding a member, face recognition is on, and the user may enrol faces.
+   */
+  face?: { notice: string };
 }) {
   const [state, formAction, pending] = useActionState<
     MemberFormState,
@@ -70,7 +77,17 @@ export function MemberForm({
   );
 
   return (
-    <form action={formAction} className="space-y-6">
+    <form
+      // Submitted by hand rather than with `action`: React resets a form after
+      // its action finishes, which would clear what was typed — and the photo —
+      // whenever the server sends back an error.
+      onSubmit={(event) => {
+        event.preventDefault();
+        const formData = new FormData(event.currentTarget);
+        startTransition(() => formAction(formData));
+      }}
+      className="space-y-6"
+    >
       {state?.message ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {state.message}
@@ -339,6 +356,21 @@ export function MemberForm({
           </Field>
         </CardContent>
       </Card>
+
+      {face ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Face check-in</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <FacePhotoField
+              notice={face.notice}
+              errors={{ facePhoto: errors.facePhoto, faceConsent: errors.faceConsent }}
+              disabled={pending}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex items-center justify-end gap-2">
         <Link
