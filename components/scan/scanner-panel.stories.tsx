@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import type { Meta, StoryObj } from "@storybook/nextjs-vite";
 
-import type { CheckInResult, ScanResult } from "@/app/(app)/scan/actions";
+import type { CheckInResult, FaceScanResult, ScanResult } from "@/app/(app)/scan/actions";
 import { Toaster } from "@/components/ui/sonner";
 import type { CheckInCandidate } from "@/server/attendance";
 import { ScannerPanel } from "./scanner-panel";
@@ -104,4 +104,27 @@ export const Scanning: Story = {
 
 export const NoServices: Story = {
   render: () => <Preview services={[]} />,
+};
+
+/**
+ * With face recognition configured, the camera looks for faces instead of QR
+ * codes. The fake recogniser checks Ana in, then keeps finding her again —
+ * which the screen does not repeat — so move in front of the camera to try it.
+ */
+export const FaceCheckIn: Story = {
+  render: () => {
+    const actions = fakeActions();
+    return (
+      <Preview
+        initialServiceId="sunday"
+        canReactivate
+        {...actions}
+        checkInByFace={async (serviceId): Promise<FaceScanResult> => {
+          const result = await actions.checkIn(serviceId, "ana");
+          if (result.status === "error") return { status: "no_match" };
+          return { status: "checked_in", checkIn: result, score: 97.4 };
+        }}
+      />
+    );
+  },
 };

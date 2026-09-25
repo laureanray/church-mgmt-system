@@ -342,6 +342,24 @@ matter while editing:
   secret/password/token), so pass whole rows rather than picking fields.
 - The LAM ministry is built in with the stable id `lam`: its roster is who may
   be scheduled on a service line-up, and the line-up actions check it.
+- Face check-in (Tencent Cloud IAI; README "Face check-in") keeps to these:
+  - **One face group per deployment**, named by `FACE_GROUP_ID`. Development
+    uses its own group; nothing local ever points at the production one.
+  - **PersonId = `members.id`**, and PersonName is the same id — no name or
+    other personal detail is sent. PersonIds are unique across the whole Tencent
+    account, so removal is always `DeletePersonFromGroup` for our group, never
+    `DeletePerson`, which would reach other deployments' groups too.
+  - **Frames are never stored.** Only the enrolment photo is kept, in
+    `member_faces` — never on `members`, whose every column the directory
+    selects. Its audit entries record when and by whom, never the photo, so
+    `server/faces.ts` passes picked fields to `recordAudit`, not the row.
+  - **No face is a quiet no-op.** `NoFaceInPhoto` is what an empty doorway
+    returns; the scan loop shows nothing for it.
+  - **The Tencent client is server-only.** `lib/tencent-face.ts` imports
+    `server-only`; the key never reaches the browser, and recognition runs
+    through `server/faces.ts`, which ends in `recordAttendanceForMember`.
+  - Unset, face is off and `/scan` scans QR codes as before. Enrolment stays off
+    in production until consent (#21) lands.
 
 ## Working here
 

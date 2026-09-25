@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { requirePermission } from "@/lib/auth-helpers";
 import { isServiceError } from "@/server/errors";
+import * as facesService from "@/server/faces";
 import * as membersService from "@/server/members";
 
 /*
@@ -155,5 +156,66 @@ export async function reactivateMember(
   revalidatePath("/members");
   revalidatePath(`/members/${memberId}`);
   revalidatePath("/dashboard");
+  return { status: "ok" };
+}
+
+export type FaceEnrollResult =
+  | { status: "ok"; enrolledAt: string; enrolledByName: string | null }
+  | { status: "error"; message: string };
+
+export type FaceRemoveResult = { status: "ok" } | { status: "error"; message: string };
+
+/** A refused photo or an unreachable Tencent becomes a message; the rest rethrows. */
+function toFaceError(error: unknown): { status: "error"; message: string } {
+  if (
+    isServiceError(error) &&
+    (error.code === "invalid" ||
+      error.code === "unavailable" ||
+      error.code === "not_found")
+  ) {
+    return { status: "error", message: error.message };
+  }
+  throw error;
+}
+
+/**
+ * Enrol the photo in `formData` ("photo", a JPEG the browser has already
+ * scaled down) as the member's face for check-in.
+ */
+export async function enrollMemberFace(
+  memberId: string,
+  formData: FormData,
+): Promise<FaceEnrollResult> {
+  const user = await requirePermission("members.update");
+
+  const file = formData.get("photo");
+  const photo =
+    file instanceof Blob ? new Uint8Array(await file.arrayBuffer()) : null;
+
+  let enrollment;
+  try {
+    enrollment = await facesService.enrollMemberFace(user, memberId, photo);
+  } catch (error) {
+    return toFaceError(error);
+  }
+
+  revalidatePath(`/members/${memberId}`);
+  return {
+    status: "ok",
+    enrolledAt: enrollment.enrolledAt.toISOString(),
+    enrolledByName: enrollment.enrolledByName,
+  };
+}
+
+export async function removeMemberFace(
+  memberId: string,
+): Promise<FaceRemoveResult> {
+  const user = await requirePermission("members.update");
+  try {
+    await facesService.removeMemberFace(user, memberId);
+  } catch (error) {
+    return toFaceError(error);
+  }
+  revalidatePath(`/members/${memberId}`);
   return { status: "ok" };
 }

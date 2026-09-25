@@ -143,6 +143,35 @@ kept, so the next name can be typed without touching the screen. Lapsed members
 are listed with their `MemberStatusBadge`, not hidden. Stories cover matches, a
 returning member, no match, searching, a failed search and a check-in in flight.
 
+### Face check-in
+
+Three components, all Storybook-first with every state drawn from props, so no
+story needs a camera, a key or a server:
+
+- `FaceScanner` (`components/scan/face-scanner.tsx`) replaces the QR camera on
+  `/scan` when face recognition is configured. `FaceScannerView` is the
+  picture and its overlays — idle, starting, ready, recognising, a welcome by
+  first name, "already checked in at …", a confirm prompt for a likely match
+  ("Is this …?" with *Yes, check in* / *No*), not recognised (pointing to the
+  name search), a hint the person can act on ("step closer"), a problem for an
+  administrator, and a blocked camera. `FaceScanner` adds the camera and the
+  loop. Overlays sit on the picture in a `popover` card, so they read the same
+  in both themes over a black video; the guidance chips are `bg-black/60`
+  over the video itself. "One person at a time" is always shown while live.
+  The loop is a motion check on a 32×24 grayscale sample (`FaceScanGate` in
+  `lib/face-policy.ts`), **not** a face detector.
+- `FaceEnrollmentCard` (`components/members/`) sits on the member page:
+  not configured, not enrolled, enrolled (photo, date, who enrolled them), a
+  read-only variant, busy, and a refusal explained in Tencent's terms made
+  plain. Take photo, Upload photo, Replace and Remove; Remove confirms first.
+- `FaceCaptureDialog` (`components/members/`) takes the enrolment photo with
+  the front camera: starting, live (an oval guide), captured, enrolling,
+  refused, camera blocked and no camera. The live preview is mirrored; the
+  photo is not.
+
+Story photos come from `face-photo.fixture.ts`, a drawn silhouette, so no real
+face ships in the repository.
+
 ### Date entry
 
 Use `DatePicker` from `components/form/date-picker.tsx` inside `Field` for

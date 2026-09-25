@@ -13,9 +13,14 @@ import {
 import { toast } from "sonner";
 
 import type { ReactivateResult } from "@/app/(app)/members/actions";
-import type { CheckInResult, ScanResult } from "@/app/(app)/scan/actions";
+import type {
+  CheckInResult,
+  FaceScanResult,
+  ScanResult,
+} from "@/app/(app)/scan/actions";
 import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { EmptyState } from "@/components/patterns/empty-state";
+import { FaceScanner } from "@/components/scan/face-scanner";
 import { NameSearchPanel } from "@/components/scan/name-search-panel";
 import {
   ReactivateMemberDialog,
@@ -42,7 +47,7 @@ import {
 import { isLapsed, type MemberStatus } from "@/lib/constants";
 import { formatDateTime, formatTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import type { CheckInCandidate } from "@/server/attendance";
+import type { CheckIn, CheckInCandidate } from "@/server/attendance";
 
 // Camera scanner is browser-only — load it without SSR.
 const Scanner = dynamic(
@@ -109,6 +114,7 @@ export function ScannerPanel({
   checkIn,
   searchMembers,
   reactivate,
+  checkInByFace,
 }: {
   services: ServiceOption[];
   initialServiceId?: string;
@@ -120,6 +126,14 @@ export function ScannerPanel({
   checkIn: (serviceId: string, memberId: string) => Promise<CheckInResult>;
   searchMembers: (query: string) => Promise<CheckInCandidate[]>;
   reactivate: (memberId: string) => Promise<ReactivateResult>;
+  /**
+   * Recognise a face in a camera frame and check them in. Given only when
+   * face recognition is configured; the camera scans QR codes otherwise.
+   */
+  checkInByFace?: (
+    serviceId: string,
+    formData: FormData,
+  ) => Promise<FaceScanResult>;
 }) {
   const [serviceId, setServiceId] = useState(initialServiceId ?? "");
   const [feed, setFeed] = useState<Feed[]>([]);
@@ -151,10 +165,14 @@ export function ScannerPanel({
     setFeed((prev) => [entry, ...prev].slice(0, 30));
   }
 
-  function handleResult(res: ScanResult) {
+  /**
+   * `quiet` skips the toast, for a face check-in: the welcome on the camera
+   * picture already says it, where the person at the door can see it.
+   */
+  function handleResult(res: ScanResult, { quiet = false } = {}) {
     switch (res.status) {
       case "ok":
-        toast.success(`${res.memberName} checked in`);
+        if (!quiet) toast.success(`${res.memberName} checked in`);
         pushFeed(res.memberName, "ok", {
           id: res.memberId,
           status: res.memberStatus,
@@ -162,9 +180,11 @@ export function ScannerPanel({
         setCheckedInCount((c) => c + 1);
         break;
       case "duplicate":
-        toast.warning(
-          `${res.memberName} was already checked in at ${formatTime(res.at)}`,
-        );
+        if (!quiet) {
+          toast.warning(
+            `${res.memberName} was already checked in at ${formatTime(res.at)}`,
+          );
+        }
         pushFeed(res.memberName, "duplicate", {
           id: res.memberId,
           status: res.memberStatus,
@@ -282,64 +302,73 @@ export function ScannerPanel({
           </CardContent>
         </Card>
 
-        {/* Camera viewport */}
-        <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-xl border bg-black">
-          {serviceId && !cameraError ? (
-            <Scanner
-              onScan={(codes) => {
-                const value = codes?.[0]?.rawValue;
-                if (value) void processScan(value);
-              }}
-              onError={(err) => {
-                const message =
-                  err instanceof Error ? err.message : "Camera unavailable";
-                setCameraError(message);
-              }}
-              constraints={{ facingMode: "environment" }}
-              formats={["qr_code"]}
-              scanDelay={400}
-              components={{ finder: true }}
-              styles={{
-                container: { width: "100%", height: "100%" },
-                video: {
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                },
-              }}
-            />
-          ) : (
-            <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
-              {cameraError ? (
-                <>
-                  <CameraOff className="size-8" />
-                  <p className="text-sm font-medium text-white">
-                    Camera unavailable
-                  </p>
-                  <p className="max-w-xs text-xs">
-                    {cameraError}. Use the manual entry below (works with USB
-                    scanners too).
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => setCameraError(null)}
-                    className="mt-1"
-                  >
-                    Retry camera
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <QrCode className="size-8" />
-                  <p className="text-sm">
-                    Select a service to start the camera.
-                  </p>
-                </>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Camera viewport: faces when recognition is set up, QR codes otherwise */}
+        {checkInByFace ? (
+          <FaceScanner
+            active={Boolean(serviceId)}
+            identify={(form) => checkInByFace(serviceId, form)}
+            confirm={(memberId) => checkIn(serviceId, memberId)}
+            onCheckedIn={(result: CheckIn) => handleResult(result, { quiet: true })}
+          />
+        ) : (
+          <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-xl border bg-black">
+            {serviceId && !cameraError ? (
+              <Scanner
+                onScan={(codes) => {
+                  const value = codes?.[0]?.rawValue;
+                  if (value) void processScan(value);
+                }}
+                onError={(err) => {
+                  const message =
+                    err instanceof Error ? err.message : "Camera unavailable";
+                  setCameraError(message);
+                }}
+                constraints={{ facingMode: "environment" }}
+                formats={["qr_code"]}
+                scanDelay={400}
+                components={{ finder: true }}
+                styles={{
+                  container: { width: "100%", height: "100%" },
+                  video: {
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  },
+                }}
+              />
+            ) : (
+              <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
+                {cameraError ? (
+                  <>
+                    <CameraOff className="size-8" />
+                    <p className="text-sm font-medium text-white">
+                      Camera unavailable
+                    </p>
+                    <p className="max-w-xs text-xs">
+                      {cameraError}. Use the manual entry below (works with USB
+                      scanners too).
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setCameraError(null)}
+                      className="mt-1"
+                    >
+                      Retry camera
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <QrCode className="size-8" />
+                    <p className="text-sm">
+                      Select a service to start the camera.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         <NameSearchPanel search={searchMembers} onSelect={checkInByName} />
 

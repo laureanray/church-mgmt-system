@@ -23,6 +23,7 @@
     "db:seed": "bun db/seed.ts",
     "bootstrap:admin": "bun scripts/bootstrap-admin.mjs",
     "audit:prune": "bun scripts/audit-prune.ts",
+    "face:setup": "bun --conditions=react-server scripts/face-setup.ts",
     "test:unit": "bun test lib",
     "test:watch": "bun test --watch lib",
     "test:coverage": "bun test --coverage lib",

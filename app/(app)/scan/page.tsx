@@ -2,6 +2,7 @@ import { asc, desc, eq, gte, lt } from "drizzle-orm";
 
 import { reactivateMember } from "@/app/(app)/members/actions";
 import {
+  checkInByFace,
   checkInMember,
   recordAttendance,
   searchMembersForCheckIn,
@@ -14,6 +15,7 @@ import { selectScanServices } from "@/lib/scan-selection";
 import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { ScannerPanel } from "@/components/scan/scanner-panel";
+import { faceCheckInEnabled } from "@/server/faces";
 
 /** How many services either side of now the picker offers. */
 const SCAN_WINDOW = 25;
@@ -76,11 +78,19 @@ export default async function ScanPage({
     now.getTime(),
   );
 
+  // Until Tencent is configured the camera keeps scanning QR codes, so a
+  // deployment without the keys behaves exactly as it did before.
+  const face = faceCheckInEnabled();
+
   return (
     <PageContainer>
       <PageHeader
         title="Scan Attendance"
-        description="Scan a member's QR code, or search for them by name, to record their attendance."
+        description={
+          face
+            ? "Members check in by looking at the camera. Search by name for anyone it does not recognise."
+            : "Scan a member's QR code, or search for them by name, to record their attendance."
+        }
       />
       <ScannerPanel
         services={rows}
@@ -90,6 +100,7 @@ export default async function ScanPage({
         checkIn={checkInMember}
         searchMembers={searchMembersForCheckIn}
         reactivate={reactivateMember}
+        checkInByFace={face ? checkInByFace : undefined}
       />
     </PageContainer>
   );
