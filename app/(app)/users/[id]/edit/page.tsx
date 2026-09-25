@@ -1,12 +1,13 @@
-import { asc, eq, isNull, or } from "drizzle-orm";
-import { notFound } from "next/navigation";
+import { asc, eq, isNull, or, sql } from "drizzle-orm";
+import { notFound, redirect } from "next/navigation";
 
 import { updateUser } from "../../actions";
 import { db } from "@/db";
-import { members, roles, users } from "@/db/schema";
+import { members, rolePermissions, roles, users } from "@/db/schema";
 import { requirePermission } from "@/lib/auth-helpers";
 import { loadUserAccess } from "@/lib/access";
-import { permissionSources } from "@/lib/ministry-access";
+import { canManageAccount } from "@/lib/delegation";
+import { effectivePermissions, permissionSources } from "@/lib/ministry-access";
 import { AccessSummary } from "@/components/ministries/access-summary";
 import { BackLink } from "@/components/patterns/back-link";
 import { UserForm } from "@/components/users/user-form";
@@ -25,13 +26,21 @@ export default async function EditUserPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePermission("users.update");
+  const actor = await requirePermission("users.update");
   const { id } = await params;
 
-  const [user, roleOptions, memberOptions, access] = await Promise.all([
+  const [user, allRoles, memberOptions, access] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, id) }),
     db
-      .select({ value: roles.id, label: roles.name })
+      .select({
+        value: roles.id,
+        label: roles.name,
+        permissions: sql<string[]>`coalesce(
+          (select array_agg(${rolePermissions.permissionKey}) from ${rolePermissions}
+            where ${rolePermissions.roleId} = ${roles.id}),
+          '{}'
+        )`,
+      })
       .from(roles)
       .orderBy(roles.name),
     // Unclaimed members, plus the one this login already has.
@@ -43,6 +52,20 @@ export default async function EditUserPage({
     loadUserAccess(id),
   ]);
   if (!user || !access) notFound();
+
+  // updateUser refuses an account holding more than the editor — changing its
+  // email would hand them that access — and any role holding more, so the
+  // page does the same. See lib/delegation.ts.
+  const targetPermissions = effectivePermissions(
+    access.rolePermissions,
+    access.ministryGrants,
+  );
+  if (!canManageAccount(actor.permissions, targetPermissions)) {
+    redirect("/no-access");
+  }
+  const roleOptions = allRoles
+    .filter((role) => canManageAccount(actor.permissions, role.permissions))
+    .map(({ value, label }) => ({ value, label }));
 
   const action = updateUser.bind(null, user.id);
   const entries = permissionSources(

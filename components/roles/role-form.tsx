@@ -8,7 +8,13 @@ import type { RoleFormState } from "@/app/(app)/roles/actions";
 import { Field } from "@/components/form/field";
 import { PermissionMatrix } from "@/components/roles/permission-matrix";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { PermissionKey } from "@/lib/permissions";
@@ -24,11 +30,17 @@ export function RoleForm({
   role,
   selectedPermissions = [],
   protectedRole = false,
+  grantable,
+  permissionsNote,
 }: {
   action: RoleAction;
   role?: { name: string; description: string | null };
   selectedPermissions?: readonly PermissionKey[];
   protectedRole?: boolean;
+  /** The permissions this editor may change; the rest are locked. */
+  grantable?: readonly PermissionKey[];
+  /** Why some permissions are locked, shown above the matrix. */
+  permissionsNote?: string;
 }) {
   const [state, formAction, pending] = useActionState<RoleFormState, FormData>(
     action,
@@ -81,11 +93,15 @@ export function RoleForm({
       <Card>
         <CardHeader>
           <CardTitle>Module permissions</CardTitle>
+          {permissionsNote ? (
+            <CardDescription>{permissionsNote}</CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent>
           <PermissionMatrix
             selected={selectedPermissions}
             disabled={protectedRole}
+            grantable={grantable}
           />
         </CardContent>
       </Card>

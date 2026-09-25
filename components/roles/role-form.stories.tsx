@@ -33,3 +33,39 @@ export const ProtectedAdmin: Story = {
     protectedRole: true,
   },
 };
+
+const LEADER_HOLDS = [
+  "dashboard.view",
+  "attendance.view",
+  "attendance.record",
+  "members.view",
+  "members.create",
+  "members.update",
+  "roles.view",
+  "roles.update",
+] as const;
+
+/**
+ * Edited by someone who holds only some permissions. The rest are locked in
+ * their saved state; the note says why.
+ */
+export const LimitedEditor: Story = {
+  args: {
+    role: { name: "Usher", description: "Checks people in at the door." },
+    selectedPermissions: ["dashboard.view", "attendance.view", "attendance.record", "services.view"],
+    grantable: [...LEADER_HOLDS],
+    permissionsNote:
+      "Permissions you do not hold yourself are locked: you can neither grant nor remove them.",
+  },
+};
+
+/** The editor's own role: every permission is locked, name and description are not. */
+export const OwnRole: Story = {
+  args: {
+    role: { name: "Office Staff", description: "Runs staff accounts for the church office." },
+    selectedPermissions: [...LEADER_HOLDS],
+    grantable: [],
+    permissionsNote:
+      "This is your own role, so its permissions are locked. Ask another authorized staff member to change them.",
+  },
+};

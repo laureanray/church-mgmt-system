@@ -6,14 +6,68 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { members, roles, users } from "@/db/schema";
+import { prospectiveAccess } from "@/lib/access";
 import { recordAudit } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
-import { hasPermission, requirePermission } from "@/lib/auth-helpers";
+import {
+  hasPermission,
+  requirePermission,
+  type SessionUser,
+} from "@/lib/auth-helpers";
+import {
+  canManageAccount,
+  describePermissions,
+  permissionsBeyond,
+} from "@/lib/delegation";
+import { effectivePermissions } from "@/lib/ministry-access";
 import { generateTempPassword } from "@/lib/password";
+import { loadSessionUser } from "@/lib/session-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
 
 const MEMBER_ALREADY_LINKED = "That member is already linked to another staff login.";
+const OUT_OF_REACH =
+  "This account has access you do not hold, so only someone who holds it can change the account.";
+
+/**
+ * Refuses a role or member link that would leave an account holding access
+ * the actor lacks. Whoever creates an account is handed its temporary
+ * password, and whoever edits one can change its login email, so either way
+ * they could sign in as it: an account may hold no more than they do. See
+ * lib/delegation.ts.
+ */
+async function assignmentErrors(
+  actor: SessionUser,
+  roleId: string,
+  memberId: string | null,
+): Promise<Record<string, string> | null> {
+  const access = await prospectiveAccess(roleId, memberId);
+  const errors: Record<string, string> = {};
+
+  const fromRole = permissionsBeyond(actor.permissions, access.rolePermissions);
+  if (fromRole.length) {
+    errors.roleId = `This role grants access you do not have: ${describePermissions(fromRole)}.`;
+  }
+  const fromMinistries = permissionsBeyond(
+    actor.permissions,
+    effectivePermissions([], access.ministryGrants),
+  );
+  if (fromMinistries.length) {
+    errors.memberId = `This member’s ministries grant access you do not have: ${describePermissions(fromMinistries)}.`;
+  }
+  return Object.keys(errors).length ? errors : null;
+}
+
+/**
+ * Whether an existing account holds access the actor lacks. Resetting its
+ * password, changing its email or role, or deleting it are all out of reach
+ * then — the first two would hand the actor that access outright. An account
+ * with no profile row holds nothing.
+ */
+async function outranksActor(actor: SessionUser, id: string): Promise<boolean> {
+  const target = await loadSessionUser(id);
+  return target !== null && !canManageAccount(actor.permissions, target.permissions);
+}
 
 /**
  * Checks a member can be linked to this login: it exists, and no other login
@@ -141,6 +195,9 @@ export async function createUser(
   const memberError = await linkableMemberError(memberId, null);
   if (memberError) return { errors: { memberId: memberError } };
 
+  const beyond = await assignmentErrors(actor, roleId, memberId);
+  if (beyond) return { errors: beyond };
+
   const taken = await db.query.users.findFirst({
     where: eq(users.email, email),
   });
@@ -230,6 +287,10 @@ export async function updateUser(
 
   const { name, email, roleId, memberId } = parsed.data;
 
+  if (await outranksActor(currentUser, id)) {
+    return { message: OUT_OF_REACH };
+  }
+
   const assignedRole = await db.query.roles.findFirst({
     where: eq(roles.id, roleId),
   });
@@ -239,6 +300,9 @@ export async function updateUser(
 
   const memberError = await linkableMemberError(memberId, id);
   if (memberError) return { errors: { memberId: memberError } };
+
+  const beyond = await assignmentErrors(currentUser, roleId, memberId);
+  if (beyond) return { errors: beyond };
 
   const clash = await db.query.users.findFirst({
     where: and(eq(users.email, email), ne(users.id, id)),
@@ -366,6 +430,9 @@ export async function resetUserPassword(
   _prev: ResetPasswordState,
 ): Promise<ResetPasswordState> {
   const actor = await requirePermission("users.reset_password");
+  // A temporary password is the account: issuing one for an account that
+  // holds more than the actor would hand them that access.
+  if (await outranksActor(actor, id)) redirect("/no-access");
 
   const tempPassword = generateTempPassword();
   const admin = createAdminClient();
@@ -405,6 +472,9 @@ export async function deleteUser(currentUserId: string, id: string) {
     // Guard against locking yourself out.
     return;
   }
+  // Nor may anyone remove an account that holds more than they do — that is
+  // how the last administrator stays out of reach of everyone but another.
+  if (await outranksActor(actor, id)) redirect("/no-access");
 
   // Delete the credential first: a profile with no auth user is merely orphaned
   // data, while an auth user with no profile is an account that can still sign

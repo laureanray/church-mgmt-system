@@ -1,11 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { Pencil, UserCog } from "lucide-react";
 
 import { db } from "@/db";
-import { members, roles, users } from "@/db/schema";
+import {
+  members,
+  ministries,
+  ministryMembers,
+  ministryPermissions,
+  rolePermissions,
+  roles,
+  users,
+} from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
+import { canManageAccount } from "@/lib/delegation";
+import { effectivePermissions, type MinistryGrant } from "@/lib/ministry-access";
 import {
   allowedValues,
   overRunPage,
@@ -37,6 +47,8 @@ type StaffRow = {
   mustChangePassword: boolean;
   memberId: string | null;
   memberName: string | null;
+  /** Whether the viewer may edit, reset or delete this account at all. */
+  withinReach: boolean;
 };
 
 const SORT_COLUMNS = {
@@ -57,9 +69,17 @@ export default async function UsersPage({
   const canOpenMembers = hasPermission(currentUser, "members.view");
   // Linking a login to a member is a users.update action, creation included.
   const canLinkMembers = canCreate && hasPermission(currentUser, "users.update");
-  const [roleOptions, unlinkedMembers] = await Promise.all([
+  const [allRoles, unlinkedMembers] = await Promise.all([
     db
-      .select({ value: roles.id, label: roles.name })
+      .select({
+        value: roles.id,
+        label: roles.name,
+        permissions: sql<string[]>`coalesce(
+          (select array_agg(${rolePermissions.permissionKey}) from ${rolePermissions}
+            where ${rolePermissions.roleId} = ${roles.id}),
+          '{}'
+        )`,
+      })
       .from(roles)
       .orderBy(asc(roles.name)),
     canLinkMembers
@@ -70,6 +90,16 @@ export default async function UsersPage({
           .orderBy(asc(members.fullName), asc(members.id))
       : Promise.resolve([]),
   ]);
+
+  const roleOptions = allRoles.map(({ value, label }) => ({ value, label }));
+  const rolePermissionsById = new Map(
+    allRoles.map((role) => [role.value, role.permissions]),
+  );
+  // Nobody assigns a role that holds more than they do (lib/delegation.ts);
+  // createUser refuses one, so the dialog does not offer it.
+  const assignableRoles = allRoles
+    .filter((role) => canManageAccount(currentUser.permissions, role.permissions))
+    .map(({ value, label }) => ({ value, label }));
 
   const ctx = tableContext("/users", await searchParams, {
     sortKeys: Object.keys(SORT_COLUMNS),
@@ -95,7 +125,7 @@ export default async function UsersPage({
   const sortColumn = SORT_COLUMNS[state.sort as keyof typeof SORT_COLUMNS];
   const direction = state.direction === "asc" ? asc : desc;
 
-  const [rows, [{ matching }]] = await Promise.all([
+  const [page, [{ matching }]] = await Promise.all([
     db
       .select({
         id: users.id,
@@ -106,6 +136,20 @@ export default async function UsersPage({
         mustChangePassword: users.mustChangePassword,
         memberId: members.id,
         memberName: members.fullName,
+        // What the linked member's active ministries add to the role, so each
+        // row's full access is known without a query per row.
+        ministryGrants: sql<MinistryGrant[]>`coalesce(
+          (select json_agg(json_build_object(
+              'ministryId', ${ministryPermissions.ministryId},
+              'permissionKey', ${ministryPermissions.permissionKey}
+            ))
+            from ${ministryPermissions}
+            join ${ministryMembers}
+              on ${ministryMembers.ministryId} = ${ministryPermissions.ministryId}
+            join ${ministries} on ${ministries.id} = ${ministryPermissions.ministryId}
+            where ${ministryMembers.memberId} = ${members.id} and ${ministries.active}),
+          '[]'
+        )`,
       })
       .from(users)
       .innerJoin(roles, eq(users.roleId, roles.id))
@@ -119,6 +163,16 @@ export default async function UsersPage({
 
   const clamped = overRunPage(state, matching);
   if (clamped !== null) redirect(tableHref(ctx, { page: clamped }));
+
+  // The account actions refuse anyone holding more than the viewer, so they
+  // are not offered on those rows.
+  const rows: StaffRow[] = page.map(({ ministryGrants, ...row }) => ({
+    ...row,
+    withinReach: canManageAccount(
+      currentUser.permissions,
+      effectivePermissions(rolePermissionsById.get(row.roleId) ?? [], ministryGrants),
+    ),
+  }));
 
   const columns: DataTableColumn<StaffRow>[] = [
     {
@@ -208,7 +262,7 @@ export default async function UsersPage({
       width: "w-28",
       cell: (u) => (
         <div className="flex items-center justify-end gap-0.5">
-          {hasPermission(currentUser, "users.update") ? (
+          {u.withinReach && hasPermission(currentUser, "users.update") ? (
             <Link
               href={`/users/${u.id}/edit`}
               className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
@@ -217,10 +271,12 @@ export default async function UsersPage({
               <Pencil className="size-4" />
             </Link>
           ) : null}
-          {hasPermission(currentUser, "users.reset_password") ? (
+          {u.withinReach && hasPermission(currentUser, "users.reset_password") ? (
             <ResetPasswordButton id={u.id} name={u.name} />
           ) : null}
-          {u.id !== currentUser.id && hasPermission(currentUser, "users.delete") ? (
+          {u.withinReach &&
+          u.id !== currentUser.id &&
+          hasPermission(currentUser, "users.delete") ? (
             <DeleteUserButton
               id={u.id}
               name={u.name}
@@ -240,7 +296,7 @@ export default async function UsersPage({
       >
         {canCreate ? (
           <CreateUserDialog
-            roles={roleOptions}
+            roles={assignableRoles}
             memberOptions={canLinkMembers ? unlinkedMembers : undefined}
             action={createUser}
           />

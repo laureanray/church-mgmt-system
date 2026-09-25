@@ -9,14 +9,15 @@ import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { MinistryForm } from "@/components/ministries/ministry-form";
 import { requirePermission } from "@/lib/auth-helpers";
-import { isMinistryGrantable } from "@/lib/permissions";
+import { LOCKED_PERMISSIONS_NOTE, grantableFor } from "@/lib/delegation";
+import { MINISTRY_GRANTABLE_KEYS, isMinistryGrantable } from "@/lib/permissions";
 
 export default async function EditMinistryPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePermission("ministries.update");
+  const actor = await requirePermission("ministries.update");
   const { id } = await params;
   const [ministry, grants] = await Promise.all([
     db.query.ministries.findFirst({ where: eq(ministries.id, id) }),
@@ -26,6 +27,7 @@ export default async function EditMinistryPage({
       .where(eq(ministryPermissions.ministryId, id)),
   ]);
   if (!ministry) notFound();
+  const grantable = grantableFor(actor.permissions, MINISTRY_GRANTABLE_KEYS);
 
   return (
     <PageContainer>
@@ -36,6 +38,8 @@ export default async function EditMinistryPage({
         ministry={ministry}
         selectedPermissions={grants.map(({ key }) => key).filter(isMinistryGrantable)}
         cancelHref={`/ministries/${ministry.id}`}
+        grantable={grantable}
+        permissionsNote={grantable ? LOCKED_PERMISSIONS_NOTE : undefined}
       />
     </PageContainer>
   );

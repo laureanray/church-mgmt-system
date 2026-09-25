@@ -9,6 +9,7 @@ import { PageContainer } from "@/components/patterns/page-container";
 import { PageHeader } from "@/components/patterns/page-header";
 import { RoleForm } from "@/components/roles/role-form";
 import { requirePermission } from "@/lib/auth-helpers";
+import { LOCKED_PERMISSIONS_NOTE, grantableFor } from "@/lib/delegation";
 import type { PermissionKey } from "@/lib/permissions";
 
 export default async function EditRolePage({
@@ -16,7 +17,7 @@ export default async function EditRolePage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePermission("roles.update");
+  const actor = await requirePermission("roles.update");
   const { id } = await params;
   const [role, assigned] = await Promise.all([
     db.query.roles.findFirst({ where: eq(roles.id, id) }),
@@ -27,6 +28,16 @@ export default async function EditRolePage({
       .orderBy(asc(rolePermissions.permissionKey)),
   ]);
   if (!role) notFound();
+
+  // The same limits updateRole applies: your own role's permissions are your
+  // own access, and nobody grants or removes what they do not hold.
+  const ownRole = role.id === actor.role.id && role.id !== "admin";
+  const grantable = ownRole ? [] : grantableFor(actor.permissions);
+  const permissionsNote = ownRole
+    ? "This is your own role, so its permissions are locked. Ask another authorized staff member to change them."
+    : grantable
+      ? LOCKED_PERMISSIONS_NOTE
+      : undefined;
 
   return (
     <PageContainer>
@@ -44,6 +55,8 @@ export default async function EditRolePage({
         role={role}
         selectedPermissions={assigned.map(({ key }) => key as PermissionKey)}
         protectedRole={role.id === "admin"}
+        grantable={grantable}
+        permissionsNote={permissionsNote}
       />
     </PageContainer>
   );

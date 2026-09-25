@@ -236,7 +236,9 @@ describe("ministry actions", () => {
   });
 
   it("replaces the grants on a valid update", async () => {
-    requirePermission.mockResolvedValue(session({ permissions: ["ministries.update"] }));
+    requirePermission.mockResolvedValue(
+      session({ permissions: ["ministries.update", "members.view"] }),
+    );
     await database.db.insert(ministries).values({ id: "prayer", name: "Prayer" });
 
     await expect(
@@ -304,7 +306,9 @@ describe("audit", () => {
   }
 
   it("logs a new ministry with its grants, and nothing for a rejected form", async () => {
-    requirePermission.mockResolvedValue(session({ permissions: ["ministries.create"] }));
+    requirePermission.mockResolvedValue(
+      session({ permissions: ["ministries.create", "members.view"] }),
+    );
     expect(
       await createMinistry(undefined, form({ name: "", description: "" })),
     ).toMatchObject({ errors: { name: expect.any(String) } });
@@ -328,7 +332,9 @@ describe("audit", () => {
   });
 
   it("logs a change of grants as a change to the ministry", async () => {
-    requirePermission.mockResolvedValue(session({ permissions: ["ministries.update"] }));
+    requirePermission.mockResolvedValue(
+      session({ permissions: ["ministries.update", "members.view"] }),
+    );
     await database.db.insert(ministries).values({ id: "prayer", name: "Prayer", active: true });
 
     await expect(
