@@ -33,6 +33,7 @@ await mock.module("next/navigation", () => ({
   },
 }));
 const { loadUserAccess } = await import("../../lib/access");
+const { loadSessionUser } = await import("../../lib/session-user");
 const {
   addRosterMember,
   deleteMinistry,
@@ -84,6 +85,24 @@ beforeEach(async () => {
   ]);
 });
 afterAll(() => database.client.end());
+
+describe("loadSessionUser", () => {
+  // The web app and the HTTP API both end here, so a ministry's grants reach
+  // an API caller exactly as they reach the browser.
+  it("carries ministry grants, the linked member and memberships", async () => {
+    await database.db.insert(ministryMembers).values({ ministryId: "lam", memberId: "joy" });
+
+    const user = await loadSessionUser("joy-login");
+    expect(user).toMatchObject({
+      id: "joy-login",
+      role: { id: "usher" },
+      memberId: "joy",
+      ministries: [{ id: "lam", name: "LAM", position: "member" }],
+    });
+    expect(user?.permissions).toContain("lam.view");
+    expect(user?.permissions).toContain("attendance.record");
+  });
+});
 
 describe("loadUserAccess", () => {
   it("adds the grants of every ministry the linked member serves in", async () => {
