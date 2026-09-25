@@ -1,10 +1,17 @@
 import { afterAll, expect, it } from "bun:test";
 import { asc, eq } from "drizzle-orm";
 
-import { rolePermissions, roles, users } from "../../db/schema";
+import {
+  ministries,
+  ministryPermissions,
+  rolePermissions,
+  roles,
+  users,
+} from "../../db/schema";
 import {
   DEFAULT_ROLE_PERMISSIONS,
   PERMISSION_KEYS,
+  isMinistryGrantable,
 } from "../../lib/permissions";
 import { connectTestDatabase } from "../support/database";
 
@@ -53,4 +60,28 @@ it("rejects a user assigned to a role that does not exist", async () => {
       })
       .execute(),
   ).rejects.toThrow();
+});
+
+it("seeds the starter ministries with only grantable permissions", async () => {
+  const seeded = await database.db
+    .select({ id: ministries.id, isSystem: ministries.isSystem, active: ministries.active })
+    .from(ministries)
+    .orderBy(asc(ministries.id));
+  expect(seeded).toEqual([
+    { id: "childrens-ministry", isSystem: false, active: true },
+    { id: "lam", isSystem: true, active: true },
+    { id: "ushering", isSystem: false, active: true },
+  ]);
+
+  const grants = await database.db
+    .select({ id: ministryPermissions.ministryId, key: ministryPermissions.permissionKey })
+    .from(ministryPermissions)
+    .orderBy(asc(ministryPermissions.ministryId), asc(ministryPermissions.permissionKey));
+  expect(grants.every(({ key }) => isMinistryGrantable(key))).toBe(true);
+  expect(grants.filter(({ id }) => id === "ushering").map(({ key }) => key)).toEqual([
+    "attendance.record",
+    "attendance.view",
+    "services.view",
+  ]);
+  expect(grants.filter(({ id }) => id === "lam").map(({ key }) => key)).toContain("lam.view");
 });

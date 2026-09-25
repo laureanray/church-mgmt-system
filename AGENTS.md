@@ -225,6 +225,11 @@ password. Supabase owns credentials — this codebase never hashes a password.
   The
   verifier in `lib/supabase/verify.ts` is a fourth, but it is anonymous and
   read-only — it holds no session and can reach no data.
+- **Ministries add permissions on top of a role.** A ministry's roster is made
+  of *members*; a rostered member whose record is linked to a login
+  (`members.user_id`) receives the ministry's grants. Ministries can never
+  grant staff, role, ministry or settings permissions, and heads manage only
+  their own roster. `docs/authorization.md` has the rules and why.
 - Creating or deleting staff writes to **both** Supabase Auth and the profile
   table; `app/(app)/users/actions.ts` rolls the auth user back if the profile
   insert fails, so neither half is left orphaned.
@@ -316,16 +321,20 @@ matter while editing:
   There is no cron; occurrences appear because someone opened a page. Each
   schedule keeps only its next occurrence (plus today's, on a meeting day) —
   not weeks of empty future services.
-- Editing or pausing a schedule rebuilds only *future, un-attended*
-  occurrences. Past and already-attended services survive.
+- Editing or pausing a schedule rebuilds only *future, unused*
+  occurrences. Past services, already-attended ones, and any with a LAM
+  line-up (songs or team) survive — deleting a service cascades to its line-up.
 - `app_settings` is a single row keyed `"singleton"`; write it with
   `onConflictDoUpdate`.
 - Every mutation of members, cell groups (and their membership), services,
-  staff users, roles and settings calls `recordAudit()` from `lib/audit.ts`
+  staff users (and their member link), roles, settings, ministries (and their
+  rosters), songs and line-ups calls `recordAudit()` from `lib/audit.ts`
   **inside the same transaction**, after the write — a rolled-back change
   leaves no entry, and a failed entry undoes the change.
   `recordAudit` diffs and redacts on its own (any key matching
   secret/password/token), so pass whole rows rather than picking fields.
+- The LAM ministry is built in with the stable id `lam`: its roster is who may
+  be scheduled on a service line-up, and the line-up actions check it.
 
 ## Working here
 

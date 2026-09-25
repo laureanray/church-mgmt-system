@@ -31,5 +31,8 @@ export async function migrateTestDatabase() {
 }
 
 export async function resetTestDatabase(client: ReturnType<typeof postgres>) {
-  await client`TRUNCATE audit_log, attendance, members, cell_groups, services, service_schedules, users, app_settings CASCADE`;
+  await client`TRUNCATE audit_log, attendance, ministry_members, lineup_assignments, lineup_songs, songs, members, cell_groups, services, service_schedules, users, app_settings CASCADE`;
+  // The starter ministries are migration data, like the built-in roles, so they
+  // stay; anything a test created goes.
+  await client`DELETE FROM ministries WHERE id NOT IN ('lam', 'ushering', 'childrens-ministry')`;
 }

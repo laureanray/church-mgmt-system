@@ -12,7 +12,8 @@ try {
 
 async function main() {
   const { db } = await import("./index");
-  const { users, members, services, cellGroups } = await import("./schema");
+  const { users, members, services, cellGroups, songs, ministryMembers } =
+    await import("./schema");
   const { eq } = await import("drizzle-orm");
 
   console.log("Seeding database...");
@@ -258,6 +259,35 @@ async function main() {
     console.log("  ✓ 2 sample services created");
   } else {
     console.log(`  • Services already present (${existingServices}), skipping`);
+  }
+
+  // --- LAM: a song library and a roster ------------------------------------
+  // The LAM ministry itself comes from the migration; only its data is seeded.
+  const existingSongs = await db.$count(songs);
+  if (existingSongs === 0) {
+    await db.insert(songs).values([
+      { title: "Way Maker", artist: "Sinach", defaultKey: "E", tempo: 68 },
+      { title: "Goodness of God", artist: "Bethel Music", defaultKey: "A", tempo: 63 },
+      { title: "Build My Life", artist: "Housefires", defaultKey: "G", tempo: 70 },
+      { title: "Dakilang Katapatan", defaultKey: "G", tempo: 72 },
+    ]);
+
+    const maria = await db.query.members.findFirst({
+      where: eq(members.fullName, "Maria Santos"),
+    });
+    const rosa = await db.query.members.findFirst({
+      where: eq(members.fullName, "Rosa Villanueva"),
+    });
+    const roster = [
+      maria && { ministryId: "lam", memberId: maria.id, position: "head" as const },
+      rosa && { ministryId: "lam", memberId: rosa.id },
+    ].filter((row) => !!row);
+    if (roster.length) {
+      await db.insert(ministryMembers).values(roster).onConflictDoNothing();
+    }
+    console.log("  ✓ 4 sample songs and a LAM roster created");
+  } else {
+    console.log(`  • Songs already present (${existingSongs}), skipping`);
   }
 
   console.log("Done.");

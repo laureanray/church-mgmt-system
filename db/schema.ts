@@ -318,6 +318,164 @@ export const attendance = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Ministries — where members serve. A ministry's roster is made of members, not
+// staff logins; a rostered member who also has a login (members.user_id) gains
+// the ministry's permissions on top of their role's. See docs/authorization.md.
+// ---------------------------------------------------------------------------
+
+export const ministries = pgTable("ministries", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  // An inactive ministry keeps its roster but grants nothing.
+  active: boolean("active").notNull().default(true),
+  // Built-in ministries own a module (LAM owns line-ups), so they keep a stable
+  // id and cannot be deleted.
+  isSystem: boolean("is_system").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const ministryMembers = pgTable(
+  "ministry_members",
+  {
+    ministryId: text("ministry_id")
+      .notNull()
+      .references(() => ministries.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "cascade" }),
+    position: text("position", { enum: ["member", "head"] })
+      .notNull()
+      .default("member"),
+    joinedAt: timestamp("joined_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ministryId, t.memberId] }),
+    // requireUser() walks from a member to their ministries on every request.
+    index("ministry_members_member_id_idx").on(t.memberId),
+  ],
+);
+
+export const ministryPermissions = pgTable(
+  "ministry_permissions",
+  {
+    ministryId: text("ministry_id")
+      .notNull()
+      .references(() => ministries.id, { onDelete: "cascade" }),
+    permissionKey: text("permission_key")
+      .notNull()
+      .references(() => permissions.key, { onDelete: "cascade" }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ministryId, t.permissionKey] }),
+    index("ministry_permissions_permission_key_idx").on(t.permissionKey),
+  ],
+);
+
+// ---------------------------------------------------------------------------
+// LAM — the song library, and each service's line-up: the songs in order, and
+// who from the LAM roster serves in which part.
+// ---------------------------------------------------------------------------
+
+export const songs = pgTable(
+  "songs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    title: text("title").notNull(),
+    artist: text("artist"),
+    // Free text: "G", "Bb", "F#m". The key a line-up plays it in can differ.
+    defaultKey: text("default_key"),
+    tempo: integer("tempo"), // beats per minute
+    // Lyrics, chords, or a recording — wherever the team keeps it.
+    referenceUrl: text("reference_url"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("songs_title_idx").on(t.title)],
+);
+
+export const lineupSongs = pgTable(
+  "lineup_songs",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    serviceId: text("service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    // Restrict, not cascade: deleting a song must not silently rewrite the
+    // history of what was sung. The delete action refuses a song in use.
+    songId: text("song_id")
+      .notNull()
+      .references(() => songs.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    // Overrides the song's default key for this service.
+    songKey: text("song_key"),
+    notes: text("notes"),
+  },
+  (t) => [
+    index("lineup_songs_service_id_idx").on(t.serviceId, t.position),
+    index("lineup_songs_song_id_idx").on(t.songId),
+  ],
+);
+
+export const lineupAssignments = pgTable(
+  "lineup_assignments",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    serviceId: text("service_id")
+      .notNull()
+      .references(() => services.id, { onDelete: "cascade" }),
+    memberId: text("member_id")
+      .notNull()
+      .references(() => members.id, { onDelete: "cascade" }),
+    part: text("part", {
+      enum: [
+        "worship_leader",
+        "vocals",
+        "keys",
+        "acoustic_guitar",
+        "electric_guitar",
+        "bass",
+        "drums",
+        "sound",
+        "lights",
+        "projection",
+        "dance",
+        "liturgy",
+      ],
+    }).notNull(),
+  },
+  (t) => [
+    // One person may cover two parts, but not the same part twice.
+    unique("lineup_assignments_service_member_part_unique").on(
+      t.serviceId,
+      t.memberId,
+      t.part,
+    ),
+    index("lineup_assignments_member_id_idx").on(t.memberId),
+  ],
+);
+
+// ---------------------------------------------------------------------------
 // App settings — a single-row table holding integration config (e.g. the
 // Google Sheets webhook). Keyed by a constant id so there is only ever one row.
 // ---------------------------------------------------------------------------
@@ -382,6 +540,7 @@ export const rolesRelations = relations(roles, ({ many }) => ({
 
 export const permissionsRelations = relations(permissions, ({ many }) => ({
   rolePermissions: many(rolePermissions),
+  ministryPermissions: many(ministryPermissions),
 }));
 
 export const rolePermissionsRelations = relations(
@@ -416,6 +575,7 @@ export const membersRelations = relations(members, ({ one, many }) => ({
     references: [users.id],
   }),
   ledCellGroups: many(cellGroups, { relationName: "cellLeader" }),
+  ministryMemberships: many(ministryMembers),
 }));
 
 export const cellGroupsRelations = relations(cellGroups, ({ one, many }) => ({
@@ -442,6 +602,8 @@ export const serviceSchedulesRelations = relations(
 
 export const servicesRelations = relations(services, ({ one, many }) => ({
   attendance: many(attendance),
+  lineupSongs: many(lineupSongs),
+  lineupAssignments: many(lineupAssignments),
   schedule: one(serviceSchedules, {
     fields: [services.scheduleId],
     references: [serviceSchedules.id],
@@ -470,6 +632,68 @@ export const attendanceRelations = relations(attendance, ({ one }) => ({
   }),
 }));
 
+export const ministriesRelations = relations(ministries, ({ many }) => ({
+  members: many(ministryMembers),
+  permissions: many(ministryPermissions),
+}));
+
+export const ministryMembersRelations = relations(
+  ministryMembers,
+  ({ one }) => ({
+    ministry: one(ministries, {
+      fields: [ministryMembers.ministryId],
+      references: [ministries.id],
+    }),
+    member: one(members, {
+      fields: [ministryMembers.memberId],
+      references: [members.id],
+    }),
+  }),
+);
+
+export const ministryPermissionsRelations = relations(
+  ministryPermissions,
+  ({ one }) => ({
+    ministry: one(ministries, {
+      fields: [ministryPermissions.ministryId],
+      references: [ministries.id],
+    }),
+    permission: one(permissions, {
+      fields: [ministryPermissions.permissionKey],
+      references: [permissions.key],
+    }),
+  }),
+);
+
+export const songsRelations = relations(songs, ({ many }) => ({
+  lineupSongs: many(lineupSongs),
+}));
+
+export const lineupSongsRelations = relations(lineupSongs, ({ one }) => ({
+  service: one(services, {
+    fields: [lineupSongs.serviceId],
+    references: [services.id],
+  }),
+  song: one(songs, {
+    fields: [lineupSongs.songId],
+    references: [songs.id],
+  }),
+}));
+
+export const lineupAssignmentsRelations = relations(
+  lineupAssignments,
+  ({ one }) => ({
+    service: one(services, {
+      fields: [lineupAssignments.serviceId],
+      references: [services.id],
+    }),
+    member: one(members, {
+      fields: [lineupAssignments.memberId],
+      references: [members.id],
+    }),
+  }),
+);
+
 // ---------------------------------------------------------------------------
 // Inferred types
 // ---------------------------------------------------------------------------
@@ -483,3 +707,8 @@ export type ServiceSchedule = typeof serviceSchedules.$inferSelect;
 export type Attendance = typeof attendance.$inferSelect;
 export type CellGroup = typeof cellGroups.$inferSelect;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
+export type Ministry = typeof ministries.$inferSelect;
+export type MinistryMember = typeof ministryMembers.$inferSelect;
+export type Song = typeof songs.$inferSelect;
+export type LineupSong = typeof lineupSongs.$inferSelect;
+export type LineupAssignment = typeof lineupAssignments.$inferSelect;

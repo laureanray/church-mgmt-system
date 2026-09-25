@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { desc, eq, gte } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import {
   CalendarDays,
   CalendarPlus,
@@ -11,7 +12,7 @@ import {
 
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
-import { hasPermission, requirePermission } from "@/lib/auth-helpers";
+import { hasPermission, homeFor, requireUser } from "@/lib/auth-helpers";
 import { celebrationWindow } from "@/lib/celebrations";
 import { celebrationsIn } from "@/lib/celebrations-query";
 import { SERVICE_TYPES, SERVICE_TYPE_LABELS } from "@/lib/constants";
@@ -44,7 +45,10 @@ type RecentServiceRow = {
 };
 
 export default async function DashboardPage() {
-  const user = await requirePermission("dashboard.view");
+  const user = await requireUser();
+  // Sign-in always lands here, including for someone whose access is only a
+  // ministry's grants. Send them to what they can open instead of /no-access.
+  if (!hasPermission(user, "dashboard.view")) redirect(homeFor(user));
   // This async Server Component reads the clock after request-bound authentication.
   // eslint-disable-next-line react-hooks/purity
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);

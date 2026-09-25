@@ -5,7 +5,7 @@ import { Loader2, UserPlus } from "lucide-react";
 
 import type { CreateUserState } from "@/app/(app)/users/actions";
 import { Field } from "@/components/form/field";
-import { FormSelect } from "@/components/form/form-select";
+import { FormSelect, type SelectOption } from "@/components/form/form-select";
 import { TempPasswordReveal } from "@/components/users/temp-password-reveal";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,9 +21,15 @@ import {
 import { Input } from "@/components/ui/input";
 export function CreateUserDialog({
   roles,
+  memberOptions,
   action,
 }: {
   roles: { value: string; label: string }[];
+  /**
+   * Members not yet linked to a login. Omit it when the viewer lacks
+   * `users.update`, which linking requires, and the field is not shown.
+   */
+  memberOptions?: SelectOption[];
   action: (
     state: CreateUserState,
     formData: FormData,
@@ -128,6 +134,22 @@ export function CreateUserDialog({
                   required
                 />
               </Field>
+              {memberOptions ? (
+                <Field
+                  label="Member Record"
+                  htmlFor="user-memberId"
+                  error={errors.memberId}
+                  hint="Link it if this person is a member, so their ministries apply."
+                >
+                  <FormSelect
+                    id="user-memberId"
+                    name="memberId"
+                    options={memberOptions}
+                    clearLabel="Not linked"
+                    placeholder="Not linked"
+                  />
+                </Field>
+              ) : null}
               <DialogFooter>
                 <DialogClose
                   render={<Button variant="outline" type="button" />}

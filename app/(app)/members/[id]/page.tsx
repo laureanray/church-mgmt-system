@@ -10,6 +10,8 @@ import {
   auditLog,
   cellGroups,
   members,
+  ministries,
+  ministryMembers,
   services,
   users,
 } from "@/db/schema";
@@ -39,6 +41,8 @@ import { PageContainer } from "@/components/patterns/page-container";
 import { FormSelect } from "@/components/form/form-select";
 import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
+import { MemberMinistries } from "@/components/ministries/member-ministries";
+import { canViewMinistry } from "@/lib/ministry-access";
 import { MemberQr } from "@/components/members/member-qr";
 import { MemberStatusBadge } from "@/components/members/member-status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -119,7 +123,16 @@ export default async function MemberDetailPage({
   const auditDirection = auditState.direction === "asc" ? asc : desc;
   // One batch: the audit count feeds the History tab's badge even while the
   // attendance tab is showing, and only the visible panel's rows are fetched.
-  const [qrDataUrl, history, attendedCount, auditRows, auditCount] =
+  const canViewStaff = hasPermission(user, "users.view");
+  const [
+    qrDataUrl,
+    history,
+    attendedCount,
+    auditRows,
+    auditCount,
+    memberMinistries,
+    login,
+  ] =
     await Promise.all([
       generateQrDataUrl(member.qrToken),
       showAudit
@@ -173,6 +186,23 @@ export default async function MemberDetailPage({
             .offset(tableOffset(auditState))
         : [],
       canViewAudit ? db.$count(auditLog, aboutMember) : 0,
+      db
+        .select({
+          id: ministries.id,
+          name: ministries.name,
+          position: ministryMembers.position,
+          active: ministries.active,
+        })
+        .from(ministryMembers)
+        .innerJoin(ministries, eq(ministries.id, ministryMembers.ministryId))
+        .where(eq(ministryMembers.memberId, member.id))
+        .orderBy(asc(ministries.name)),
+      canViewStaff && member.userId
+        ? db.query.users.findFirst({
+            where: eq(users.id, member.userId),
+            columns: { id: true, email: true },
+          })
+        : Promise.resolve(undefined),
     ]);
 
   const clampedHistoryPage = overRunPage(historyState, attendedCount);
@@ -356,6 +386,36 @@ export default async function MemberDetailPage({
               <p className="text-center text-xs text-muted-foreground">
                 Scan this code at the entrance to record attendance.
               </p>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-base">Ministries</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <MemberMinistries
+                ministries={memberMinistries}
+                linkableIds={memberMinistries
+                  .filter((m) => canViewMinistry(user, m.id))
+                  .map((m) => m.id)}
+              />
+              {login ? (
+                <p className="border-t pt-3 text-xs text-muted-foreground">
+                  Signs in as{" "}
+                  {hasPermission(user, "users.update") ? (
+                    <Link
+                      href={`/users/${login.id}/edit`}
+                      className="font-medium text-foreground underline underline-offset-4"
+                    >
+                      {login.email}
+                    </Link>
+                  ) : (
+                    <span className="font-medium text-foreground">{login.email}</span>
+                  )}
+                  , so these ministries add to their role&apos;s access.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 

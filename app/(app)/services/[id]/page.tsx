@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, count, desc, eq, ilike } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
-import { CalendarDays, MapPin, Pencil, QrCode, Users } from "lucide-react";
+import { CalendarDays, MapPin, Music, Pencil, QrCode, Users } from "lucide-react";
 
 import { db } from "@/db";
 import { attendance, members, services } from "@/db/schema";
@@ -158,6 +158,15 @@ export default async function ServiceDetailPage({
           >
             <QrCode className="size-4" />
             Scan attendance
+          </Link>
+        ) : null}
+        {hasPermission(user, "lam.view") ? (
+          <Link
+            href={`/lam/services/${service.id}`}
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            <Music className="size-4" />
+            Line-up
           </Link>
         ) : null}
         {sheetsOn ? <SyncServiceButton serviceId={service.id} /> : null}

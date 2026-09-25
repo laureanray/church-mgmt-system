@@ -2,11 +2,13 @@ import { z } from "zod";
 
 import {
   GENDERS,
+  LINEUP_PARTS,
   MARITAL_STATUSES,
   MEMBER_STATUSES,
+  MINISTRY_POSITIONS,
   SERVICE_TYPES,
 } from "./constants";
-import { PERMISSION_KEYS } from "./permissions";
+import { MINISTRY_GRANTABLE_KEYS, PERMISSION_KEYS } from "./permissions";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -107,11 +109,14 @@ const emailField = z.preprocess(
   z.string().regex(EMAIL_RE, "Enter a valid email"),
 );
 
-// Admin creates a user (password is generated, not entered).
+// Admin creates a user (password is generated, not entered). `memberId` links
+// the login to the person's member record, which is how ministry access
+// reaches it; empty means "not linked".
 export const createUserSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(200),
   email: emailField,
   roleId: z.string().trim().min(1, "Role is required"),
+  memberId: optionalId.optional().default(null),
 });
 
 // Editing an existing user (same fields; password handled separately).
@@ -124,6 +129,72 @@ export const roleSchema = z.object({
     .array(z.enum(PERMISSION_KEYS))
     .default([])
     .transform((values) => [...new Set(values)]),
+});
+
+const checkbox = z.preprocess(
+  (v) => v === "on" || v === "true" || v === true,
+  z.boolean(),
+);
+
+// A ministry's permissions are limited to the grantable subset. The enum is the
+// enforcement: a forged `users.update` checkbox fails parsing, it is not dropped.
+export const ministrySchema = z.object({
+  name: z.string().trim().min(1, "Ministry name is required").max(100),
+  description: optionalText,
+  active: checkbox,
+  permissions: z
+    .array(z.enum(MINISTRY_GRANTABLE_KEYS, "A ministry cannot grant that permission"))
+    .default([])
+    .transform((values) => [...new Set(values)]),
+});
+
+export const rosterAddSchema = z.object({
+  memberId: z.string().trim().min(1, "Choose a member"),
+});
+
+export const rosterPositionSchema = z.object({
+  memberId: z.string().trim().min(1, "Invalid member"),
+  position: z.enum(MINISTRY_POSITIONS),
+});
+
+const optionalUrl = z.preprocess(
+  emptyToNull,
+  z
+    .url({ protocol: /^https?$/, error: "Enter a link starting with http:// or https://" })
+    .max(1000)
+    .nullable(),
+);
+
+const musicalKey = z.preprocess(
+  emptyToNull,
+  z.string().trim().max(8, "Keep the key short, like G or F#m").nullable(),
+);
+
+export const songSchema = z.object({
+  title: z.string().trim().min(1, "Title is required").max(200),
+  artist: z.preprocess(emptyToNull, z.string().trim().max(200).nullable()),
+  defaultKey: musicalKey,
+  tempo: z.preprocess(
+    (v) => (v === "" || v == null ? null : Number(v)),
+    z
+      .number("Enter the tempo in beats per minute")
+      .int("Enter a whole number")
+      .min(20, "Tempo seems too slow")
+      .max(300, "Tempo seems too fast")
+      .nullable(),
+  ),
+  referenceUrl: optionalUrl,
+  notes: optionalText,
+});
+
+export const lineupSongSchema = z.object({
+  songId: z.string().trim().min(1, "Choose a song"),
+  songKey: musicalKey,
+});
+
+export const lineupAssignmentSchema = z.object({
+  memberId: z.string().trim().min(1, "Choose who is serving"),
+  part: z.enum(LINEUP_PARTS, "Choose a part"),
 });
 
 // A user setting their own new password.

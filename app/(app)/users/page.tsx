@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { and, asc, count, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, isNull, or } from "drizzle-orm";
 import { Pencil, UserCog } from "lucide-react";
 
 import { db } from "@/db";
-import { roles, users } from "@/db/schema";
+import { members, roles, users } from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import {
   allowedValues,
@@ -35,12 +35,15 @@ type StaffRow = {
   roleId: string;
   roleName: string;
   mustChangePassword: boolean;
+  memberId: string | null;
+  memberName: string | null;
 };
 
 const SORT_COLUMNS = {
   name: users.name,
   email: users.email,
   role: roles.name,
+  member: members.fullName,
   status: users.mustChangePassword,
 } as const;
 
@@ -50,10 +53,23 @@ export default async function UsersPage({
   searchParams: Promise<RawSearchParams>;
 }) {
   const currentUser = await requirePermission("users.view");
-  const roleOptions = await db
-    .select({ value: roles.id, label: roles.name })
-    .from(roles)
-    .orderBy(asc(roles.name));
+  const canCreate = hasPermission(currentUser, "users.create");
+  const canOpenMembers = hasPermission(currentUser, "members.view");
+  // Linking a login to a member is a users.update action, creation included.
+  const canLinkMembers = canCreate && hasPermission(currentUser, "users.update");
+  const [roleOptions, unlinkedMembers] = await Promise.all([
+    db
+      .select({ value: roles.id, label: roles.name })
+      .from(roles)
+      .orderBy(asc(roles.name)),
+    canLinkMembers
+      ? db
+          .select({ value: members.id, label: members.fullName })
+          .from(members)
+          .where(isNull(members.userId))
+          .orderBy(asc(members.fullName), asc(members.id))
+      : Promise.resolve([]),
+  ]);
 
   const ctx = tableContext("/users", await searchParams, {
     sortKeys: Object.keys(SORT_COLUMNS),
@@ -88,9 +104,12 @@ export default async function UsersPage({
         roleId: users.roleId,
         roleName: roles.name,
         mustChangePassword: users.mustChangePassword,
+        memberId: members.id,
+        memberName: members.fullName,
       })
       .from(users)
       .innerJoin(roles, eq(users.roleId, roles.id))
+      .leftJoin(members, eq(members.userId, users.id))
       .where(where)
       .orderBy(direction(sortColumn), asc(users.id))
       .limit(state.perPage)
@@ -150,6 +169,25 @@ export default async function UsersPage({
       ),
     },
     {
+      id: "member",
+      header: "Member Record",
+      label: "Member record",
+      sortKey: "member",
+      hideBelow: "lg",
+      cell: (u) =>
+        u.memberId ? (
+          canOpenMembers ? (
+            <Link href={`/members/${u.memberId}`} className="hover:underline">
+              {u.memberName}
+            </Link>
+          ) : (
+            u.memberName
+          )
+        ) : (
+          <span className="text-sm text-muted-foreground">Not linked</span>
+        ),
+    },
+    {
       id: "status",
       header: "Status",
       sortKey: "status",
@@ -200,8 +238,12 @@ export default async function UsersPage({
         title="Staff Users"
         description="People who can log in to manage members and record attendance."
       >
-        {hasPermission(currentUser, "users.create") ? (
-          <CreateUserDialog roles={roleOptions} action={createUser} />
+        {canCreate ? (
+          <CreateUserDialog
+            roles={roleOptions}
+            memberOptions={canLinkMembers ? unlinkedMembers : undefined}
+            action={createUser}
+          />
         ) : null}
       </PageHeader>
 

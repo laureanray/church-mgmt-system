@@ -1,17 +1,95 @@
 "use server";
 
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { roles, users } from "@/db/schema";
+import { members, roles, users } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
-import { requirePermission } from "@/lib/auth-helpers";
+import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { generateTempPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createUserSchema, editUserSchema, fieldErrors } from "@/lib/validators";
+
+const MEMBER_ALREADY_LINKED = "That member is already linked to another staff login.";
+
+/**
+ * Checks a member can be linked to this login: it exists, and no other login
+ * already claims it. This is the early, friendly answer for the form; the
+ * claim itself is re-checked atomically in linkMember, because two staff can
+ * pass this check for the same member at the same moment.
+ */
+async function linkableMemberError(
+  memberId: string | null,
+  userId: string | null,
+): Promise<string | null> {
+  if (!memberId) return null;
+  const member = await db.query.members.findFirst({
+    where: eq(members.id, memberId),
+    columns: { userId: true },
+  });
+  if (!member) return "That member no longer exists.";
+  if (member.userId && member.userId !== userId) {
+    return MEMBER_ALREADY_LINKED;
+  }
+  return null;
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Thrown inside a transaction to roll it back when the claim is lost. */
+class MemberAlreadyLinked extends Error {}
+
+/**
+ * Points exactly one member record (or none) at this login.
+ *
+ * The claim only succeeds while the member is unclaimed or already this
+ * login's, and it must touch a row — so a concurrent link to the same member
+ * rolls this transaction back instead of silently taking the member over,
+ * which would move its ministry access from one login to another.
+ */
+/** The name of the member record a login is linked to — how the log shows it. */
+async function linkedMemberName(tx: Tx, userId: string) {
+  const [member] = await tx
+    .select({ fullName: members.fullName })
+    .from(members)
+    .where(eq(members.userId, userId))
+    .limit(1);
+  return member?.fullName ?? null;
+}
+
+/** Links the login to `memberId` (or unlinks it) and returns the member's name. */
+async function linkMember(
+  tx: Tx,
+  userId: string,
+  memberId: string | null,
+): Promise<string | null> {
+  await tx
+    .update(members)
+    .set({ userId: null, updatedAt: new Date() })
+    .where(
+      memberId
+        ? and(eq(members.userId, userId), ne(members.id, memberId))
+        : eq(members.userId, userId),
+    );
+  if (memberId) {
+    const claimed = await tx
+      .update(members)
+      .set({ userId, updatedAt: new Date() })
+      .where(
+        and(
+          eq(members.id, memberId),
+          or(isNull(members.userId), eq(members.userId, userId)),
+        ),
+      )
+      .returning({ fullName: members.fullName });
+    if (claimed.length === 0) throw new MemberAlreadyLinked();
+    return claimed[0].fullName;
+  }
+  return null;
+}
 
 export type CreateUserState =
   | {
@@ -33,6 +111,7 @@ export async function createUser(
     name: formData.get("name"),
     email: formData.get("email"),
     roleId: formData.get("roleId"),
+    memberId: formData.get("memberId"),
   });
   if (!parsed.success) {
     return {
@@ -41,7 +120,16 @@ export async function createUser(
     };
   }
 
-  const { name, email, roleId } = parsed.data;
+  const { name, email, roleId, memberId } = parsed.data;
+
+  // The linked member carries ministry access, so linking one is a
+  // users.update action even when it happens at creation.
+  if (memberId && !hasPermission(actor, "users.update")) {
+    return {
+      errors: { memberId: "You cannot link a member record." },
+      message: "Create the login unlinked; staff who can edit users can link it.",
+    };
+  }
 
   const assignedRole = await db.query.roles.findFirst({
     where: eq(roles.id, roleId),
@@ -49,6 +137,9 @@ export async function createUser(
   if (!assignedRole) {
     return { errors: { roleId: "Select an available role." } };
   }
+
+  const memberError = await linkableMemberError(memberId, null);
+  if (memberError) return { errors: { memberId: memberError } };
 
   const taken = await db.query.users.findFirst({
     where: eq(users.email, email),
@@ -88,12 +179,13 @@ export async function createUser(
           mustChangePassword: true,
         })
         .returning();
+      const linkedMember = await linkMember(tx, data.user.id, memberId);
       await recordAudit(tx, {
         actorId: actor.id,
         action: "user.create",
         entity: "user",
         entityId: created.id,
-        after: created,
+        after: { ...created, linkedMember },
         summary: `Created staff account for ${name} (${assignedRole.name})`,
       });
     });
@@ -101,10 +193,14 @@ export async function createUser(
     // Roll the auth user back, otherwise it lingers with no profile and its
     // owner can sign in but gets bounced by requireUser().
     await admin.auth.admin.deleteUser(data.user.id);
+    if (err instanceof MemberAlreadyLinked) {
+      return { errors: { memberId: MEMBER_ALREADY_LINKED } };
+    }
     throw err;
   }
 
   revalidatePath("/users");
+  if (memberId) revalidatePath(`/members/${memberId}`);
   return { ok: true, email, tempPassword };
 }
 
@@ -123,6 +219,7 @@ export async function updateUser(
     name: formData.get("name"),
     email: formData.get("email"),
     roleId: formData.get("roleId"),
+    memberId: formData.get("memberId"),
   });
   if (!parsed.success) {
     return {
@@ -131,7 +228,7 @@ export async function updateUser(
     };
   }
 
-  const { name, email, roleId } = parsed.data;
+  const { name, email, roleId, memberId } = parsed.data;
 
   const assignedRole = await db.query.roles.findFirst({
     where: eq(roles.id, roleId),
@@ -139,6 +236,9 @@ export async function updateUser(
   if (!assignedRole) {
     return { errors: { roleId: "Select an available role." } };
   }
+
+  const memberError = await linkableMemberError(memberId, id);
+  if (memberError) return { errors: { memberId: memberError } };
 
   const clash = await db.query.users.findFirst({
     where: and(eq(users.email, email), ne(users.id, id)),
@@ -158,11 +258,21 @@ export async function updateUser(
     };
   }
 
+  // Ministry access arrives through the linked member, so relinking yourself is
+  // the same self-escalation as changing your own role.
+  if (id === currentUser.id && (currentUser.memberId ?? null) !== memberId) {
+    return {
+      errors: { memberId: "You cannot change your own member record." },
+      message: "Ask another authorized staff member to link your member record.",
+    };
+  }
+
   // Email is the login identity, so a change has to reach Supabase too, or the
   // staff member would keep signing in with the old address.
-  if (existing && existing.email !== email) {
-    const admin = createAdminClient();
-    const { error } = await admin.auth.admin.updateUserById(id, {
+  const previousEmail =
+    existing && existing.email !== email ? existing.email : null;
+  if (previousEmail) {
+    const { error } = await createAdminClient().auth.admin.updateUserById(id, {
       email,
       email_confirm: true,
     });
@@ -171,32 +281,79 @@ export async function updateUser(
     }
   }
 
-  await db.transaction(async (tx) => {
-    const [updated] = await tx
-      .update(users)
-      .set({ name, email, roleId, updatedAt: new Date() })
-      .where(eq(users.id, id))
-      .returning();
-    if (!existing || !updated) return;
+  // The linked member carries ministry access, so relinking can change what
+  // this user may do exactly as a role change can.
+  try {
+    await db.transaction(async (tx) => {
+      const previousMember = await linkedMemberName(tx, id);
+      const [updated] = await tx
+        .update(users)
+        .set({ name, email, roleId, updatedAt: new Date() })
+        .where(eq(users.id, id))
+        .returning();
+      const linkedMember = await linkMember(tx, id, memberId);
+      if (!existing || !updated) return;
 
-    const roleChanged = existing.roleId !== updated.roleId;
-    await recordAudit(tx, {
-      actorId: currentUser.id,
-      action: roleChanged ? "user.role_change" : "user.update",
-      entity: "user",
-      entityId: id,
-      before: existing,
-      after: updated,
-      summary: (fields) => {
-        const others = describeFields(fields.filter((field) => field !== "roleId"));
-        if (!roleChanged) return `Edited staff user ${name}: ${others}`;
-        const role = `Changed ${name}’s role to ${assignedRole.name}`;
-        return others ? `${role}, and edited ${others}` : role;
-      },
+      const roleChanged = existing.roleId !== updated.roleId;
+      await recordAudit(tx, {
+        actorId: currentUser.id,
+        action: roleChanged ? "user.role_change" : "user.update",
+        entity: "user",
+        entityId: id,
+        // The member link carries ministry access, so it is logged like a field.
+        before: { ...existing, linkedMember: previousMember },
+        after: { ...updated, linkedMember },
+        summary: (fields) => {
+          const others = describeFields(fields.filter((field) => field !== "roleId"));
+          if (!roleChanged) return `Edited staff user ${name}: ${others}`;
+          const role = `Changed ${name}’s role to ${assignedRole.name}`;
+          return others ? `${role}, and edited ${others}` : role;
+        },
+      });
     });
-  });
+  } catch (err) {
+    // The profile rolled back, so put the login email back too; otherwise the
+    // staff member signs in with an address the profile does not show.
+    const restore = previousEmail
+      ? await createAdminClient().auth.admin.updateUserById(id, {
+          email: previousEmail,
+          email_confirm: true,
+        })
+      : null;
+    // Supabase refused the old address, so it keeps the new one. The profile
+    // is the half we can still move: bring its email into line, and say so.
+    const emailKept = Boolean(restore?.error);
+    if (emailKept && previousEmail) {
+      await db.transaction(async (tx) => {
+        await tx
+          .update(users)
+          .set({ email, updatedAt: new Date() })
+          .where(eq(users.id, id));
+        await recordAudit(tx, {
+          actorId: currentUser.id,
+          action: "user.update",
+          entity: "user",
+          entityId: id,
+          before: { email: previousEmail },
+          after: { email },
+          summary: `Kept ${name}’s new login email after the rest of the edit failed`,
+        });
+      });
+      revalidatePath("/users");
+    }
+    if (err instanceof MemberAlreadyLinked) {
+      return {
+        errors: { memberId: MEMBER_ALREADY_LINKED },
+        ...(emailKept && {
+          message: "The new email was saved, but nothing else was. Pick another member record.",
+        }),
+      };
+    }
+    throw err;
+  }
 
   revalidatePath("/users");
+  revalidatePath("/members", "layout");
   redirect("/users");
 }
 
