@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { parseChurchDateTime } from "./church-time";
 import {
   GENDERS,
   LINEUP_PARTS,
@@ -78,11 +79,19 @@ export const memberSchema = z.object({
 export const serviceSchema = z.object({
   name: z.string().trim().min(1, "Service name is required").max(200),
   type: z.enum(SERVICE_TYPES),
-  // datetime-local value, e.g. "2026-07-05T09:00"
+  // datetime-local value, e.g. "2026-07-05T09:00". It carries no zone, so it
+  // is read as church time here: `new Date(value)` would read it in the
+  // server's zone, which on Vercel is UTC and stored a 9 AM service at 5 PM.
   scheduledAt: z
     .string()
     .min(1, "Date and time are required")
-    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, "Pick a valid date and time"),
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/, "Pick a valid date and time")
+    .transform((value, ctx) => {
+      const instant = parseChurchDateTime(value);
+      if (instant) return instant;
+      ctx.addIssue({ code: "custom", message: "Pick a valid date and time" });
+      return z.NEVER;
+    }),
   location: optionalText,
   notes: optionalText,
 });

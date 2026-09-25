@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { appSettings, attendance } from "@/db/schema";
 import type { DbExecutor } from "@/lib/audit";
+import { wallClock } from "@/lib/church-time";
 
 const SETTINGS_ID = "singleton";
 
@@ -60,13 +61,14 @@ export type AttendanceRow = {
 
 export type SyncResult = { ok: boolean; synced?: number; error?: string };
 
+// In church time: read in the server's zone (UTC on Vercel), a 7:30 AM Sunday
+// check-in was exported as 11:30 PM on the Saturday before.
 const pad = (n: number) => String(n).padStart(2, "0");
-const fmtTimestamp = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-const fmtDate = (d: Date) =>
-  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fmtTimestamp = (d: Date) => {
+  const { date, time } = wallClock(d);
+  return `${date} ${time}:${pad(d.getUTCSeconds())}`;
+};
+const fmtDate = (d: Date) => wallClock(d).date;
 
 async function postToWebhook(
   config: SheetsConfig,

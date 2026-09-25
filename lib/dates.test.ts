@@ -9,6 +9,7 @@ import {
   isLeapYear,
   isoDate,
   todayIn,
+  weekdayOf,
 } from "./dates";
 
 describe("dateParts and isoDate", () => {
@@ -65,5 +66,13 @@ describe("anniversaryIn", () => {
   it("moves 29 February to the 28th only in a common year", () => {
     expect(anniversaryIn("1992-02-29", 2027)).toBe("2027-02-28");
     expect(anniversaryIn("1992-02-29", 2028)).toBe("2028-02-29");
+  });
+});
+
+describe("weekdayOf", () => {
+  it("numbers weekdays from Sunday, like Date.getDay()", () => {
+    expect(weekdayOf("2026-09-27")).toBe(0);
+    expect(weekdayOf("2026-09-26")).toBe(6);
+    expect(weekdayOf("2024-02-29")).toBe(4);
   });
 });

@@ -38,10 +38,9 @@ export async function createService(
     };
   }
 
-  const { scheduledAt, ...rest } = parsed.data;
   const [row] = await db
     .insert(services)
-    .values({ ...rest, scheduledAt: new Date(scheduledAt) })
+    .values(parsed.data)
     .returning({ id: services.id });
 
   revalidatePath("/services");
@@ -63,10 +62,9 @@ export async function updateService(
     };
   }
 
-  const { scheduledAt, ...rest } = parsed.data;
   await db
     .update(services)
-    .set({ ...rest, scheduledAt: new Date(scheduledAt) })
+    .set(parsed.data)
     .where(eq(services.id, id));
 
   revalidatePath("/services");

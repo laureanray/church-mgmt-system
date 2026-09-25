@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { inEachProcessTimeZone } from "../tests/support/time-zones";
 import {
   cellGroupSchema,
   createUserSchema,
@@ -6,6 +7,7 @@ import {
   ministrySchema,
   promoteSchema,
   roleSchema,
+  serviceSchema,
   songSchema,
 } from "./validators";
 
@@ -298,5 +300,24 @@ describe("createUserSchema", () => {
         memberId: "",
       }).memberId,
     ).toBeNull();
+  });
+});
+
+describe("serviceSchema", () => {
+  const service = (scheduledAt: string) =>
+    serviceSchema.safeParse({ name: "Sunday Service", type: "sunday_service", scheduledAt });
+
+  it("reads the date and time as church time, whatever zone the server is in", () => {
+    inEachProcessTimeZone(() => {
+      const parsed = service("2026-09-27T09:00");
+      expect(parsed.success && parsed.data.scheduledAt.toISOString()).toBe(
+        "2026-09-27T01:00:00.000Z",
+      );
+    });
+  });
+
+  it("rejects a value that is not a date and time", () => {
+    const parsed = service("2026-09-27");
+    expect(parsed.success).toBe(false);
   });
 });

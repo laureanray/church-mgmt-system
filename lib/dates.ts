@@ -74,3 +74,9 @@ export function anniversaryIn(date: string, year: number): string {
   const leapDay = month === 2 && day === 29 && !isLeapYear(year);
   return isoDate(year, month, leapDay ? 28 : day);
 }
+
+/** The weekday a date falls on: 0 = Sunday … 6 = Saturday, like `Date.getDay()`. */
+export function weekdayOf(value: string): number {
+  const { year, month, day } = dateParts(value);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}

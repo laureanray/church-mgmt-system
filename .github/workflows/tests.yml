@@ -39,7 +39,11 @@ jobs:
       # Lets the coverage step post/update its comment on the pull request.
       pull-requests: write
     env:
-      TZ: Asia/Manila
+      # UTC, as on Vercel. Code that names the church's zone is unaffected;
+      # code that leans on the process's zone should fail here, not in
+      # production. Unit tests also run key cases in several zones
+      # (tests/support/time-zones.ts), and the e2e browser is on Manila time.
+      TZ: UTC
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
