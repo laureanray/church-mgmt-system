@@ -1,11 +1,18 @@
 import Link from "next/link";
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 import { CalendarCheck, Pencil } from "lucide-react";
 
 import { promoteMemberToLeader } from "@/app/(app)/cell-groups/actions";
 import { db } from "@/db";
-import { attendance, cellGroups, members, services } from "@/db/schema";
+import {
+  attendance,
+  auditLog,
+  cellGroups,
+  members,
+  services,
+  users,
+} from "@/db/schema";
 import { hasPermission, requirePermission } from "@/lib/auth-helpers";
 import { GENDER_LABELS, MARITAL_STATUS_LABELS } from "@/lib/constants";
 import {
@@ -18,10 +25,16 @@ import {
 import { formatDate, formatDateTime, initials } from "@/lib/format";
 import { generateQrDataUrl } from "@/lib/qr";
 import { cn } from "@/lib/utils";
+import {
+  AUDIT_SORT_KEYS,
+  AuditLogTable,
+  toAuditRow,
+} from "@/components/audit/audit-log-table";
 import { BackLink } from "@/components/patterns/back-link";
 import { DataTable } from "@/components/patterns/data-table";
 import type { DataTableColumn } from "@/components/patterns/data-table";
 import { DetailList, DetailRow } from "@/components/patterns/detail-list";
+import { LinkTabs } from "@/components/patterns/link-tabs";
 import { FormSelect } from "@/components/form/form-select";
 import { Input } from "@/components/ui/input";
 import { DeleteMemberButton } from "@/components/members/delete-member-button";
@@ -50,6 +63,11 @@ const HISTORY_SORT_COLUMNS = {
   date: attendance.checkedInAt,
 } as const;
 
+const AUDIT_SORT_COLUMNS = {
+  at: auditLog.at,
+  action: auditLog.action,
+} as const satisfies Record<(typeof AUDIT_SORT_KEYS)[number], unknown>;
+
 export default async function MemberDetailPage({
   params,
   searchParams,
@@ -66,9 +84,15 @@ export default async function MemberDetailPage({
   });
   if (!member) notFound();
 
+  const query = await searchParams;
+  // The audit history is a second tab, offered only to those who may read the
+  // log. `?tab=history` selects it; anything else is the attendance tab.
+  const canViewAudit = hasPermission(user, "audit.view");
+  const showAudit = canViewAudit && query.tab === "history";
+
   // The page carries two independent lists, so this table namespaces its state
   // and a sort here cannot collide with anything else on the route.
-  const historyCtx = tableContext(`/members/${member.id}`, await searchParams, {
+  const historyCtx = tableContext(`/members/${member.id}`, query, {
     prefix: "att",
     sortKeys: Object.keys(HISTORY_SORT_COLUMNS),
     defaultSort: "date",
@@ -79,34 +103,85 @@ export default async function MemberDetailPage({
   const attended = eq(attendance.memberId, member.id);
   const historyDirection = historyState.direction === "asc" ? asc : desc;
 
-  const [qrDataUrl, history, attendedCount] = await Promise.all([
-    generateQrDataUrl(member.qrToken),
-    db
-      .select({
-        id: attendance.id,
-        serviceId: services.id,
-        serviceName: services.name,
-        checkedInAt: attendance.checkedInAt,
-      })
-      .from(attendance)
-      .leftJoin(services, eq(services.id, attendance.serviceId))
-      .where(attended)
-      .orderBy(
-        historyDirection(
-          HISTORY_SORT_COLUMNS[
-            historyState.sort as keyof typeof HISTORY_SORT_COLUMNS
-          ],
-        ),
-        asc(attendance.id),
-      )
-      .limit(historyState.perPage)
-      .offset(tableOffset(historyState)),
-    db.$count(attendance, attended),
-  ]);
+  const auditCtx = tableContext(`/members/${member.id}`, query, {
+    prefix: "log",
+    sortKeys: [...AUDIT_SORT_KEYS],
+    defaultSort: "at",
+    defaultDirection: "desc",
+    defaultPerPage: 10,
+  });
+  const auditState = auditCtx.state;
+  const aboutMember = and(
+    eq(auditLog.entity, "member"),
+    eq(auditLog.entityId, member.id),
+  );
+  const auditDirection = auditState.direction === "asc" ? asc : desc;
+  // One batch: the audit count feeds the History tab's badge even while the
+  // attendance tab is showing, and only the visible panel's rows are fetched.
+  const [qrDataUrl, history, attendedCount, auditRows, auditCount] =
+    await Promise.all([
+      generateQrDataUrl(member.qrToken),
+      showAudit
+        ? []
+        : db
+            .select({
+              id: attendance.id,
+              serviceId: services.id,
+              serviceName: services.name,
+              checkedInAt: attendance.checkedInAt,
+            })
+            .from(attendance)
+            .leftJoin(services, eq(services.id, attendance.serviceId))
+            .where(attended)
+            .orderBy(
+              historyDirection(
+                HISTORY_SORT_COLUMNS[
+                  historyState.sort as keyof typeof HISTORY_SORT_COLUMNS
+                ],
+              ),
+              asc(attendance.id),
+            )
+            .limit(historyState.perPage)
+            .offset(tableOffset(historyState)),
+      db.$count(attendance, attended),
+      showAudit
+        ? db
+            .select({
+              id: auditLog.id,
+              at: auditLog.at,
+              actorName: users.name,
+              action: auditLog.action,
+              entity: auditLog.entity,
+              summary: auditLog.summary,
+              before: auditLog.before,
+              after: auditLog.after,
+            })
+            .from(auditLog)
+            .leftJoin(users, eq(users.id, auditLog.actorId))
+            .where(aboutMember)
+            .orderBy(
+              auditDirection(
+                AUDIT_SORT_COLUMNS[
+                  auditState.sort as keyof typeof AUDIT_SORT_COLUMNS
+                ],
+              ),
+              desc(auditLog.at),
+              asc(auditLog.id),
+            )
+            .limit(auditState.perPage)
+            .offset(tableOffset(auditState))
+        : [],
+      canViewAudit ? db.$count(auditLog, aboutMember) : 0,
+    ]);
 
   const clampedHistoryPage = overRunPage(historyState, attendedCount);
-  if (clampedHistoryPage !== null) {
+  if (!showAudit && clampedHistoryPage !== null) {
     redirect(tableHref(historyCtx, { page: clampedHistoryPage }));
+  }
+
+  const clampedAuditPage = showAudit ? overRunPage(auditState, auditCount) : null;
+  if (clampedAuditPage !== null) {
+    redirect(tableHref(auditCtx, { page: clampedAuditPage }));
   }
 
   const historyColumns: DataTableColumn<HistoryRow>[] = [
@@ -338,20 +413,49 @@ export default async function MemberDetailPage({
 
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle className="text-base">Attendance History</CardTitle>
+          {canViewAudit ? (
+            <LinkTabs
+              label="Member activity"
+              tabs={[
+                {
+                  href: `/members/${member.id}`,
+                  label: "Attendance",
+                  count: attendedCount,
+                  active: !showAudit,
+                },
+                {
+                  href: `/members/${member.id}?tab=history`,
+                  label: "History",
+                  count: auditCount,
+                  active: showAudit,
+                },
+              ]}
+            />
+          ) : (
+            <CardTitle className="text-base">Attendance History</CardTitle>
+          )}
         </CardHeader>
         <CardContent>
-          <DataTable
-            ctx={historyCtx}
-            caption="Services this member has attended"
-            columns={historyColumns}
-            rows={history}
-            rowKey={(row) => row.id}
-            total={attendedCount}
-            framed={false}
-            columnVisibility={false}
-            empty={{ title: "No attendance recorded yet." }}
-          />
+          {showAudit ? (
+            <AuditLogTable
+              ctx={auditCtx}
+              rows={auditRows.map(toAuditRow)}
+              total={auditCount}
+              variant="record"
+            />
+          ) : (
+            <DataTable
+              ctx={historyCtx}
+              caption="Services this member has attended"
+              columns={historyColumns}
+              rows={history}
+              rowKey={(row) => row.id}
+              total={attendedCount}
+              framed={false}
+              columnVisibility={false}
+              empty={{ title: "No attendance recorded yet." }}
+            />
+          )}
         </CardContent>
       </Card>
     </div>

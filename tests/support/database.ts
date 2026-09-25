@@ -31,5 +31,5 @@ export async function migrateTestDatabase() {
 }
 
 export async function resetTestDatabase(client: ReturnType<typeof postgres>) {
-  await client`TRUNCATE attendance, members, cell_groups, services, service_schedules, users, app_settings CASCADE`;
+  await client`TRUNCATE audit_log, attendance, members, cell_groups, services, service_schedules, users, app_settings CASCADE`;
 }

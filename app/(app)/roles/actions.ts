@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { rolePermissions, roles, users } from "@/db/schema";
+import { recordAudit, type DbExecutor } from "@/lib/audit";
+import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
 import { roleSchema, fieldErrors } from "@/lib/validators";
 
@@ -21,11 +23,22 @@ function roleValues(formData: FormData) {
   };
 }
 
+/** A role with its permission keys, sorted so a reorder is not a change. */
+async function roleSnapshot(tx: DbExecutor, id: string) {
+  const role = await tx.query.roles.findFirst({ where: eq(roles.id, id) });
+  if (!role) return null;
+  const granted = await tx
+    .select({ key: rolePermissions.permissionKey })
+    .from(rolePermissions)
+    .where(eq(rolePermissions.roleId, id));
+  return { ...role, permissions: granted.map(({ key }) => key).sort() };
+}
+
 export async function createRole(
   _previous: RoleFormState,
   formData: FormData,
 ): Promise<RoleFormState> {
-  await requirePermission("roles.create");
+  const actor = await requirePermission("roles.create");
   const parsed = roleSchema.safeParse(roleValues(formData));
   if (!parsed.success) {
     return {
@@ -53,6 +66,14 @@ export async function createRole(
         })),
       );
     }
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "role.create",
+      entity: "role",
+      entityId: role.id,
+      after: await roleSnapshot(tx, role.id),
+      summary: `Created role ${name}`,
+    });
   });
 
   revalidatePath("/roles");
@@ -64,7 +85,7 @@ export async function updateRole(
   _previous: RoleFormState,
   formData: FormData,
 ): Promise<RoleFormState> {
-  await requirePermission("roles.update");
+  const actor = await requirePermission("roles.update");
   if (id === "admin") {
     return { message: "The Admin role is protected and cannot be changed." };
   }
@@ -83,6 +104,7 @@ export async function updateRole(
   if (duplicate) return { errors: { name: "That role name is already in use." } };
 
   await db.transaction(async (tx) => {
+    const before = await roleSnapshot(tx, id);
     await tx
       .update(roles)
       .set({ name, description, updatedAt: new Date() })
@@ -93,6 +115,17 @@ export async function updateRole(
         permissions.map((permissionKey) => ({ roleId: id, permissionKey })),
       );
     }
+    if (before) {
+      await recordAudit(tx, {
+        actorId: actor.id,
+        action: "role.update",
+        entity: "role",
+        entityId: id,
+        before,
+        after: await roleSnapshot(tx, id),
+        summary: (fields) => `Edited role ${name}: ${describeFields(fields)}`,
+      });
+    }
   });
 
   revalidatePath("/roles");
@@ -101,8 +134,8 @@ export async function updateRole(
 }
 
 export async function deleteRole(id: string) {
-  await requirePermission("roles.delete");
-  const role = await db.query.roles.findFirst({ where: eq(roles.id, id) });
+  const actor = await requirePermission("roles.delete");
+  const role = await roleSnapshot(db, id);
   if (!role || role.isSystem) return;
 
   const assigned = await db.query.users.findFirst({
@@ -111,7 +144,17 @@ export async function deleteRole(id: string) {
   });
   if (assigned) return;
 
-  await db.delete(roles).where(eq(roles.id, id));
+  await db.transaction(async (tx) => {
+    await tx.delete(roles).where(eq(roles.id, id));
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "role.delete",
+      entity: "role",
+      entityId: id,
+      before: role,
+      summary: `Deleted role ${role.name}`,
+    });
+  });
   revalidatePath("/roles");
   revalidatePath("/users");
 }

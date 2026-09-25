@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/db";
-import { services } from "@/db/schema";
+import { attendance, services } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 import { requirePermission } from "@/lib/auth-helpers";
 import { fieldErrors, serviceSchema } from "@/lib/validators";
 
@@ -74,8 +75,25 @@ export async function updateService(
 }
 
 export async function deleteService(id: string) {
-  await requirePermission("services.delete");
-  await db.delete(services).where(eq(services.id, id));
+  const actor = await requirePermission("services.delete");
+  await db.transaction(async (tx) => {
+    // Deleting a service cascades to its attendance, which is the one way
+    // attendance can be removed — so the count goes on record with it.
+    const checkIns = await tx.$count(attendance, eq(attendance.serviceId, id));
+    const [deleted] = await tx
+      .delete(services)
+      .where(eq(services.id, id))
+      .returning();
+    if (!deleted) return;
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "service.delete",
+      entity: "service",
+      entityId: id,
+      before: { ...deleted, attendanceCount: checkIns },
+      summary: `Deleted service ${deleted.name} and its ${checkIns} check-in${checkIns === 1 ? "" : "s"}`,
+    });
+  });
   revalidatePath("/services");
   redirect("/services");
 }

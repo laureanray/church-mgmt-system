@@ -182,12 +182,26 @@ card, which drops the frame and the cell-group column. Stories use a fixed
 | `TableCard` | The bordered, clipped frame around a full-width table |
 | `SearchField` | The list-page search box |
 | `DataTable` | Every table in the app: sorting, paging, search, facets, columns |
+| `LinkTabs` | Tabs whose selection is the URL (`?tab=history`), rendered as navigation links |
 
 Domain-specific editors follow the same layers. `PermissionMatrix` groups the
 authorization catalog by module and uses native named checkboxes so the role
 form submits ordinary `FormData`; `RoleForm` composes it with the shared Field,
 Card, Input, Textarea, and Button primitives. Their stories cover new, edited,
 empty, and protected states without requiring a database.
+
+### Audit log
+
+`AuditLogTable` (`components/audit/`) is the `DataTable` behind both
+`/settings/audit` and a member's History tab: `variant="log"` adds search and
+the Action/Record facets, `variant="record"` drops them along with the Record
+column. Each row's changes render through `AuditChanges` — an edit reads as the
+old value struck through beside the new one, while a create or delete, which
+stores the whole record, folds behind a native `<details>`. Deletions take the
+`destructive` badge; every other action is `outline`, so the log stays quiet
+until something was removed. The member page reaches History through
+`LinkTabs`, which are links in a `<nav>` rather than an ARIA tablist because
+each tab is its own URL.
 
 ### DataTable
 

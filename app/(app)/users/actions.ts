@@ -6,6 +6,8 @@ import { redirect } from "next/navigation";
 
 import { db } from "@/db";
 import { roles, users } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
+import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
 import { generateTempPassword } from "@/lib/password";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -25,7 +27,7 @@ export async function createUser(
   _prev: CreateUserState,
   formData: FormData,
 ): Promise<CreateUserState> {
-  await requirePermission("users.create");
+  const actor = await requirePermission("users.create");
 
   const parsed = createUserSchema.safeParse({
     name: formData.get("name"),
@@ -75,12 +77,25 @@ export async function createUser(
   }
 
   try {
-    await db.insert(users).values({
-      id: data.user.id,
-      name,
-      email,
-      roleId,
-      mustChangePassword: true,
+    await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(users)
+        .values({
+          id: data.user.id,
+          name,
+          email,
+          roleId,
+          mustChangePassword: true,
+        })
+        .returning();
+      await recordAudit(tx, {
+        actorId: actor.id,
+        action: "user.create",
+        entity: "user",
+        entityId: created.id,
+        after: created,
+        summary: `Created staff account for ${name} (${assignedRole.name})`,
+      });
     });
   } catch (err) {
     // Roll the auth user back, otherwise it lingers with no profile and its
@@ -134,7 +149,6 @@ export async function updateUser(
 
   const existing = await db.query.users.findFirst({
     where: eq(users.id, id),
-    columns: { email: true, roleId: true },
   });
 
   if (existing && id === currentUser.id && existing.roleId !== roleId) {
@@ -157,10 +171,30 @@ export async function updateUser(
     }
   }
 
-  await db
-    .update(users)
-    .set({ name, email, roleId, updatedAt: new Date() })
-    .where(eq(users.id, id));
+  await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(users)
+      .set({ name, email, roleId, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    if (!existing || !updated) return;
+
+    const roleChanged = existing.roleId !== updated.roleId;
+    await recordAudit(tx, {
+      actorId: currentUser.id,
+      action: roleChanged ? "user.role_change" : "user.update",
+      entity: "user",
+      entityId: id,
+      before: existing,
+      after: updated,
+      summary: (fields) => {
+        const others = describeFields(fields.filter((field) => field !== "roleId"));
+        if (!roleChanged) return `Edited staff user ${name}: ${others}`;
+        const role = `Changed ${name}’s role to ${assignedRole.name}`;
+        return others ? `${role}, and edited ${others}` : role;
+      },
+    });
+  });
 
   revalidatePath("/users");
   redirect("/users");
@@ -174,7 +208,7 @@ export async function resetUserPassword(
   id: string,
   _prev: ResetPasswordState,
 ): Promise<ResetPasswordState> {
-  await requirePermission("users.reset_password");
+  const actor = await requirePermission("users.reset_password");
 
   const tempPassword = generateTempPassword();
   const admin = createAdminClient();
@@ -186,19 +220,31 @@ export async function resetUserPassword(
     throw new Error(`Could not reset the password: ${error.message}`);
   }
 
-  const [updated] = await db
-    .update(users)
-    .set({ mustChangePassword: true, updatedAt: new Date() })
-    .where(eq(users.id, id))
-    .returning({ email: users.email });
+  // Neither the temporary password nor anything derived from it is logged —
+  // only that one was issued, and to whom.
+  const updated = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(users)
+      .set({ mustChangePassword: true, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning({ name: users.name, email: users.email });
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "user.password_reset",
+      entity: "user",
+      entityId: id,
+      summary: `Issued a temporary password to ${updated.name}`,
+    });
+    return updated;
+  });
 
   revalidatePath("/users");
   return { email: updated.email, tempPassword };
 }
 
 export async function deleteUser(currentUserId: string, id: string) {
-  await requirePermission("users.delete");
-  if (id === currentUserId) {
+  const actor = await requirePermission("users.delete");
+  if (id === currentUserId || id === actor.id) {
     // Guard against locking yourself out.
     return;
   }
@@ -212,6 +258,17 @@ export async function deleteUser(currentUserId: string, id: string) {
     throw new Error(`Could not delete the account: ${error.message}`);
   }
 
-  await db.delete(users).where(eq(users.id, id));
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx.delete(users).where(eq(users.id, id)).returning();
+    if (!deleted) return;
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "user.delete",
+      entity: "user",
+      entityId: id,
+      before: deleted,
+      summary: `Deleted staff account for ${deleted.name}`,
+    });
+  });
   revalidatePath("/users");
 }
