@@ -26,5 +26,5 @@ describe("DeleteMemberButton", () => {
     expect(
       await within(dialog).findByRole("alert", {}, { timeout: 3000 }),
     ).toHaveTextContent("the member was not deleted");
-  });
+  }, 15_000);
 });

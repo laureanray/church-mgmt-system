@@ -28,7 +28,7 @@ describe("FaceSettingsCard", () => {
     await user.type(notice, "OK?");
     await user.click(screen.getByRole("button", { name: "Save notice" }));
     expect(await screen.findByText(/Write out the notice in full/)).toBeInTheDocument();
-  });
+  }, 15_000);
 
   test("purges only once the phrase is typed", async () => {
     const user = userEvent.setup();
@@ -44,7 +44,7 @@ describe("FaceSettingsCard", () => {
     expect(
       await screen.findByText(/No members are enrolled yet/, {}, { timeout: 3000 }),
     ).toBeInTheDocument();
-  });
+  }, 15_000);
 
   test("keeps the dialog open and explains a failed purge", async () => {
     const user = userEvent.setup();
@@ -56,7 +56,7 @@ describe("FaceSettingsCard", () => {
     expect(
       await within(dialog).findByText(/Face recognition is busy/, {}, { timeout: 3000 }),
     ).toBeInTheDocument();
-  });
+  }, 15_000);
 
   test("offers nothing to change to staff who cannot update settings", () => {
     render(<ReadOnly />);

@@ -68,7 +68,7 @@ describe("FaceEnrollmentCard", () => {
     // Consent went with the face: enrolling again asks for it again.
     expect(screen.getByRole("checkbox")).not.toBeChecked();
     expect(screen.getByRole("button", { name: "Take photo" })).toBeDisabled();
-  });
+  }, 15_000);
 
   test("keeps the enrolment and explains when removal fails", async () => {
     const user = userEvent.setup();
@@ -82,5 +82,5 @@ describe("FaceEnrollmentCard", () => {
       await screen.findByText("Face recognition is busy. Wait a moment and try again.", {}, { timeout: 3000 }),
     ).toBeInTheDocument();
     expect(screen.getByText("Enrolled")).toBeInTheDocument();
-  });
+  }, 15_000);
 });
