@@ -286,14 +286,29 @@ export async function updateUser(
   } catch (err) {
     // The profile rolled back, so put the login email back too; otherwise the
     // staff member signs in with an address the profile does not show.
-    if (previousEmail) {
-      await createAdminClient().auth.admin.updateUserById(id, {
-        email: previousEmail,
-        email_confirm: true,
-      });
+    const restore = previousEmail
+      ? await createAdminClient().auth.admin.updateUserById(id, {
+          email: previousEmail,
+          email_confirm: true,
+        })
+      : null;
+    // Supabase refused the old address, so it keeps the new one. The profile
+    // is the half we can still move: bring its email into line, and say so.
+    const emailKept = Boolean(restore?.error);
+    if (emailKept) {
+      await db
+        .update(users)
+        .set({ email, updatedAt: new Date() })
+        .where(eq(users.id, id));
+      revalidatePath("/users");
     }
     if (err instanceof MemberAlreadyLinked) {
-      return { errors: { memberId: MEMBER_ALREADY_LINKED } };
+      return {
+        errors: { memberId: MEMBER_ALREADY_LINKED },
+        ...(emailKept && {
+          message: "The new email was saved, but nothing else was. Pick another member record.",
+        }),
+      };
     }
     throw err;
   }

@@ -16,7 +16,9 @@ await mock.module("next/navigation", () => ({
   },
 }));
 // Only reached when an email changes.
-const updateUserById = mock(async (_id: string, _attributes: object) => ({ error: null }));
+const updateUserById = mock(
+  async (_id: string, _attributes: object): Promise<{ error: { message: string } | null }> => ({ error: null }),
+);
 await mock.module("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ auth: { admin: { updateUserById } } }),
 }));
@@ -141,3 +143,25 @@ it("refuses to relink your own login", async () => {
   expect(result?.errors?.memberId).toBe("You cannot change your own member record.");
   expect((await links()).find((row) => row.id === "joy")?.userId).toBeNull();
 });
+
+it("keeps the profile in step when Supabase refuses the old email back", async () => {
+  updateUserById
+    .mockImplementationOnce(async () => ({ error: null }))
+    .mockImplementationOnce(async () => ({ error: { message: "Service unavailable" } }));
+  const outcome = await editWhileRivalClaimsJoy(editForm("joy", "joy.new@example.test"));
+  expect(outcome).toEqual({
+    value: {
+      errors: { memberId: "That member is already linked to another staff login." },
+      message: "The new email was saved, but nothing else was. Pick another member record.",
+    },
+  });
+
+  // Supabase kept the new address, so the profile now shows it too.
+  const [profile] = await database.db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.id, "joy-login"));
+  expect(profile.email).toBe("joy.new@example.test");
+  expect((await links()).find((row) => row.id === "joy-duplicate")?.userId).toBe("joy-login");
+});
+
