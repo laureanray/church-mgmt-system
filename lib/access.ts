@@ -1,6 +1,6 @@
 import "server-only";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -105,4 +105,37 @@ export async function loadUserAccess(userId: string): Promise<UserAccess | null>
     ministries: row.ministries,
     ministryGrants,
   };
+}
+
+/**
+ * What an account would hold with this role and this linked member: the same
+ * two sources loadUserAccess reads, for an account that does not exist yet or
+ * is about to change. Kept apart so a refusal can name the field responsible.
+ * The two queries run side by side.
+ */
+export async function prospectiveAccess(
+  roleId: string,
+  memberId: string | null,
+): Promise<{ rolePermissions: string[]; ministryGrants: MinistryGrant[] }> {
+  const [granted, ministryGrants] = await Promise.all([
+    db
+      .select({ key: rolePermissions.permissionKey })
+      .from(rolePermissions)
+      .where(eq(rolePermissions.roleId, roleId)),
+    memberId
+      ? db
+          .select({
+            ministryId: ministryPermissions.ministryId,
+            permissionKey: ministryPermissions.permissionKey,
+          })
+          .from(ministryPermissions)
+          .innerJoin(
+            ministryMembers,
+            eq(ministryMembers.ministryId, ministryPermissions.ministryId),
+          )
+          .innerJoin(ministries, eq(ministries.id, ministryPermissions.ministryId))
+          .where(and(eq(ministryMembers.memberId, memberId), eq(ministries.active, true)))
+      : Promise.resolve([]),
+  ]);
+  return { rolePermissions: granted.map(({ key }) => key), ministryGrants };
 }

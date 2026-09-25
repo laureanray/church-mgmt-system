@@ -14,7 +14,13 @@ import {
 import { recordAudit, type DbExecutor } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
 import { requirePermission, requireUser } from "@/lib/auth-helpers";
-import { canManageRoster } from "@/lib/ministry-access";
+import {
+  delegatedEdit,
+  describePermissions,
+  grantRefusal,
+  permissionsBeyond,
+} from "@/lib/delegation";
+import { canManageRoster, effectivePermissions } from "@/lib/ministry-access";
 import type { MinistryPosition } from "@/lib/constants";
 import {
   fieldErrors,
@@ -58,7 +64,14 @@ export async function createMinistry(
     };
   }
 
-  const { name, description, active, permissions } = parsed.data;
+  const { name, description, active } = parsed.data;
+  const { permissions, refused } = delegatedEdit({
+    held: actor.permissions,
+    before: [],
+    submitted: parsed.data.permissions,
+  });
+  if (refused.length) return { message: grantRefusal(refused) };
+
   const duplicate = await db.query.ministries.findFirst({
     where: ilike(ministries.name, name),
   });
@@ -108,7 +121,7 @@ export async function updateMinistry(
     };
   }
 
-  const { name, description, active, permissions } = parsed.data;
+  const { name, description, active } = parsed.data;
   const duplicate = await db.query.ministries.findFirst({
     where: and(ilike(ministries.name, name), ne(ministries.id, id)),
   });
@@ -116,14 +129,31 @@ export async function updateMinistry(
     return { errors: { name: "That ministry name is already in use." } };
   }
 
-  await db.transaction(async (tx) => {
+  const refusal = await db.transaction(async (tx) => {
     const before = await ministryWithGrants(tx, id);
+    if (!before) return null;
+
+    const { permissions, refused } = delegatedEdit({
+      held: actor.permissions,
+      before: before.permissions,
+      submitted: parsed.data.permissions,
+    });
+    if (refused.length) return grantRefusal(refused);
+    // An inactive ministry grants nothing, so switching one back on hands its
+    // whole grant list to the roster at once.
+    const restored = !before.active && active
+      ? permissionsBeyond(actor.permissions, permissions)
+      : [];
+    if (restored.length) {
+      return `Reactivating this ministry would restore access you do not hold: ${describePermissions(restored)}.`;
+    }
+
     const [updated] = await tx
       .update(ministries)
       .set({ name, description, active, updatedAt: new Date() })
       .where(eq(ministries.id, id))
       .returning();
-    if (!before || !updated) return;
+    if (!updated) return null;
     await tx
       .delete(ministryPermissions)
       .where(eq(ministryPermissions.ministryId, id));
@@ -143,7 +173,9 @@ export async function updateMinistry(
       after: { ...updated, permissions: [...permissions].sort() },
       summary: (fields) => `Edited ministry ${updated.name}: ${describeFields(fields)}`,
     });
+    return null;
   });
+  if (refusal) return { message: refusal };
 
   revalidateMinistry(id);
   redirect(`/ministries/${id}`);
@@ -257,6 +289,27 @@ export async function addRosterMember(
     columns: { id: true, fullName: true },
   });
   if (!member) return { errors: { memberId: "That member no longer exists." } };
+
+  // Rostering your own member record hands you the ministry's grants, so it is
+  // held to the same ceiling as granting them. Checked whether or not the
+  // ministry is active: reactivating it later would hand them over all the same.
+  if (member.id === actor.memberId) {
+    const grants = await db
+      .select({
+        ministryId: ministryPermissions.ministryId,
+        permissionKey: ministryPermissions.permissionKey,
+      })
+      .from(ministryPermissions)
+      .where(eq(ministryPermissions.ministryId, ministryId));
+    const beyond = permissionsBeyond(actor.permissions, effectivePermissions([], grants));
+    if (beyond.length) {
+      return {
+        errors: {
+          memberId: `You cannot add yourself: this ministry grants access you do not hold (${describePermissions(beyond)}).`,
+        },
+      };
+    }
+  }
 
   const added = await db.transaction(async (tx) => {
     const [row] = await tx

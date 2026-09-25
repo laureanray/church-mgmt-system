@@ -37,11 +37,17 @@ export function MinistryForm({
   ministry,
   selectedPermissions = [],
   cancelHref = "/ministries",
+  grantable,
+  permissionsNote,
 }: {
   action: MinistryAction;
   ministry?: { name: string; description: string | null; active: boolean };
   selectedPermissions?: readonly PermissionKey[];
   cancelHref?: string;
+  /** The permissions this editor may change; the rest are locked. */
+  grantable?: readonly PermissionKey[];
+  /** Why some permissions are locked, shown with the card's description. */
+  permissionsNote?: string;
 }) {
   const [state, formAction, pending] = useActionState<
     MinistryFormState,
@@ -111,6 +117,7 @@ export function MinistryForm({
             Added to each member&apos;s role when their member record is linked
             to a staff login. Staff, role, ministry and settings administration
             can only come from a role.
+            {permissionsNote ? <span className="mt-1 block">{permissionsNote}</span> : null}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -119,7 +126,11 @@ export function MinistryForm({
               {errors.permissions}
             </p>
           ) : null}
-          <PermissionMatrix selected={selectedPermissions} scope="ministry" />
+          <PermissionMatrix
+            selected={selectedPermissions}
+            scope="ministry"
+            grantable={grantable}
+          />
         </CardContent>
       </Card>
 

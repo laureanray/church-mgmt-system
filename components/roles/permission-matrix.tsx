@@ -9,17 +9,28 @@ import {
  * A grouped, native-checkbox editor for a role's or a ministry's permission
  * assignments. `scope="ministry"` offers only what a ministry may grant — the
  * server validator enforces the same subset, so this is presentation only.
+ *
+ * `grantable` locks every other checkbox in its current state: nobody grants
+ * or removes a permission they do not hold (lib/delegation.ts). A locked box
+ * is never submitted, and the action keeps its saved state, so this too is
+ * presentation — the server applies the same rule. Omit it when the editor
+ * holds everything.
  */
 export function PermissionMatrix({
   selected = [],
   disabled = false,
   scope = "role",
+  grantable,
 }: {
   selected?: readonly PermissionKey[];
   disabled?: boolean;
   scope?: "role" | "ministry";
+  grantable?: readonly PermissionKey[];
 }) {
   const selectedKeys = new Set(selected);
+  const grantableKeys = grantable ? new Set(grantable) : null;
+  const locked = (key: PermissionKey) =>
+    disabled || (grantableKeys !== null && !grantableKeys.has(key));
   const modules = groupPermissionsByModule(
     scope === "ministry" ? MINISTRY_GRANTABLE_PERMISSIONS : PERMISSIONS,
   );
@@ -49,7 +60,7 @@ export function PermissionMatrix({
                   name="permissions"
                   value={permission.key}
                   defaultChecked={selectedKeys.has(permission.key)}
-                  disabled={disabled}
+                  disabled={locked(permission.key)}
                   className="mt-0.5 size-4 rounded-sm border-input accent-primary disabled:cursor-not-allowed disabled:opacity-50"
                 />
                 <span>

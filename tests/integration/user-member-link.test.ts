@@ -3,6 +3,7 @@ import { asc, eq } from "drizzle-orm";
 
 import { connectTestDatabase, resetTestDatabase } from "../support/database";
 import { auditLog, members, users } from "../../db/schema";
+import { DEFAULT_ROLE_PERMISSIONS, PERMISSION_KEYS } from "../../lib/permissions";
 
 const database = connectTestDatabase();
 const requirePermission = mock();
@@ -51,7 +52,9 @@ beforeEach(async () => {
   await resetTestDatabase(database.client);
   requirePermission.mockReset();
   updateUserById.mockClear();
-  requirePermission.mockResolvedValue({ id: "admin", memberId: null, permissions: ["users.update"] });
+  // An administrator: editing staff is limited to accounts holding no more
+  // than the editor (lib/delegation.ts), so the actor holds what Admin does.
+  requirePermission.mockResolvedValue({ id: "admin", memberId: null, permissions: [...PERMISSION_KEYS] });
   await database.db.insert(users).values([
     { id: "admin", email: "admin@example.test", name: "Admin", roleId: "admin" },
     { id: "joy-login", email: "joy@example.test", name: "Joy", roleId: "usher" },
@@ -144,7 +147,7 @@ it("refuses to relink your own login", async () => {
   requirePermission.mockResolvedValue({
     id: "joy-login",
     memberId: "joy-duplicate",
-    permissions: ["users.update"],
+    permissions: [...DEFAULT_ROLE_PERMISSIONS.usher, "users.update"],
   });
   const result = await updateUser("joy-login", undefined, editForm("joy"));
   expect(result?.errors?.memberId).toBe("You cannot change your own member record.");

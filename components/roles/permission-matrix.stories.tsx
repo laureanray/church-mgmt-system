@@ -25,3 +25,24 @@ export const Disabled: Story = { args: { disabled: true } };
 export const MinistryScope: Story = {
   args: { scope: "ministry", selected: ["services.view", "lam.view", "lam.lineups_update"] },
 };
+
+/**
+ * An editor who does not hold every permission — here, a leader. Boxes for
+ * what they lack stay in their saved state and cannot be changed: nobody
+ * grants or removes access they do not hold themselves. Members' Delete stays
+ * ticked because the role already has it, not because this editor may give it.
+ */
+export const LimitedEditor: Story = {
+  args: {
+    selected: ["dashboard.view", "members.view", "members.delete", "users.view"],
+    grantable: [
+      "dashboard.view",
+      "attendance.view",
+      "attendance.record",
+      "members.view",
+      "members.create",
+      "members.update",
+      "services.view",
+    ],
+  },
+};

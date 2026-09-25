@@ -17,6 +17,36 @@ ministry also receives the ministry's permissions.
 Permission keys are part of stored data. Treat them like API identifiers: add
 new ones, but do not rename or remove them without a data migration.
 
+## Delegation limits
+
+Every `users.*`, `roles.*` and `ministries.*` permission can be granted on its
+own, and each one changes what some login may do. Without a ceiling, holding
+any one of them would mean holding all of them. So **nobody grants, removes or
+takes over access they do not hold themselves** (`lib/delegation.ts`), where
+"hold" means the actor's effective permissions: role plus ministries.
+
+- **Accounts.** Create, edit, reset-password and delete act only on an account
+  whose effective permissions are a subset of the actor's. Creating an account
+  hands the actor its temporary password, and editing one can change its login
+  email, so either way the actor could sign in as it. The role and linked member
+  chosen for an account must stay within the actor's access too. An
+  administrator can therefore be edited, reset or removed only by another
+  administrator, and the last one cannot remove themselves.
+- **Roles and ministries.** Creating or editing a role or a ministry changes
+  only the permissions the actor holds. Permissions they do not hold keep their
+  saved state: the matrix shows those boxes locked, and the action carries them
+  over rather than reading a disabled box's absence as "remove". An edit that
+  tries to *add* one is refused outright. Nobody changes the permissions of
+  their own role. Reactivating a ministry counts as granting everything it
+  grants.
+- **Rosters.** Adding your own member record to a roster hands you that
+  ministry's grants, so it is held to the same ceiling. Rostering anyone else
+  is unaffected, and so is a head managing their own roster.
+
+The pages apply the same rules for usability: the staff list hides actions on
+accounts beyond reach and offers only assignable roles, and the edit forms lock
+what cannot change. The actions are the boundary.
+
 ## Ministries
 
 A ministry (`ministries`) has a roster of **members** (`ministry_members`) and

@@ -9,6 +9,7 @@ import { rolePermissions, roles, users } from "@/db/schema";
 import { recordAudit, type DbExecutor } from "@/lib/audit";
 import { describeFields } from "@/lib/audit-diff";
 import { requirePermission } from "@/lib/auth-helpers";
+import { delegatedEdit, grantRefusal, sameGrants } from "@/lib/delegation";
 import { roleSchema, fieldErrors } from "@/lib/validators";
 
 export type RoleFormState =
@@ -22,6 +23,9 @@ function roleValues(formData: FormData) {
     permissions: formData.getAll("permissions"),
   };
 }
+
+const OWN_ROLE =
+  "You cannot change the permissions of your own role. Ask another authorized staff member.";
 
 /** A role with its permission keys, sorted so a reorder is not a change. */
 async function roleSnapshot(tx: DbExecutor, id: string) {
@@ -47,7 +51,14 @@ export async function createRole(
     };
   }
 
-  const { name, description, permissions } = parsed.data;
+  const { name, description } = parsed.data;
+  const { permissions, refused } = delegatedEdit({
+    held: actor.permissions,
+    before: [],
+    submitted: parsed.data.permissions,
+  });
+  if (refused.length) return { message: grantRefusal(refused) };
+
   const duplicate = await db.query.roles.findFirst({
     where: ilike(roles.name, name),
   });
@@ -97,36 +108,53 @@ export async function updateRole(
       message: "Please fix the highlighted fields.",
     };
   }
-  const { name, description, permissions } = parsed.data;
+  const { name, description } = parsed.data;
   const duplicate = await db.query.roles.findFirst({
     where: and(ilike(roles.name, name), ne(roles.id, id)),
   });
   if (duplicate) return { errors: { name: "That role name is already in use." } };
 
-  await db.transaction(async (tx) => {
+  // Read the current grants inside the transaction that replaces them, so the
+  // permissions this actor may not touch are carried over from what is saved
+  // at that moment rather than from an earlier read.
+  const refusal = await db.transaction(async (tx) => {
     const before = await roleSnapshot(tx, id);
+    if (!before) return null;
+
+    const edit = delegatedEdit({
+      held: actor.permissions,
+      before: before.permissions,
+      submitted: parsed.data.permissions,
+    });
+    if (edit.refused.length) return grantRefusal(edit.refused);
+    // A role's permissions are the access of everyone in it, so changing your
+    // own is the same self-escalation as changing your own role.
+    if (id === actor.role.id && !sameGrants(before.permissions, edit.permissions)) {
+      return OWN_ROLE;
+    }
+
     await tx
       .update(roles)
       .set({ name, description, updatedAt: new Date() })
       .where(eq(roles.id, id));
     await tx.delete(rolePermissions).where(eq(rolePermissions.roleId, id));
-    if (permissions.length) {
+    if (edit.permissions.length) {
       await tx.insert(rolePermissions).values(
-        permissions.map((permissionKey) => ({ roleId: id, permissionKey })),
+        edit.permissions.map((permissionKey) => ({ roleId: id, permissionKey })),
       );
     }
-    if (before) {
-      await recordAudit(tx, {
-        actorId: actor.id,
-        action: "role.update",
-        entity: "role",
-        entityId: id,
-        before,
-        after: await roleSnapshot(tx, id),
-        summary: (fields) => `Edited role ${name}: ${describeFields(fields)}`,
-      });
-    }
+    await recordAudit(tx, {
+      actorId: actor.id,
+      action: "role.update",
+      entity: "role",
+      entityId: id,
+      before,
+      after: await roleSnapshot(tx, id),
+      summary: (fields) => `Edited role ${name}: ${describeFields(fields)}`,
+    });
+    return null;
   });
+  if (refusal) return { message: refusal };
 
   revalidatePath("/roles");
   revalidatePath("/users");

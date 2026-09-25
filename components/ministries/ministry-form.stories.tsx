@@ -50,3 +50,18 @@ export const DuplicateName: Story = {
     result: { errors: { name: "That ministry name is already in use." } },
   },
 };
+
+/**
+ * Edited by someone who does not hold every ministry-grantable permission:
+ * those boxes are locked in their saved state, so the ministry keeps granting
+ * Plan line-ups even though this editor could not give it.
+ */
+export const LimitedEditor: Story = {
+  args: {
+    ministry: { name: "LAM", description: "Liturgy, Arts, and Music.", active: true },
+    selectedPermissions: ["lam.view", "lam.lineups_update"],
+    grantable: ["dashboard.view", "members.view", "services.view", "lam.view"],
+    permissionsNote:
+      "Permissions you do not hold yourself are locked: you can neither grant nor remove them.",
+  },
+};
